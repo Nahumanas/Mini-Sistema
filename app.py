@@ -11,12 +11,11 @@ import threading
 from datetime import date
 
 import streamlit as st
-import streamlit.components.v1 as componentes
 
 import operaciones as op
 import reportes
 from ingreso import pantalla_ingreso
-from comun import RUBROS, a_python, permisos_de
+from comun import RUBROS, a_python, correr_script, permisos_de
 from config import MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE
 
 st.set_page_config(page_title="Mini-Sistema", page_icon="🏪", layout="wide")
@@ -39,26 +38,18 @@ def preparar_base():
 preparar_base()
 
 
-def correr_script(js):
-    """Corre un poco de JavaScript en la página (window.parent.document es la página del sistema)."""
-    try:
-        st.html(f"<script>{js}</script>", unsafe_allow_javascript=True)
-    except TypeError:  # Streamlit más viejo: usa la forma anterior
-        componentes.html(f"<script>{js}</script>", height=0)
-
-
 # Le avisa al navegador que la página está en español, para que el traductor de Chrome
 # no la "traduzca" (cambia textos, por ejemplo "Usa tickets" por "Boletos para Estados Unidos",
 # y deja textos viejos en pantalla cuando algo se actualiza).
 correr_script("""
-    const raiz = window.parent.document.documentElement;
+    const raiz = PAGINA.documentElement;
     raiz.lang = "es";
     raiz.setAttribute("translate", "no");
     raiz.classList.add("notranslate");
-    if (!window.parent.document.querySelector('meta[name="google"]')) {
-        const meta = window.parent.document.createElement("meta");
+    if (!PAGINA.querySelector('meta[name="google"]')) {
+        const meta = PAGINA.createElement("meta");
         meta.name = "google"; meta.content = "notranslate";
-        window.parent.document.head.appendChild(meta);
+        PAGINA.head.appendChild(meta);
     }
 """)
 

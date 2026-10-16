@@ -15,3 +15,6 @@ venv/
 
 # Notas internas del proyecto
 informe/plan/
+
+# Videos pesados (el GIF sí se sube, para el README)
+informe/videos/*.mp4

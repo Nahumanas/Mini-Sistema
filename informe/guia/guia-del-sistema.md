@@ -160,7 +160,9 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 - El código está en **GitHub**: https://github.com/Nahumanas/Mini-Sistema. Es el portfolio: cualquiera puede ver el código, el README y las capturas.
 - **No se suben** la base de datos, los reportes ni el plan interno (lo controla el archivo `.gitignore`).
 - **Modo demo:** en Streamlit Community Cloud se publica con `MODO_DEMO = "1"`. Si no hay base, la crea sola con datos de prueba, el PIN de jefe es **1234** y no aparece el botón de apagar.
-- Cada vez que se sube un cambio a GitHub, la demo se actualiza sola.
+- La demo está en **https://mini-sistema-demo.streamlit.app**. Cada vez que se sube un cambio a GitHub, se actualiza sola.
+- En Streamlit Cloud el sistema se muestra adentro de otra página (un marco). Por eso el JavaScript del sistema usa la página donde corre (`correr_script` en `comun.py`) y no la de "afuera": si no, el lector no quedaría listo para escanear.
+- **Videos:** en `informe/videos` están el tutorial completo, la versión corta para LinkedIn y un GIF de la caja con la pistola (el GIF va en el README).
 
 ## 11. Cuánto cobrarlo (propuesta)
 

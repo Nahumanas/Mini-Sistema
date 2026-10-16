@@ -4,6 +4,10 @@ Un mini ERP para comercios urbanos (kiosco, ferretería, tienda de ropa, panader
 
 Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 
+▶️ **Probá la demo online:** https://mini-sistema-demo.streamlit.app (entrá como jefe con el PIN `1234`; los datos son inventados).
+
+![Venta con el lector de código de barras](informe/videos/pistola-caja.gif)
+
 ![Inicio del dueño con sus comercios](informe/capturas/inicio.png)
 
 ## Qué hace
@@ -114,6 +118,7 @@ En **Control → Reportes** elegís el **período** (una semana, un mes o las fe
 | `informe/` | Todo lo informativo, separado por tipo: |
 | `informe/ejemplos/` | Dos Excel de ejemplo hechos con los datos de prueba (los 3 comercios de Carlos): uno de septiembre y uno de la semana del 5 al 11 de octubre. |
 | `informe/capturas/` | Capturas de pantalla del sistema. |
+| `informe/videos/` | Video tutorial completo, versión corta para LinkedIn y el GIF de la caja (los MP4 no se suben a GitHub). |
 | `informe/guia/` | La guía para entender todo el sistema (en .md y en Word). |
 | `comun.py` | Cosas que comparten las pantallas (formato de pesos, medios de pago...). |
 | `config.py` | Dice dónde está la base. En el paso 5 (nube) solo se cambia esta línea. |

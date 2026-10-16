@@ -88,7 +88,7 @@ def dejar_listo_el_lector(etiqueta, forzar=False):
     st.session_state["vueltas_lector"] = st.session_state.get("vueltas_lector", 0) + 1
     js = f"""// vuelta {st.session_state["vueltas_lector"]}
     (() => {{
-        const doc = window.parent.document;
+        const doc = PAGINA;
         let intentos = 0;
         const enfocar = () => {{
             const campo = doc.querySelector('input[aria-label={json.dumps(etiqueta)}]');
@@ -107,10 +107,21 @@ def dejar_listo_el_lector(etiqueta, forzar=False):
         }};
         setTimeout(enfocar, 200);
     }})();"""
+    correr_script(js)
+
+
+def correr_script(js):
+    """Corre un poco de JavaScript en la página del sistema. En el código, PAGINA es la página.
+
+    Con st.html el script corre en la misma página (PAGINA = document). Con la forma vieja corre
+    adentro de un cuadrito aparte y la página es la de "afuera" (window.parent.document).
+    No conviene usar siempre window.parent: en Streamlit Cloud el sistema está adentro de otra
+    página y el script buscaría las cosas en el lugar equivocado.
+    """
     try:
-        st.html(f"<script>{js}</script>", unsafe_allow_javascript=True)
+        st.html(f"<script>{js.replace('PAGINA', 'document')}</script>", unsafe_allow_javascript=True)
     except TypeError:  # Streamlit más viejo: usa la forma anterior
-        componentes.html(f"<script>{js}</script>", height=0)
+        componentes.html(f"<script>{js.replace('PAGINA', 'window.parent.document')}</script>", height=0)
 
 
 def codigo_nuevo(comercio):

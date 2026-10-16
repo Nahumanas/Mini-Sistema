@@ -34,7 +34,7 @@ if not es_jefe():
                       | (vista["codigo_barras"] == texto)]
     st.dataframe(
         vista, hide_index=True,
-        column_order=["estado", "codigo", "nombre", "categoria", "precio_venta", "stock", "stock_minimo",
+        column_order=["estado", "codigo", "nombre", "stock", "stock_minimo", "categoria", "precio_venta",
                       "codigo_barras"],
         column_config={
             "estado": "Estado", "codigo": "Código", "nombre": "Producto", "categoria": "Categoría",
@@ -71,8 +71,9 @@ vista["estado"] = vista.apply(
     lambda p: "⛔ Inactivo" if not p["activo"] else ("⚠️ Reponer" if p["stock"] <= p["stock_minimo"] else "✅ OK"), axis=1
 )
 vista["margen"] = (vista["precio_venta"] / vista["precio_costo"] - 1).where(vista["precio_costo"] > 0)
-columnas = ["id", "estado", "codigo", "nombre", "categoria", "precio_costo", "precio_venta", "margen",
-            "stock", "stock_minimo", "activo", "codigo_barras"]
+# El stock va al lado del nombre, así se ve aunque la pantalla sea angosta
+columnas = ["id", "estado", "codigo", "nombre", "stock", "stock_minimo", "categoria", "precio_costo", "precio_venta",
+            "margen", "activo", "codigo_barras"]
 
 # Tabla editable: se puede cambiar precio, stock, etc. y después tocar "Guardar cambios".
 version = st.session_state.setdefault("version_stock", 0)
