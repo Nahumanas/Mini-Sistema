@@ -72,7 +72,7 @@ Si escribís mal el PIN 3 veces, hay que esperar 30 segundos. Si te olvidaste el
 
 Por ahora el dueño se elige de una lista. Con la nube (paso 5) se entra con Gmail y contraseña.
 
-**Modo demo.** Con la variable `MODO_DEMO = "1"` (en Streamlit Community Cloud va en los *Secrets* de la app), el PIN del jefe viene puesto en `1234`, la pantalla de ingreso lo muestra y se ocultan el botón para apagar y el cambio de PIN.
+**Modo demo.** Con la variable `MODO_DEMO = "1"` (en Streamlit Community Cloud va en los *Secrets* de la app), el PIN del jefe viene puesto en `1234`, la pantalla de ingreso lo muestra y se ocultan el botón para apagar y el cambio de PIN. En Streamlit Community Cloud el modo demo se prende solo, aunque falte ese Secret, y el botón para apagar nunca aparece en internet.
 
 ## Próximo: la nube (paso 5)
 

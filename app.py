@@ -17,7 +17,7 @@ import operaciones as op
 import reportes
 from ingreso import pantalla_ingreso
 from comun import RUBROS, a_python, permisos_de
-from config import MODO_DEMO, PIN_DEMO, RUTA_BASE
+from config import MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE
 
 st.set_page_config(page_title="Mini-Sistema", page_icon="🏪", layout="wide")
 
@@ -76,7 +76,7 @@ def guardar_reportes_pendientes(semana_actual):
 
 
 # Si se confirmó "Apagar el sistema": muestra el aviso y cierra el programa (y la ventana negra)
-if st.session_state.get("apagando"):
+if st.session_state.get("apagando") and PUEDE_APAGARSE:  # en internet nunca se apaga
     st.title("⏻ Sistema apagado")
     st.success("Todo lo que cargaste quedó guardado. Ya podés cerrar esta pestaña.")
     st.info("Para volver a abrirlo, hacé doble clic en **iniciar.bat**.")
@@ -108,7 +108,7 @@ rol = st.session_state.get("rol")
 if rol not in ("jefe", "empleado"):
     with st.sidebar:
         st.title("🏪 Mini-Sistema")
-        if not MODO_DEMO and st.button("⏻ Apagar el sistema", width="stretch"):
+        if PUEDE_APAGARSE and st.button("⏻ Apagar el sistema", width="stretch"):
             confirmar_apagado()
     # Cualquier dirección (por ejemplo /caja si alguien recarga la página) muestra el ingreso;
     # después de entrar, sigue en esa misma pantalla.
@@ -156,7 +156,7 @@ with st.sidebar:
         for clave in ("rol", "nombre", "dueno", "comercio", "comercio_nombre"):
             st.session_state.pop(clave, None)
         st.rerun()
-    if not MODO_DEMO and st.button("⏻ Apagar el sistema", width="stretch"):
+    if PUEDE_APAGARSE and st.button("⏻ Apagar el sistema", width="stretch"):
         confirmar_apagado()
 
 # 3) Las pantallas del sistema, agrupadas como en un ERP
