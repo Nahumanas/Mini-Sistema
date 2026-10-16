@@ -1,0 +1,15 @@
+[theme]
+primaryColor = "#1F6FEB"
+
+[server]
+# headless = true evita que Streamlit frene la primera vez pidiendo un email.
+# El navegador lo abre iniciar.bat (o entrá vos a http://localhost:8501).
+headless = true
+runOnSave = true
+
+[client]
+# Oculta el botón "Deploy" y el menú de desarrollador de Streamlit
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false

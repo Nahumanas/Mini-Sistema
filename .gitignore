@@ -1,0 +1,17 @@
+# Base de datos y archivos que genera el sistema (se crean solos)
+mini_sistema.db
+reportes/
+powerbi/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Secretos (nunca subirlos)
+.env
+.streamlit/secrets.toml
+
+# Notas internas del proyecto
+informe/plan/
