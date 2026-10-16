@@ -22,6 +22,8 @@ Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 
 **Hecho con:** Python, pandas, SQLAlchemy, SQLite y Streamlit. Los reportes en Excel se arman con openpyxl y el ticket con fpdf2. La base está escrita con SQLAlchemy para pasarla a PostgreSQL en la nube (Supabase) cambiando una sola línea.
 
+📘 **¿Querés entender cómo funciona todo?** Leé la [guía del sistema](informe/guia/guia-del-sistema.md).
+
 ## Cómo abrirlo
 
 Si es la primera vez y no hay base de datos, el sistema crea sola una con datos de prueba (2 dueños, 4 comercios y unos 6 meses de ventas).
@@ -112,6 +114,7 @@ En **Control → Reportes** elegís el **período** (una semana, un mes o las fe
 | `informe/` | Todo lo informativo, separado por tipo: |
 | `informe/ejemplos/` | Dos Excel de ejemplo hechos con los datos de prueba (los 3 comercios de Carlos): uno de septiembre y uno de la semana del 5 al 11 de octubre. |
 | `informe/capturas/` | Capturas de pantalla del sistema. |
+| `informe/guia/` | La guía para entender todo el sistema (en .md y en Word). |
 | `comun.py` | Cosas que comparten las pantallas (formato de pesos, medios de pago...). |
 | `config.py` | Dice dónde está la base. En el paso 5 (nube) solo se cambia esta línea. |
 | `base_datos.py` | Define las tablas y cómo se relacionan. |
