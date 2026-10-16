@@ -4,6 +4,8 @@ Sirve para cargar de una vez todos los productos de un comercio nuevo,
 o para cambiar muchos precios juntos: exportás, editás en Excel e importás.
 """
 
+import re
+import unicodedata
 from io import BytesIO
 
 import pandas as pd
@@ -14,6 +16,25 @@ from comun import comercio_actual, encabezado
 
 OBLIGATORIAS = ["codigo", "nombre", "precio_costo", "precio_venta", "stock"]
 OPCIONALES = ["categoria", "stock_minimo", "codigo_barras"]
+
+# Otros nombres con los que puede venir cada columna (por ejemplo, en la lista de un proveedor)
+SINONIMOS = {
+    "codigo_barras": ["codigo_de_barras", "codigo_de_barra", "codigo_barra", "cod_barras", "cod_de_barras",
+                      "barras", "ean", "ean13", "ean_13", "barcode", "upc"],
+    "codigo": ["cod", "codigo_interno", "sku"],
+    "nombre": ["producto", "descripcion", "articulo"],
+    "precio_costo": ["costo", "precio_de_costo", "precio_compra", "precio_de_compra"],
+    "precio_venta": ["precio", "precio_de_venta", "pvp"],
+    "stock": ["cantidad", "existencia"],
+    "stock_minimo": ["stock_min", "minimo"],
+    "categoria": ["rubro", "familia"],
+}
+
+
+def normalizar(encabezado):
+    """ "Código de Barras" -> "codigo_de_barras": sin tildes, en minúscula y con guiones bajos."""
+    texto = unicodedata.normalize("NFKD", str(encabezado)).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "_", texto.lower()).strip("_")
 
 comercio = comercio_actual()
 encabezado("📥", "Importar / exportar Excel", comercio)
@@ -50,8 +71,23 @@ st.caption("Si el código ya existe, se actualiza el producto. Si no existe, se 
 archivo = st.file_uploader("Subí el Excel", type=["xlsx", "xls"])
 if archivo:
     df = pd.read_excel(archivo)
-    # Acepta encabezados con mayúsculas o espacios: "Precio Venta" -> "precio_venta"
-    df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
+    # Acepta encabezados con mayúsculas, tildes o espacios, y otros nombres comunes:
+    # "Precio Venta" -> precio_venta, "Código de barras" o "EAN" -> codigo_barras
+    originales = list(df.columns)
+    df.columns = [normalizar(c) for c in originales]
+    equivalencias = {otro: columna for columna, otros in SINONIMOS.items() for otro in otros}
+    leidas = []
+    for original, nombre in zip(originales, list(df.columns)):
+        columna = equivalencias.get(nombre)
+        if columna and columna not in df.columns:
+            df = df.rename(columns={nombre: columna})
+            leidas.append(f"«{original}» como **{columna}**")
+    if leidas:
+        st.info("Leí " + ", ".join(leidas) + ".")
+    sin_usar = [str(o) for o, c in zip(originales, df.columns) if c not in OBLIGATORIAS + OPCIONALES]
+    if sin_usar:
+        st.caption("Estas columnas no se usan: " + ", ".join(sin_usar) + ". Si alguna es el código de barras, "
+                   "cambiale el nombre a **codigo_barras**.")
     faltan = [c for c in OBLIGATORIAS if c not in df.columns]
     if faltan:
         st.error(f"Al Excel le faltan estas columnas: {', '.join(faltan)}. Usá la plantilla como guía.")
