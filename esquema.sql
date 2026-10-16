@@ -71,6 +71,7 @@ CREATE TABLE productos (
 	comercio_id INTEGER NOT NULL, 
 	proveedor_id INTEGER, 
 	codigo VARCHAR(20) NOT NULL, 
+	codigo_barras VARCHAR(30), 
 	nombre VARCHAR(100) NOT NULL, 
 	categoria VARCHAR(50), 
 	precio_costo FLOAT NOT NULL, 

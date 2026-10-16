@@ -76,6 +76,8 @@ productos = Table(
     Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
     Column("proveedor_id", Integer, ForeignKey("proveedores.id")),
     Column("codigo", String(20), nullable=False),
+    # El número que lee el lector (por ejemplo 7790895000997). Opcional: el pan suelto no tiene.
+    Column("codigo_barras", String(30)),
     Column("nombre", String(100), nullable=False),
     Column("categoria", String(50)),
     Column("precio_costo", Float, nullable=False),  # precio actual de compra
@@ -192,6 +194,7 @@ def actualizar_base(motor):
         ("comercios", "permisos_empleado", f"VARCHAR(200) NOT NULL DEFAULT '{PERMISOS_EMPLEADO_INICIALES}'"),
         ("duenos", "pin_hash", "VARCHAR(200)"),
         ("ventas", "caja_id", "INTEGER REFERENCES cajas(id)"),
+        ("productos", "codigo_barras", "VARCHAR(30)"),
     ]
     for tabla, columna, tipo in nuevas:
         if columna not in {c["name"] for c in revisor.get_columns(tabla)}:

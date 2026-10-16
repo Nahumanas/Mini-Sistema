@@ -10,7 +10,8 @@ import pandas as pd
 import streamlit as st
 
 import operaciones as op
-from comun import MEDIOS_DE_PAGO, comercio_actual, encabezado, es_jefe, pesos
+from comun import (MEDIOS_DE_PAGO, alta_rapida, buscar_por_codigo, comercio_actual, dejar_listo_el_lector,
+                   encabezado, es_jefe, pesos)
 
 
 def pesos_md(valor):
@@ -181,31 +182,72 @@ if ultima and ultima["comercio_id"] == comercio["id"]:
 
 izquierda, derecha = st.columns([3, 2], gap="large")
 
+
+def agregar_al_carrito(producto_id, cantidad):
+    """Suma el producto a la venta (si ya estaba, le suma la cantidad)."""
+    for item in carrito:
+        if item["producto_id"] == producto_id:
+            item["cantidad"] += int(cantidad)
+            return
+    carrito.append({
+        "producto_id": int(producto_id),
+        "nombre": productos.loc[producto_id, "nombre"],
+        "cantidad": int(cantidad),
+        "precio_unitario": float(productos.loc[producto_id, "precio_venta"]),
+    })
+
+
+ESCANER = "📷 Escanear código de barras"
+clave_escaner = f"escaner_{comercio['id']}"
+clave_desconocido = f"codigo_desconocido_{comercio['id']}"  # código que el lector no encontró
+
+
+def escanear():
+    """Lo que pasa cuando el lector "escribe" un código y aprieta Enter: suma 1 unidad de ese producto."""
+    codigo = st.session_state[clave_escaner].strip()
+    st.session_state[clave_escaner] = ""  # deja el casillero vacío para el próximo producto
+    if not codigo:
+        return
+    producto_id = buscar_por_codigo(productos, codigo)
+    if producto_id is None:
+        st.session_state[clave_desconocido] = codigo
+        return
+    st.session_state.pop(clave_desconocido, None)
+    agregar_al_carrito(producto_id, 1)
+    st.toast(f"➕ {productos.loc[producto_id, 'nombre']}")
+
+
 # --- Agregar productos ---
 with izquierda:
+    st.text_input(ESCANER, key=clave_escaner, on_change=escanear,
+                  placeholder="Pasá el lector por el producto (o escribí el código y Enter)")
+    if desconocido := st.session_state.get(clave_desconocido):
+        if es_jefe():
+            # El jefe lo puede dar de alta en el momento, y queda sumado a la venta
+            with st.container(border=True):
+                st.warning(f"No hay ningún producto con el código **{desconocido}**.")
+                if producto_nuevo := alta_rapida(comercio, desconocido, clave_desconocido, pedir_stock=True):
+                    productos = op.listar_productos(comercio["id"]).set_index("id")
+                    agregar_al_carrito(producto_nuevo, 1)
+                    st.rerun()
+        else:
+            st.warning(f"No hay ningún producto con el código **{desconocido}**. Avisale al jefe.")
+            st.session_state.pop(clave_desconocido)
+    dejar_listo_el_lector(ESCANER)
+
     with st.form("agregar_producto", clear_on_submit=True, border=False):
         c1, c2 = st.columns([4, 1])
         producto_id = c1.selectbox(
             "Producto",
             productos.index,
             index=None,
-            placeholder="Escribí el nombre o el código para buscar...",
+            placeholder="Sin código de barras: escribí el nombre para buscar...",
             format_func=lambda i: f"{productos.loc[i, 'codigo']} · {productos.loc[i, 'nombre']} · "
                                   f"{pesos(productos.loc[i, 'precio_venta'])}  (stock {productos.loc[i, 'stock']})",
         )
         cantidad = c2.number_input("Cantidad", min_value=1, value=1, step=1)
         if st.form_submit_button("➕ Agregar") and producto_id is not None:
-            for item in carrito:
-                if item["producto_id"] == producto_id:
-                    item["cantidad"] += int(cantidad)
-                    break
-            else:
-                carrito.append({
-                    "producto_id": int(producto_id),
-                    "nombre": productos.loc[producto_id, "nombre"],
-                    "cantidad": int(cantidad),
-                    "precio_unitario": float(productos.loc[producto_id, "precio_venta"]),
-                })
+            agregar_al_carrito(producto_id, cantidad)
             st.rerun()
 
     if not carrito:

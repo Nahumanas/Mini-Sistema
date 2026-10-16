@@ -208,15 +208,52 @@ def listar_productos(comercio_id, solo_activos=True):
 
 
 def crear_producto(comercio_id, codigo, nombre, categoria, precio_costo, precio_venta,
-                   stock, stock_minimo, proveedor_id=None):
+                   stock, stock_minimo, proveedor_id=None, codigo_barras=None):
+    """Crea el producto y devuelve su id."""
     with motor.begin() as con:
-        con.execute(
+        resultado = con.execute(
             bd.productos.insert().values(
                 comercio_id=comercio_id, proveedor_id=proveedor_id, codigo=codigo,
+                codigo_barras=limpiar_codigo_barras(codigo_barras),
                 nombre=nombre, categoria=categoria, precio_costo=precio_costo,
                 precio_venta=precio_venta, stock=stock, stock_minimo=stock_minimo,
                 activo=True,
             )
+        )
+    return resultado.inserted_primary_key[0]
+
+
+def limpiar_codigo_barras(valor):
+    """Deja el código de barras como texto prolijo, o None si está vacío.
+
+    Excel a veces guarda 7790895000997 como número con decimales (7790895000997.0): se lo sacamos.
+    """
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+        return None
+    if isinstance(valor, float) and valor.is_integer():
+        valor = int(valor)
+    texto = str(valor).strip()
+    return texto or None
+
+
+def producto_con_codigo_barras(comercio_id, codigo_barras):
+    """El producto del comercio que tiene ese código de barras (activo o no), o None."""
+    codigo_barras = limpiar_codigo_barras(codigo_barras)
+    if codigo_barras is None:
+        return None
+    with motor.connect() as con:
+        fila = con.execute(
+            select(bd.productos)
+            .where(bd.productos.c.comercio_id == comercio_id, bd.productos.c.codigo_barras == codigo_barras)
+        ).mappings().first()
+    return dict(fila) if fila else None
+
+
+def asignar_codigo_barras(producto_id, codigo_barras):
+    with motor.begin() as con:
+        con.execute(
+            bd.productos.update().where(bd.productos.c.id == producto_id)
+            .values(codigo_barras=limpiar_codigo_barras(codigo_barras))
         )
 
 
@@ -255,6 +292,8 @@ def importar_productos(comercio_id, df):
                 "stock_minimo": 0 if pd.isna(minimo) else int(minimo),
                 "activo": True,
             }
+            if "codigo_barras" in fila:  # columna opcional: si el Excel no la trae, no se toca
+                datos["codigo_barras"] = limpiar_codigo_barras(fila["codigo_barras"])
             if datos["codigo"] in id_por_codigo:
                 con.execute(
                     bd.productos.update()

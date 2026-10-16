@@ -9,6 +9,7 @@ Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 ## Qué hace
 
 - **Caja:** se abre con el efectivo inicial, se cobra producto por producto (descuenta el stock solo) y al cerrar hace el **arqueo**: cuánto efectivo debería haber, cuánto se contó y si sobra o falta. Una caja cerrada no se puede modificar.
+- **Lector de código de barras:** en la Caja cada pasada suma el producto a la venta; en Compras pide la cantidad que llegó. Los códigos se cargan en el Excel de productos (o con el lector en Stock), y si aparece uno desconocido el jefe lo da de alta en el momento.
 - **Jefe y empleado:** el jefe entra con su PIN y ve todo; el empleado ve la Caja y solo lo que el jefe le habilite.
 - **Reportes** por semana, mes o fechas, en pantalla y en Excel con gráficos. El del mes pasado se guarda solo; el semanal se activa en temporada alta.
 - **Panel del día** que se actualiza solo, **stock** con avisos de reposición, **compras**, **gastos**, **ticket en PDF** e **importar/exportar Excel**.
@@ -46,15 +47,15 @@ Al abrir el sistema elegís el **dueño** y el **comercio**, y entrás como **je
 | Pantalla | Para qué sirve |
 |---|---|
 | 🏠 Inicio | El "launcher": todos tus comercios con lo vendido hoy y en el mes, avisos de stock bajo y un botón para abrir la caja de cada uno. |
-| 💵 Caja | Primero se **abre la caja** con el efectivo inicial. Después cargás cada venta en el momento: buscás el producto, ponés la cantidad, elegís el medio de pago y cobrás (descuenta el stock solo). Al final del turno se **cierra la caja**: contás el efectivo y el sistema muestra cuánto debería haber y si sobra o falta. Una caja cerrada no se puede modificar. |
+| 💵 Caja | Primero se **abre la caja** con el efectivo inicial. Después cargás cada venta en el momento: pasás el **lector de código de barras** por cada producto (cada pasada suma 1) o, si no tiene código, lo buscás en la lista; elegís el medio de pago y cobrás (descuenta el stock solo). Si el lector lee un código que no está cargado, el jefe puede crear el producto ahí mismo. Al final del turno se **cierra la caja**: contás el efectivo y el sistema muestra cuánto debería haber y si sobra o falta. Una caja cerrada no se puede modificar. |
 | 🧾 Ticket | En los comercios que usan ticket, al cobrar podés tildar "El cliente pide ticket" y se descarga un PDF de 80 mm listo para imprimir. Es un comprobante interno, no una factura de ARCA. |
-| 📦 Compras | Cargar lo que le comprás a un proveedor. Suma al stock y actualiza el precio de costo. |
+| 📦 Compras | Cargar lo que le comprás a un proveedor. Con el lector: pasás el producto, escribís la cantidad que llegó y Enter. Suma al stock y actualiza el precio de costo. |
 | 🧾 Gastos | Alquiler, luz, sueldos, etc. Sirve para calcular la ganancia real del mes. |
 | 📊 Panel del día | Cómo viene el día: vendido, cantidad de ventas, ganancia, ventas por hora, medios de pago y lo más vendido. Se actualiza solo cada 10 segundos y compara con el mismo día de la semana pasada. |
-| 📋 Stock | Todos los productos con su estado (✅ OK / ⚠️ Reponer). Podés cambiar precios y cantidades en la tabla y tocar **Guardar cambios**, o agregar productos nuevos. |
+| 📋 Stock | Todos los productos con su estado (✅ OK / ⚠️ Reponer). Podés cambiar precios, cantidades y códigos de barras en la tabla y tocar **Guardar cambios**, o agregar productos nuevos. También podés cargar con el lector los códigos de barras que falten. |
 | 📑 Reportes | Por semana, por mes o por las fechas que elijas: cuánto vendí, cuánto gané, cuánto gasté, qué se vende más y qué me falta comprar. Para un comercio o todos juntos, con el botón para **descargar el Excel**. |
 | 🏬 Mis comercios | Crear un comercio nuevo (sin tocar código), activar o desactivar los tickets de cada uno, prender o apagar el **resumen semanal** (para la temporada), elegir **qué ve el empleado** y cambiar tu PIN de jefe. |
-| 📥 Importar / exportar Excel | Bajar la plantilla o tus productos a Excel, editarlos y volver a subirlos. Si el código ya existe actualiza el producto; si no, lo crea. |
+| 📥 Importar / exportar Excel | Bajar la plantilla o tus productos a Excel, editarlos y volver a subirlos. Si el código ya existe actualiza el producto; si no, lo crea. La columna `codigo_barras` (opcional) es la forma más rápida de cargar todos los códigos de barras de una vez. |
 
 ## Jefe y empleado
 
@@ -126,7 +127,7 @@ En **Control → Reportes** elegís el **período** (una semana, un mes o las fe
 ```
 duenos
   └── comercios              un dueño tiene 1 o más comercios
-        ├── productos        con precio de costo, precio de venta y stock
+        ├── productos        con precio de costo, precio de venta, stock y código de barras
         ├── proveedores
         ├── compras ── compras_detalle   lo que se compra a proveedores
         ├── cajas            cada apertura y cierre de caja, con el arqueo
@@ -154,6 +155,7 @@ duenos
 - Los precios suben 2% por mes (inflación).
 - Cuando el stock baja, el comercio le compra al proveedor en sus días de reposición.
 - Los gastos fijos se cargan el día 5 de cada mes.
+- Los productos tienen códigos de barras inventados (empiezan con 779, como los de Argentina), salvo los tornillos sueltos de la ferretería, que se eligen de la lista.
 - **Octubre sale con poca ganancia o en negativo** porque solo tiene 15 días de ventas pero ya tiene los gastos del mes completo.
 
 `python generar_datos_prueba.py` **borra y vuelve a crear** la base, incluidas las ventas que hayas cargado a mano en la Caja. Usalo para volver a empezar de cero.

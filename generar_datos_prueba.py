@@ -187,6 +187,13 @@ def cantidad_de_ventas(promedio):
     return max(0, round(random.gauss(promedio, promedio ** 0.5)))
 
 
+def codigo_de_barras(producto_id):
+    """Inventa un código de barras EAN-13 válido (779 es el prefijo de Argentina)."""
+    base = f"779{producto_id:09d}"
+    suma = sum(int(d) * (3 if i % 2 else 1) for i, d in enumerate(base))
+    return base + str((10 - suma % 10) % 10)
+
+
 def generar():
     # Listas donde se van guardando las filas de cada tabla
     filas = {nombre: [] for nombre in base_datos.metadata.tables}
@@ -221,9 +228,12 @@ def generar():
             unidades_diarias = (c["ventas_por_dia"] * items_promedio * (1 + qmax) / 2
                                 * popu / sum(p[4] for p in CATALOGOS[c["rubro"]]))
             stock_objetivo = max(5, round(unidades_diarias * 14))  # alcanza para ~2 semanas
+            id_producto = len(filas["productos"]) + len(prods) + 1
             prods.append({
-                "id": len(filas["productos"]) + len(prods) + 1,
+                "id": id_producto,
                 "comercio_id": id_comercio,
+                # Los tornillos se venden sueltos: no tienen código de barras (se eligen de la lista)
+                "codigo_barras": None if cat == "Tornillería" else codigo_de_barras(id_producto),
                 "proveedor_id": ids_proveedores[j % len(ids_proveedores)],
                 "codigo": f"{c['rubro'][:3].upper()}-{j:03d}",
                 "nombre": nombre, "categoria": cat,

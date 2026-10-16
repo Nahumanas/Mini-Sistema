@@ -3,15 +3,17 @@
 El empleado solo puede mirar (sin costos ni márgenes); cambiar algo es cosa del jefe.
 """
 
+import pandas as pd
 import streamlit as st
 
 import operaciones as op
-from comun import comercio_actual, encabezado, es_jefe, pesos
+from comun import codigo_nuevo, comercio_actual, encabezado, es_jefe, pesos
 
 comercio = comercio_actual()
 encabezado("📋", "Stock", comercio)
 
 productos = op.listar_productos(comercio["id"], solo_activos=False)
+productos["codigo_barras"] = productos["codigo_barras"].fillna("")  # vacío en vez de "nada"
 activos = productos[productos["activo"].astype(bool)]
 bajos = activos[activos["stock"] <= activos["stock_minimo"]]
 
@@ -24,16 +26,19 @@ if es_jefe():
 if not es_jefe():
     vista = activos.copy()
     vista["estado"] = vista.apply(lambda p: "⚠️ Reponer" if p["stock"] <= p["stock_minimo"] else "✅ OK", axis=1)
-    busqueda = st.text_input("Buscar", placeholder="Nombre o código")
+    busqueda = st.text_input("Buscar", placeholder="Nombre, código o código de barras (podés pasar el lector)")
     if busqueda:
-        texto = busqueda.lower()
+        texto = busqueda.strip().lower()
         vista = vista[vista["nombre"].str.lower().str.contains(texto, regex=False)
-                      | vista["codigo"].str.lower().str.contains(texto, regex=False)]
+                      | vista["codigo"].str.lower().str.contains(texto, regex=False)
+                      | (vista["codigo_barras"] == texto)]
     st.dataframe(
         vista, hide_index=True,
-        column_order=["estado", "codigo", "nombre", "categoria", "precio_venta", "stock", "stock_minimo"],
+        column_order=["estado", "codigo", "nombre", "categoria", "precio_venta", "stock", "stock_minimo",
+                      "codigo_barras"],
         column_config={
             "estado": "Estado", "codigo": "Código", "nombre": "Producto", "categoria": "Categoría",
+            "codigo_barras": "Código de barras",
             "precio_venta": st.column_config.NumberColumn("Precio ($)", format="localized"),
             "stock": "Stock", "stock_minimo": "Stock mínimo",
         },
@@ -46,7 +51,7 @@ if st.session_state.pop("stock_guardado", None):
 
 # --- Filtros ---
 f1, f2 = st.columns([3, 1], vertical_alignment="bottom")
-busqueda = f1.text_input("Buscar", placeholder="Nombre, código o categoría")
+busqueda = f1.text_input("Buscar", placeholder="Nombre, código, categoría o código de barras")
 solo_bajo = f2.toggle("Solo stock bajo")
 
 vista = productos.copy()
@@ -57,6 +62,7 @@ if busqueda:
         vista["nombre"].str.lower().str.contains(texto, regex=False)
         | vista["codigo"].str.lower().str.contains(texto, regex=False)
         | vista["categoria"].fillna("").str.lower().str.contains(texto, regex=False)
+        | vista["codigo_barras"].str.contains(texto, regex=False)
     ]
 if solo_bajo:
     vista = vista[vista["stock"] <= vista["stock_minimo"]]
@@ -66,7 +72,7 @@ vista["estado"] = vista.apply(
 )
 vista["margen"] = (vista["precio_venta"] / vista["precio_costo"] - 1).where(vista["precio_costo"] > 0)
 columnas = ["id", "estado", "codigo", "nombre", "categoria", "precio_costo", "precio_venta", "margen",
-            "stock", "stock_minimo", "activo"]
+            "stock", "stock_minimo", "activo", "codigo_barras"]
 
 # Tabla editable: se puede cambiar precio, stock, etc. y después tocar "Guardar cambios".
 version = st.session_state.setdefault("version_stock", 0)
@@ -87,13 +93,26 @@ editado = st.data_editor(
         "stock": st.column_config.NumberColumn("Stock", step=1),
         "stock_minimo": st.column_config.NumberColumn("Stock mínimo", step=1, min_value=0),
         "activo": st.column_config.CheckboxColumn("Activo"),
+        "codigo_barras": st.column_config.TextColumn("Código de barras", max_chars=30),
     },
 )
 
-editables = ["nombre", "categoria", "precio_costo", "precio_venta", "stock", "stock_minimo", "activo"]
+editables = ["nombre", "categoria", "precio_costo", "precio_venta", "stock", "stock_minimo", "activo",
+             "codigo_barras"]
 original = vista.set_index("id")[editables]
 nuevo = editado.set_index("id")[editables]
-cambiados = nuevo[(nuevo != original).any(axis=1)]
+cambiados = nuevo[(nuevo.fillna("") != original.fillna("")).any(axis=1)]
+
+
+def codigos_repetidos(cambios):
+    """Códigos de barras que, con estos cambios, quedarían en dos productos distintos."""
+    final = productos.set_index("id")["codigo_barras"].to_dict()
+    for cambio in cambios:
+        final[cambio["id"]] = cambio["codigo_barras"] or ""
+    usados = pd.Series([codigo for codigo in final.values() if codigo], dtype=str)
+    return sorted(usados[usados.duplicated()].unique())
+
+
 if st.button(f"Guardar cambios ({len(cambiados)})", type="primary", disabled=cambiados.empty):
     cambios = []
     for producto_id, fila in cambiados.iterrows():
@@ -103,21 +122,56 @@ if st.button(f"Guardar cambios ({len(cambiados)})", type="primary", disabled=cam
             "precio_costo": float(fila["precio_costo"]), "precio_venta": float(fila["precio_venta"]),
             "stock": int(fila["stock"]), "stock_minimo": int(fila["stock_minimo"]),
             "activo": bool(fila["activo"]),
+            "codigo_barras": op.limpiar_codigo_barras(fila["codigo_barras"]),
         })
-    op.actualizar_productos(cambios)
-    st.session_state["version_stock"] += 1
-    st.session_state["stock_guardado"] = True
-    st.rerun()
+    repetidos = codigos_repetidos(cambios)
+    if repetidos:
+        st.error(f"Estos códigos de barras quedarían en dos productos: {', '.join(repetidos)}. "
+                 "Cada código tiene que ser de un solo producto.")
+    else:
+        op.actualizar_productos(cambios)
+        st.session_state["version_stock"] += 1
+        st.session_state["stock_guardado"] = True
+        st.rerun()
 
 st.caption("Para dar de baja un producto que ya no vendés, destildá **Activo**: deja de aparecer en la Caja pero no se pierde su historial.")
+
+# --- Códigos de barras con el lector (la forma principal es el Excel de productos) ---
+with st.expander("📷 Cargar códigos de barras con el lector"):
+    st.caption("Lo más rápido es cargarlos todos juntos en el Excel (pantalla **Importar Excel**, columna "
+               "*codigo_barras*). Acá podés cargar los que falten: elegí el producto y pasá el lector.")
+    sin_codigo = productos[productos["codigo_barras"] == ""].set_index("id")
+    if sin_codigo.empty:
+        st.success("Todos los productos ya tienen código de barras.")
+    else:
+        with st.form("asignar_codigo", clear_on_submit=True, border=False):
+            c1, c2 = st.columns(2)
+            producto_id = c1.selectbox(
+                f"Producto sin código ({len(sin_codigo)})", sin_codigo.index, index=None,
+                placeholder="Elegí el producto",
+                format_func=lambda i: f"{sin_codigo.loc[i, 'codigo']} · {sin_codigo.loc[i, 'nombre']}",
+            )
+            codigo_barras = c2.text_input("Código de barras", placeholder="Pasá el lector por el producto")
+            if st.form_submit_button("Guardar código", type="primary"):
+                codigo_barras = op.limpiar_codigo_barras(codigo_barras)
+                otro = op.producto_con_codigo_barras(comercio["id"], codigo_barras)
+                if producto_id is None or codigo_barras is None:
+                    st.error("Elegí el producto y pasá el lector.")
+                elif otro:
+                    st.error(f"Ese código ya es de **{otro['nombre']}**.")
+                else:
+                    op.asignar_codigo_barras(int(producto_id), codigo_barras)
+                    st.session_state["version_stock"] += 1
+                    st.session_state["stock_guardado"] = True
+                    st.rerun()
 
 # --- Producto nuevo ---
 with st.expander("➕ Agregar producto nuevo"):
     proveedores = op.listar_proveedores(comercio["id"]).set_index("id")
-    with st.form("producto_nuevo", clear_on_submit=True, border=False):
+    # Sin "Enter para guardar": el lector aprieta Enter al leer el código y guardaría el producto a medias
+    with st.form("producto_nuevo", clear_on_submit=True, border=False, enter_to_submit=False):
         c1, c2, c3 = st.columns(3)
-        siguiente = len(productos) + 1
-        codigo = c1.text_input("Código", value=f"{comercio['rubro'][:3].upper()}-{siguiente:03d}")
+        codigo = c1.text_input("Código", value=codigo_nuevo(comercio))
         nombre = c2.text_input("Nombre")
         categoria = c3.text_input("Categoría")
         c4, c5, c6, c7 = st.columns(4)
@@ -125,7 +179,9 @@ with st.expander("➕ Agregar producto nuevo"):
         venta = c5.number_input("Precio de venta ($)", min_value=0.0, step=10.0)
         stock_inicial = c6.number_input("Stock inicial", min_value=0, step=1)
         minimo = c7.number_input("Stock mínimo", min_value=0, step=1, value=2)
-        proveedor_id = st.selectbox(
+        c8, c9 = st.columns(2)
+        codigo_barras = c8.text_input("Código de barras (opcional)", placeholder="Pasá el lector por el producto")
+        proveedor_id = c9.selectbox(
             "Proveedor (opcional)", proveedores.index, index=None,
             format_func=lambda i: proveedores.loc[i, "nombre"],
         )
@@ -134,11 +190,14 @@ with st.expander("➕ Agregar producto nuevo"):
                 st.error("Completá al menos el código y el nombre.")
             elif codigo.strip() in set(productos["codigo"]):
                 st.error("Ya existe un producto con ese código.")
+            elif op.producto_con_codigo_barras(comercio["id"], codigo_barras):
+                st.error("Ese código de barras ya es de otro producto.")
             else:
                 op.crear_producto(
                     comercio["id"], codigo.strip(), nombre.strip(), categoria.strip() or None,
                     costo, venta, int(stock_inicial), int(minimo),
                     int(proveedor_id) if proveedor_id is not None else None,
+                    codigo_barras,
                 )
                 st.session_state["version_stock"] += 1
                 st.session_state["stock_guardado"] = True

@@ -62,6 +62,9 @@ correr_script("""
     }
 """)
 
+# Oculta los avisos en inglés que Streamlit pone dentro de los casilleros ("Press Enter to submit form")
+st.html("<style>[data-testid='InputInstructions'] { display: none; }</style>")
+
 
 @st.cache_resource(show_spinner=False)
 def guardar_reportes_pendientes(semana_actual):
