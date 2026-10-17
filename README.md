@@ -78,6 +78,8 @@ Por ahora el dueño se elige de una lista. Con la nube (paso 5) se entra con Gma
 
 **Modo demo.** Con la variable `MODO_DEMO = "1"` (en Streamlit Community Cloud va en los *Secrets* de la app), el PIN del jefe viene puesto en `1234`, la pantalla de ingreso lo muestra y se ocultan el botón para apagar y el cambio de PIN. En Streamlit Community Cloud el modo demo se prende solo, aunque falte ese Secret, y el botón para apagar nunca aparece en internet.
 
+**Reseñas.** Si en los *Secrets* de la app se pone `FORMULARIO_RESENAS = "https://forms.gle/..."` (el link de un formulario de Google), aparece en la barra de la izquierda el botón **💬 Dejá tu reseña**. Las respuestas llegan a la planilla del formulario y no tocan la base de datos.
+
 ## Próximo: la nube (paso 5)
 
 La base pasa de SQLite a **Supabase** (PostgreSQL en internet) y la página se sube a un servidor (**Render** o **Railway**). Como el sistema usa SQLAlchemy, para cambiar de base alcanza con cambiar la dirección en `config.py`. Así varios comercios usan la misma base y el dueño ve todo en vivo, también desde el celular.

@@ -16,7 +16,7 @@ import operaciones as op
 import reportes
 from ingreso import pantalla_ingreso
 from comun import RUBROS, a_python, correr_script, permisos_de
-from config import MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE
+from config import FORMULARIO_RESENAS, MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE
 
 st.set_page_config(page_title="Mini-Sistema", page_icon="🏪", layout="wide")
 
@@ -94,11 +94,19 @@ def confirmar_apagado():
 
 guardar_reportes_pendientes(reportes.lunes_de(date.today()))
 
+def boton_resena():
+    """Botón para dejar una reseña: abre el formulario de Google en otra pestaña (las respuestas no tocan la base)."""
+    if FORMULARIO_RESENAS.startswith("https://"):
+        st.link_button("💬 Dejá tu reseña", FORMULARIO_RESENAS, width="stretch",
+                       help="Contanos qué te pareció el sistema y qué le falta. Tarda un minuto.")
+
+
 # 1) Si nadie entró todavía, solo se muestra la pantalla para ingresar
 rol = st.session_state.get("rol")
 if rol not in ("jefe", "empleado"):
     with st.sidebar:
         st.title("🏪 Mini-Sistema")
+        boton_resena()
         if PUEDE_APAGARSE and st.button("⏻ Apagar el sistema", width="stretch"):
             confirmar_apagado()
     # Cualquier dirección (por ejemplo /caja si alguien recarga la página) muestra el ingreso;
@@ -147,6 +155,7 @@ with st.sidebar:
         for clave in ("rol", "nombre", "dueno", "comercio", "comercio_nombre"):
             st.session_state.pop(clave, None)
         st.rerun()
+    boton_resena()
     if PUEDE_APAGARSE and st.button("⏻ Apagar el sistema", width="stretch"):
         confirmar_apagado()
 
