@@ -41,6 +41,15 @@ MES_FIN_TEMPORADA = 3         # en marzo sugiere apagarlo
 # Retoques visuales de todo el sistema (lo que no se puede cambiar desde .streamlit/config.toml).
 # Pensado para que se lea bien a cualquier edad: letra oscura, etiquetas más grandes y botones cómodos.
 ESTILOS = """<style>
+/* Tipografía Lexend. También está en .streamlit/config.toml, pero se carga acá por las dudas:
+   las versiones viejas de Streamlit ignoran esa opción, y así se ve igual en cualquier PC */
+@import url("https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700;800&display=swap");
+.stApp, .stApp p, .stApp li, .stApp label, .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
+.stApp button, .stApp input, .stApp textarea, .stApp [data-baseweb="select"] div,
+.stApp [data-testid="stMetricValue"], .stApp [data-testid="stMarkdownContainer"] {
+    font-family: "Lexend", sans-serif;
+}
+
 /* Detalles de Streamlit que no le sirven al comercio: el cartel "Running", la barrita de colores de arriba,
    el menú de desarrollador y los avisos en inglés dentro de los casilleros ("Press Enter to submit form") */
 [data-testid="stStatusWidget"], [data-testid="stDecoration"], [data-testid="stMainMenu"],
@@ -58,7 +67,7 @@ ESTILOS = """<style>
 
 /* Números grandes (vendido hoy, total...): el título arriba, legible */
 [data-testid="stMetricLabel"] p { font-size: 1rem; font-weight: 600; color: #3D4352; }
-[data-testid="stMetricValue"] { font-weight: 700; }
+[data-testid="stMetricValue"] { font-weight: 500; }
 
 /* Botones más cómodos de tocar */
 .stButton button, .stFormSubmitButton button, .stDownloadButton button, .stLinkButton a {
@@ -66,9 +75,9 @@ ESTILOS = """<style>
 }
 
 /* Caja: el total y el botón Cobrar bien grandes, que es lo que se mira y se toca con apuro */
-.st-key-total_a_cobrar [data-testid="stMetricValue"] { font-size: 3.4rem; font-weight: 800; color: #1B1F2A; }
+.st-key-total_a_cobrar [data-testid="stMetricValue"] { font-size: 3.4rem; font-weight: 600; color: #1B1F2A; }
 .st-key-boton_cobrar button { min-height: 3.6rem; }
-.st-key-boton_cobrar button p { font-size: 1.4rem; font-weight: 800; }
+.st-key-boton_cobrar button p { font-size: 1.4rem; font-weight: 700; }
 
 /* En el celular: menos espacio en blanco arriba, y cada producto de la venta en dos renglones
    (el nombre arriba; cantidad, precio y la X abajo) en vez de cuatro */
