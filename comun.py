@@ -41,14 +41,17 @@ MES_FIN_TEMPORADA = 3         # en marzo sugiere apagarlo
 # Retoques visuales de todo el sistema (lo que no se puede cambiar desde .streamlit/config.toml).
 # Pensado para que se lea bien a cualquier edad: letra oscura, etiquetas más grandes y botones cómodos.
 ESTILOS = """<style>
-/* Tipografía Lexend. También está en .streamlit/config.toml, pero se carga acá por las dudas:
-   las versiones viejas de Streamlit ignoran esa opción, y así se ve igual en cualquier PC */
-@import url("https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700;800&display=swap");
-.stApp, .stApp p, .stApp li, .stApp label, .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
-.stApp button, .stApp input, .stApp textarea, .stApp [data-baseweb="select"] div,
-.stApp [data-testid="stMetricValue"], .stApp [data-testid="stMarkdownContainer"] {
-    font-family: "Lexend", sans-serif;
+/* Tipografía: Inter para todo (se lee muy bien en pantalla y sus números tienen todos el mismo ancho,
+   así los precios quedan alineados) y Manrope para los títulos, que le da un toque propio.
+   También está en .streamlit/config.toml, pero se carga acá por las dudas: las versiones viejas
+   de Streamlit ignoran esa opción, y así se ve igual en cualquier PC */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap");
+.stApp, .stApp p, .stApp li, .stApp label, .stApp button, .stApp input, .stApp textarea,
+.stApp [data-baseweb="select"] div, .stApp [data-testid="stMetricValue"], .stApp [data-testid="stMarkdownContainer"] {
+    font-family: "Inter", sans-serif;
 }
+.stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6 { font-family: "Manrope", "Inter", sans-serif; }
+.stApp [data-testid="stMetricValue"], .stApp [data-testid="stMarkdownContainer"] p { font-variant-numeric: tabular-nums; }
 
 /* Detalles de Streamlit que no le sirven al comercio: el cartel "Running", la barrita de colores de arriba,
    el menú de desarrollador y los avisos en inglés dentro de los casilleros ("Press Enter to submit form") */

@@ -8,9 +8,10 @@ textColor = "#1B1F2A"
 grayTextColor = "#4A5162"
 borderColor = "#D3D8E2"
 showWidgetBorder = true
-# Letra más grande (Streamlit trae 16) y una tipografía propia, hecha para leerse fácil
+# Letra más grande (Streamlit trae 16). Tipografía: Inter para todo y Manrope para los títulos
 baseFontSize = 17
-font = "Lexend:https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700;800&display=swap, sans-serif"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+headingFont = "Manrope:https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&display=swap, sans-serif"
 headingFontWeights = [800, 700, 700]
 baseRadius = "medium"
 
