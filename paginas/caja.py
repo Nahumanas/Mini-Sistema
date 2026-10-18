@@ -11,7 +11,7 @@ import streamlit as st
 
 import operaciones as op
 from comun import (MEDIOS_DE_PAGO, alta_rapida, buscar_por_codigo, comercio_actual, dejar_listo_el_lector,
-                   encabezado, es_jefe, pesos)
+                   encabezado, es_jefe, pesos, plural)
 
 
 def pesos_md(valor):
@@ -20,7 +20,7 @@ def pesos_md(valor):
 
 
 def ventas_texto(cantidad):
-    return f"{cantidad} venta" if cantidad == 1 else f"{cantidad} ventas"
+    return plural(cantidad, "venta", "ventas")
 
 from ticket import generar_ticket_pdf
 
@@ -253,11 +253,12 @@ with izquierda:
     if not carrito:
         st.info("Agregá productos para empezar la venta.")
     for indice, item in enumerate(carrito):
-        f1, f2, f3, f4 = st.columns([5, 2, 2, 1], vertical_alignment="center")
+        # La "key" deja que en el celular la fila no se parta en cuatro renglones (ver ESTILOS en comun.py)
+        f1, f2, f3, f4 = st.container(key=f"fila_venta_{indice}").columns([4, 3, 2, 1], vertical_alignment="center")
         f1.write(item["nombre"])
         f2.write(f"{item['cantidad']} x {pesos(item['precio_unitario'])}")
         f3.write(f"**{pesos(item['cantidad'] * item['precio_unitario'])}**")
-        if f4.button("✕", key=f"quitar_{indice}", help="Quitar de la venta"):
+        if f4.button("", icon=":material/close:", key=f"quitar_{indice}", help="Quitar de la venta"):
             carrito.pop(indice)
             st.rerun()
 
@@ -265,7 +266,7 @@ with izquierda:
 with derecha:
     total = sum(i["cantidad"] * i["precio_unitario"] for i in carrito)
     with st.container(border=True):
-        st.metric("Total a cobrar", pesos(total))
+        st.container(key="total_a_cobrar").metric("Total a cobrar", pesos(total))
         medio_pago = st.radio(
             "Medio de pago", list(MEDIOS_DE_PAGO), format_func=MEDIOS_DE_PAGO.get, horizontal=True
         )
@@ -273,9 +274,10 @@ with derecha:
         if comercio["usa_ticket"]:
             con_ticket = st.checkbox("El cliente pide ticket")
 
-        c1, c2 = st.columns(2)
-        cobrar = c1.button("Cobrar", type="primary", disabled=not carrito)
-        if c2.button("Cancelar venta", disabled=not carrito):
+        # Cobrar ocupa todo el ancho y es bien grande; Cancelar queda abajo, más chico, para no tocarlo sin querer
+        cobrar = st.container(key="boton_cobrar").button("💵 Cobrar", type="primary", disabled=not carrito,
+                                                          width="stretch")
+        if st.button("Cancelar venta", disabled=not carrito):
             carrito.clear()
             st.rerun()
 

@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 
 import operaciones as op
-from comun import comercio_actual, encabezado
+from comun import comercio_actual, encabezado, plural
 
 OBLIGATORIAS = ["codigo", "nombre", "precio_costo", "precio_venta", "stock"]
 OPCIONALES = ["categoria", "stock_minimo", "codigo_barras"]
@@ -114,10 +114,10 @@ if archivo:
 
     st.dataframe(validos, hide_index=True)
     if not con_error.empty:
-        st.warning(f"{len(con_error)} filas tienen datos vacíos, números mal escritos o un código de barras "
+        st.warning(f"{plural(len(con_error), 'fila tiene', 'filas tienen')} datos vacíos, números mal escritos o un código de barras "
                    "repetido (o que ya es de otro producto), y no se van a importar:")
         st.dataframe(con_error, hide_index=True)
 
-    if st.button(f"Importar {len(validos)} productos", type="primary", disabled=validos.empty):
+    if st.button(f"Importar {plural(len(validos), 'producto', 'productos')}", type="primary", disabled=validos.empty):
         nuevos, actualizados = op.importar_productos(comercio["id"], validos)
-        st.success(f"Listo: {nuevos} productos nuevos y {actualizados} actualizados.")
+        st.success(f"Listo: {plural(nuevos, 'producto nuevo', 'productos nuevos')} y {plural(actualizados, 'actualizado', 'actualizados')}.")

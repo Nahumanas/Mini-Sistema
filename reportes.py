@@ -522,7 +522,7 @@ def generar_reporte(comercios, periodo, nombre_alcance=None):
     ]
     if p.tipo != "mes" or p.en_curso:
         notas.append("Los gastos del mes (alquiler, luz, sueldos...) se reparten por día: "
-                     f"a este período le tocan {p.dias} días. El detalle está en la hoja Gastos.")
+                     f"a este período le tocan {p.dias} {'día' if p.dias == 1 else 'días'}. El detalle está en la hoja Gastos.")
     if p.en_curso:
         notas.append(f"Este período todavía no terminó: se compara con los mismos días de antes ({p.nombre_anterior}).")
     for nota in notas:
@@ -547,7 +547,7 @@ def generar_reporte(comercios, periodo, nombre_alcance=None):
         fin_comprar = fila + 1
     else:
         hoja.cell(row=fila + 1, column=1,
-                  value=f"{len(comprar)} productos para reponer · costo estimado {_pesos_texto(comprar['costo_estimado'].sum())}"
+                  value=f"{len(comprar)} {'producto' if len(comprar) == 1 else 'productos'} para reponer · costo estimado {_pesos_texto(comprar['costo_estimado'].sum())}"
                   ).font = Font(bold=True, color="9A6700")
         urgentes = comprar.sort_values(["urgencia", "nombre"]).head(10)
         fin_comprar = _tabla(hoja, urgentes, fila + 2, 1, [
@@ -644,8 +644,11 @@ def generar_reporte(comercios, periodo, nombre_alcance=None):
     col_unidades = [c[0] for c in columnas].index("unidades") + 1
     col_nombre = [c[0] for c in columnas].index("nombre") + 1
     sin_ventas = int((ranking["unidades"] == 0).sum())
-    hoja["A3"] = (f"⚠️ {sin_ventas} productos no se vendieron nada en este período." if sin_ventas
-                  else "Todos los productos se vendieron al menos una vez en este período.")
+    if sin_ventas == 1:
+        hoja["A3"] = "⚠️ 1 producto no se vendió nada en este período."
+    else:
+        hoja["A3"] = (f"⚠️ {sin_ventas} productos no se vendieron nada en este período." if sin_ventas
+                      else "Todos los productos se vendieron al menos una vez en este período.")
     hoja["A3"].font = Font(size=10, italic=True, color="9A6700" if sin_ventas else "1A7F37")
     if len(ranking):
         n = min(10, len(ranking))

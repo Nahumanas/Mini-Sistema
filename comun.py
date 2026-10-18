@@ -38,9 +38,66 @@ MESES_TEMPORADA = (12, 1, 2)  # diciembre, enero y febrero
 MES_FIN_TEMPORADA = 3         # en marzo sugiere apagarlo
 
 
+# Retoques visuales de todo el sistema (lo que no se puede cambiar desde .streamlit/config.toml).
+# Pensado para que se lea bien a cualquier edad: letra oscura, etiquetas más grandes y botones cómodos.
+ESTILOS = """<style>
+/* Detalles de Streamlit que no le sirven al comercio: el cartel "Running", la barrita de colores de arriba,
+   el menú de desarrollador y los avisos en inglés dentro de los casilleros ("Press Enter to submit form") */
+[data-testid="stStatusWidget"], [data-testid="stDecoration"], [data-testid="stMainMenu"],
+[data-testid="stAppDeployButton"], [data-testid="InputInstructions"], footer { display: none !important; }
+
+/* Menú de arriba: letra más grande */
+[data-testid="stTopNavLink"] p, [data-testid="stTopNavSection"] p { font-size: 1.05rem; font-weight: 600; }
+
+/* Nombres de los casilleros ("Día", "Producto", "Cantidad"...): más grandes y oscuros */
+[data-testid="stWidgetLabel"] p { font-size: 1rem !important; font-weight: 600; color: #1B1F2A; }
+
+/* Textos chicos de ayuda: un poco más grandes y menos grises */
+[data-testid="stCaptionContainer"] { opacity: 1 !important; }
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { font-size: 0.95rem; color: #4A5162 !important; }
+
+/* Números grandes (vendido hoy, total...): el título arriba, legible */
+[data-testid="stMetricLabel"] p { font-size: 1rem; font-weight: 600; color: #3D4352; }
+[data-testid="stMetricValue"] { font-weight: 700; }
+
+/* Botones más cómodos de tocar */
+.stButton button, .stFormSubmitButton button, .stDownloadButton button, .stLinkButton a {
+    min-height: 2.75rem; font-weight: 600;
+}
+
+/* Caja: el total y el botón Cobrar bien grandes, que es lo que se mira y se toca con apuro */
+.st-key-total_a_cobrar [data-testid="stMetricValue"] { font-size: 3.4rem; font-weight: 800; color: #1B1F2A; }
+.st-key-boton_cobrar button { min-height: 3.6rem; }
+.st-key-boton_cobrar button p { font-size: 1.4rem; font-weight: 800; }
+
+/* En el celular: menos espacio en blanco arriba, y cada producto de la venta en dos renglones
+   (el nombre arriba; cantidad, precio y la X abajo) en vez de cuatro */
+@media (max-width: 640px) {
+    [data-testid="stMainBlockContainer"] { padding-top: 3.5rem; }
+    h1 { font-size: 2.1rem !important; }
+    [class*="st-key-fila_venta"] [data-testid="stHorizontalBlock"] { flex-wrap: wrap; gap: 0.25rem 0.75rem; }
+    [class*="st-key-fila_venta"] [data-testid="stColumn"] { min-width: 0 !important; width: auto !important; flex: 1 1 0; }
+    [class*="st-key-fila_venta"] [data-testid="stColumn"]:first-child { flex: 1 1 100%; }
+    [class*="st-key-fila_venta"] [data-testid="stColumn"]:last-child { flex: 0 0 auto; }
+    [class*="st-key-fila_venta"] p { white-space: nowrap; }
+}
+</style>"""
+
+
+def aplicar_estilos():
+    """Pone los retoques visuales (ESTILOS) en la página. Se llama una vez desde app.py."""
+    st.html(ESTILOS)
+
+
+def plural(cantidad, singular, plural_):
+    """plural(1, "venta", "ventas") -> '1 venta'; plural(3, "venta", "ventas") -> '3 ventas'"""
+    return f"{cantidad} {singular if cantidad == 1 else plural_}"
+
+
 def pesos(valor):
     """1234567.8 -> '$ 1.234.568'"""
-    return f"$ {valor:,.0f}".replace(",", ".")
+    # Con espacio "que no se corta" (\u00a0): así el $ nunca queda solo al final de un renglón
+    return f"$\u00a0{valor:,.0f}".replace(",", ".")
 
 
 def a_python(fila):

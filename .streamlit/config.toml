@@ -1,5 +1,21 @@
 [theme]
+base = "light"
 primaryColor = "#1F6FEB"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F2F4F8"
+# Texto casi negro (en vez del gris de Streamlit) para que se lea bien sobre el fondo blanco
+textColor = "#1B1F2A"
+grayTextColor = "#4A5162"
+borderColor = "#D3D8E2"
+showWidgetBorder = true
+# Letra más grande (Streamlit trae 16) y una tipografía propia, hecha para leerse fácil
+baseFontSize = 17
+font = "Lexend:https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700;800&display=swap, sans-serif"
+headingFontWeights = [800, 700, 700]
+baseRadius = "medium"
+
+[theme.sidebar]
+backgroundColor = "#EEF2F8"
 
 [server]
 # headless = true evita que Streamlit frene la primera vez pidiendo un email.

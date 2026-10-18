@@ -477,6 +477,17 @@ def resumen_periodo(comercio_id, desde, hasta):
         return dict(con.execute(consulta).mappings().one())
 
 
+def ultimo_dia_con_ventas(comercio_id, antes_de):
+    """El último día (anterior a antes_de) en que el comercio vendió algo, o None si nunca vendió."""
+    consulta = select(func.max(func.date(bd.ventas.c.fecha))).where(
+        bd.ventas.c.comercio_id == comercio_id,
+        func.date(bd.ventas.c.fecha) < antes_de.isoformat(),
+    )
+    with motor.connect() as con:
+        dia = con.execute(consulta).scalar()
+    return date.fromisoformat(str(dia)[:10]) if dia else None
+
+
 def primer_dia_del_mes(dia=None):
     dia = dia or date.today()
     return dia.replace(day=1)

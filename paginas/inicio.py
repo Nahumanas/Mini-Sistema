@@ -5,7 +5,7 @@ from datetime import date
 import streamlit as st
 
 import operaciones as op
-from comun import RUBROS, aviso_temporada, pesos
+from comun import RUBROS, aviso_temporada, pesos, plural
 
 dueno = st.session_state["dueno"]
 st.title(f"Hola, {dueno['nombre'].split()[0]} 👋")
@@ -49,10 +49,21 @@ for i, c in enumerate(comercios.itertuples()):
     with columnas[i % len(columnas)].container(border=True):
         st.markdown(f"### {c.nombre}")
         st.caption(f"{RUBROS.get(c.rubro, c.rubro)} · {c.direccion or ''}")
-        st.metric("Vendido hoy", pesos(del_dia["total"]))
-        st.caption(f"{del_dia['cantidad']} ventas hoy · {pesos(del_mes['total'])} en el mes")
+        if del_dia["cantidad"]:
+            st.metric("Vendido hoy", pesos(del_dia["total"]))
+            st.caption(f"{plural(del_dia['cantidad'], 'venta', 'ventas')} hoy · {pesos(del_mes['total'])} en el mes")
+        else:
+            # A primera hora un "$ 0" no dice nada: mientras hoy no haya ventas, se muestra el último día
+            # con ventas (casi siempre ayer; si ayer estuvo cerrado, el día anterior)
+            ultimo = op.ultimo_dia_con_ventas(c.id, hoy)
+            if ultimo:
+                titulo = "Ayer vendiste" if (hoy - ultimo).days == 1 else f"El {ultimo:%d/%m} vendiste"
+                st.metric(titulo, pesos(op.resumen_periodo(c.id, ultimo, ultimo)["total"]))
+            else:
+                st.metric("Vendido hoy", pesos(0))
+            st.caption(f"Hoy todavía no hay ventas · {pesos(del_mes['total'])} en el mes")
         if stock_bajo:
-            st.warning(f"{stock_bajo} productos con stock bajo")
+            st.warning(f"{plural(stock_bajo, 'producto', 'productos')} con stock bajo")
         caja = op.caja_abierta(c.id)
         st.caption(f"🟢 Caja abierta por {caja['responsable']} desde las {caja['abierta']:%H:%M}" if caja
                    else "🔒 Caja cerrada")

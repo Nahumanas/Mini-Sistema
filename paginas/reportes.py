@@ -7,7 +7,7 @@ import streamlit as st
 
 import operaciones as op
 import reportes as rep
-from comun import aviso_temporada, comercio_actual, encabezado, pesos
+from comun import aviso_temporada, comercio_actual, encabezado, pesos, plural
 
 comercio = comercio_actual()
 dueno = st.session_state["dueno"]
@@ -90,7 +90,7 @@ m1.metric("Ganancia bruta", pesos(este["ganancia_bruta"]), cambio("ganancia_brut
           help="Lo vendido menos lo que costó esa mercadería.")
 m2.metric("Gastos del período", pesos(este["gastos"]), cambio("gastos"), delta_color="inverse",
           help="Los gastos del mes (alquiler, luz, sueldos...) repartidos por día: "
-               f"a este período le tocan {periodo.dias} días.")
+               f"a este período le tocan {plural(periodo.dias, 'día', 'días')}.")
 m3.metric("Ganancia neta", pesos(este["ganancia_neta"]), cambio("ganancia_neta"),
           help="Ganancia bruta menos gastos. Si es negativa, es pérdida.")
 verbo = "viene" if periodo.en_curso else "cerró"
@@ -137,7 +137,7 @@ comprar = rep.que_comprar(datos["productos"], datos["ventas_recientes"])
 if comprar.empty:
     st.success("No hay nada urgente para comprar.")
 else:
-    st.warning(f"**{len(comprar)} productos** para reponer · costo estimado "
+    st.warning(f"**{plural(len(comprar), 'producto', 'productos')}** para reponer · costo estimado "
                f"**{pesos(comprar['costo_estimado'].sum())}**")
     columnas_comprar = {
         "proveedor": "Proveedor", "nombre": "Producto", "estado": "Estado",

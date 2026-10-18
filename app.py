@@ -15,7 +15,7 @@ import streamlit as st
 import operaciones as op
 import reportes
 from ingreso import pantalla_ingreso
-from comun import RUBROS, a_python, correr_script, permisos_de
+from comun import RUBROS, a_python, aplicar_estilos, correr_script, permisos_de
 from config import FORMULARIO_RESENAS, MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE
 
 st.set_page_config(page_title="Mini-Sistema", page_icon="🏪", layout="wide")
@@ -53,8 +53,8 @@ correr_script("""
     }
 """)
 
-# Oculta los avisos en inglés que Streamlit pone dentro de los casilleros ("Press Enter to submit form")
-st.html("<style>[data-testid='InputInstructions'] { display: none; }</style>")
+# Letra más grande y oscura, botones cómodos y sin los detalles de Streamlit (ver ESTILOS en comun.py)
+aplicar_estilos()
 
 
 @st.cache_resource(show_spinner=False)
