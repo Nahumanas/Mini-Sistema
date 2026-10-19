@@ -187,6 +187,9 @@ with st.sidebar:
 
     st.divider()
     if st.button("🚪 Salir", width="stretch", help="Vuelve a la pantalla para ingresar."):
+        # Para que al volver a entrar ya estén elegidos el mismo dueño y el mismo comercio
+        st.session_state["ultimo_ingreso"] = ((st.session_state.get("dueno") or {}).get("nombre"),
+                                              st.session_state.get("comercio_nombre"))
         for clave in ("rol", "nombre", "dueno", "comercio", "comercio_nombre"):
             st.session_state.pop(clave, None)
         st.rerun()

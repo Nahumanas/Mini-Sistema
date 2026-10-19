@@ -30,7 +30,11 @@ def pantalla_ingreso():
         if duenos.empty:
             st.error("La base está vacía. Corré primero: python generar_datos_prueba.py")
             st.stop()
-        dueno_nombre = st.selectbox("Dueño", duenos["nombre"])
+        # Si recién salió alguien, quedan elegidos su dueño y su comercio (si no, se mezcla con otro comercio)
+        ultimo_dueno, ultimo_comercio = st.session_state.get("ultimo_ingreso", (None, None))
+        nombres_duenos = duenos["nombre"].tolist()
+        dueno_nombre = st.selectbox("Dueño", nombres_duenos,
+                                    index=nombres_duenos.index(ultimo_dueno) if ultimo_dueno in nombres_duenos else 0)
         dueno = a_python(duenos[duenos["nombre"] == dueno_nombre].iloc[0])
 
         comercios = op.listar_comercios(dueno["id"])
@@ -38,8 +42,9 @@ def pantalla_ingreso():
             st.info("Este dueño todavía no tiene comercios. Entrá como jefe para crear uno en **Mis comercios**.")
             comercio = None
         else:
+            nombres = comercios["nombre"].tolist()
             comercio_nombre = st.selectbox(
-                "Comercio", comercios["nombre"],
+                "Comercio", nombres, index=nombres.index(ultimo_comercio) if ultimo_comercio in nombres else 0,
                 format_func=lambda n: f"{RUBROS.get(comercios.set_index('nombre').loc[n, 'rubro'], '🏪')[:1]} {n}",
             )
             comercio = a_python(comercios[comercios["nombre"] == comercio_nombre].iloc[0])
