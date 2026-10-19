@@ -16,7 +16,7 @@ CREATE TABLE comercios (
 	direccion VARCHAR(150), 
 	usa_ticket BOOLEAN NOT NULL, 
 	resumen_semanal BOOLEAN DEFAULT 0 NOT NULL, 
-	permisos_empleado VARCHAR(200) DEFAULT 'panel_del_dia,stock' NOT NULL, 
+	permisos_empleado VARCHAR(200) DEFAULT 'panel_del_dia,stock,compras' NOT NULL, 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(dueno_id) REFERENCES duenos (id)
 );
@@ -61,6 +61,7 @@ CREATE TABLE compras (
 	proveedor_id INTEGER, 
 	fecha DATETIME NOT NULL, 
 	total FLOAT NOT NULL, 
+	cargada_por VARCHAR(100), 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
 	FOREIGN KEY(proveedor_id) REFERENCES proveedores (id)

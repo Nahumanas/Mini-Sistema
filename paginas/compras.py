@@ -1,4 +1,8 @@
-"""Compras: cargar lo que el comercio le compra a un proveedor. Suma al stock."""
+"""Compras: cargar lo que el comercio le compra a un proveedor. Suma al stock.
+
+El empleado también puede cargar lo que llega (si el jefe no se lo sacó en Mis comercios),
+pero solo pone cantidades: no ve costos ni totales, y se usa el último costo cargado.
+"""
 
 import streamlit as st
 
@@ -8,6 +12,7 @@ from comun import (alta_rapida, buscar_por_codigo, comercio_actual, dejar_listo_
 
 comercio = comercio_actual()
 encabezado("📦", "Compras", comercio)
+jefe = es_jefe()
 
 clave = f"compra_{comercio['id']}"
 compra = st.session_state.setdefault(clave, [])
@@ -15,7 +20,8 @@ productos = op.listar_productos(comercio["id"]).set_index("id")
 proveedores = op.listar_proveedores(comercio["id"]).set_index("id")
 
 if st.session_state.pop("compra_guardada", None):
-    st.success("Compra guardada. El stock y los precios de costo ya están actualizados.")
+    st.success("Compra guardada. El stock y los precios de costo ya están actualizados." if jefe
+               else "Listo, lo que llegó ya está sumado al stock.")
 
 izquierda, derecha = st.columns([3, 2], gap="large")
 
@@ -78,8 +84,10 @@ with izquierda:
             st.markdown(f"📦 **{producto['nombre']}** · hay {producto['stock']} en stock")
             c1, c2 = st.columns(2)
             cantidad = c1.number_input(CANTIDAD, min_value=1, value=1, step=1, key=f"cantidad_{escaneado}")
-            costo = c2.number_input("Costo por unidad ($)", min_value=0.0, value=float(producto["precio_costo"]),
-                                    step=10.0, key=f"costo_{escaneado}")
+            costo = 0  # el empleado no ve costos: se usa el último
+            if jefe:
+                costo = c2.number_input("Costo por unidad ($)", min_value=0.0, value=float(producto["precio_costo"]),
+                                        step=10.0, key=f"costo_{escaneado}")
             b1, b2 = st.columns(2)
             agregar = b1.form_submit_button("➕ Agregar", type="primary")
             cancelar = b2.form_submit_button("Cancelar")
@@ -102,7 +110,7 @@ with izquierda:
     elif desconocido:
         with st.container(border=True):
             st.warning(f"No hay ningún producto con el código **{desconocido}**.")
-            if es_jefe():
+            if jefe:
                 if producto_nuevo := alta_rapida(comercio, desconocido, clave_desconocido):
                     st.session_state[clave_escaneado] = producto_nuevo  # ahora se pide la cantidad que llegó
                     st.session_state["enfocar_cantidad"] = True
@@ -117,24 +125,30 @@ with izquierda:
         dejar_listo_el_lector(ESCANER)
 
     with st.form("agregar_a_compra", clear_on_submit=True, border=False):
-        c1, c2, c3 = st.columns([4, 1, 2])
+        c1, c2, c3 = st.columns([4, 1, 2]) if jefe else (*st.columns([4, 1]), None)
         producto_id = c1.selectbox(
             "Producto", productos.index, index=None, placeholder="Buscar producto...",
             format_func=lambda i: f"{productos.loc[i, 'codigo']} · {productos.loc[i, 'nombre']} (stock {productos.loc[i, 'stock']})",
         )
         cantidad = c2.number_input("Cantidad", min_value=1, value=1, step=1)
-        costo = c3.number_input("Costo por unidad ($)", min_value=0.0, value=0.0, step=10.0,
-                                help="Si lo dejás en 0 se usa el último costo cargado.")
+        costo = 0
+        if jefe:
+            costo = c3.number_input("Costo por unidad ($)", min_value=0.0, value=0.0, step=10.0,
+                                    help="Si lo dejás en 0 se usa el último costo cargado.")
         if st.form_submit_button("➕ Agregar") and producto_id is not None:
             agregar_a_la_compra(producto_id, cantidad, costo)
             st.rerun()
-    st.caption("¿El producto no está en la lista? Crealo primero en **Stock**.")
+    st.caption("¿El producto no está en la lista? Crealo primero en **Stock**." if jefe
+               else "¿El producto no está en la lista? Avisale al jefe para que lo cargue.")
 
     for indice, item in enumerate(compra):
         f1, f2, f3, f4 = st.columns([5, 2, 2, 1], vertical_alignment="center")
         f1.write(item["nombre"])
-        f2.write(f"{item['cantidad']} x {pesos(item['costo_unitario'])}")
-        f3.write(f"**{pesos(item['cantidad'] * item['costo_unitario'])}**")
+        if jefe:
+            f2.write(f"{item['cantidad']} x {pesos(item['costo_unitario'])}")
+            f3.write(f"**{pesos(item['cantidad'] * item['costo_unitario'])}**")
+        else:
+            f2.write(f"**{item['cantidad']}**")
         if f4.button("✕", key=f"quitar_compra_{indice}"):
             compra.pop(indice)
             st.rerun()
@@ -142,9 +156,13 @@ with izquierda:
 with derecha:
     total = sum(i["cantidad"] * i["costo_unitario"] for i in compra)
     with st.container(border=True):
-        st.metric("Total de la compra", pesos(total))
+        if jefe:
+            st.metric("Total de la compra", pesos(total))
+        else:
+            st.metric("Unidades que llegaron", sum(i["cantidad"] for i in compra))
         if st.button("Guardar compra", type="primary", disabled=not compra or proveedor_id is None):
-            op.registrar_compra(comercio["id"], int(proveedor_id), compra)
+            op.registrar_compra(comercio["id"], int(proveedor_id), compra,
+                                cargada_por=f"{st.session_state.get('nombre', '')} ({'jefe' if jefe else 'empleado'})")
             compra.clear()
             st.session_state["compra_guardada"] = True
             st.rerun()
@@ -153,6 +171,8 @@ with derecha:
 
     st.subheader("Últimas compras")
     ultimas = op.listar_compras(comercio["id"])
+    if not jefe:
+        ultimas = ultimas.drop(columns="total")
     if ultimas.empty:
         st.caption("Todavía no hay compras.")
     else:
@@ -161,6 +181,7 @@ with derecha:
             column_config={
                 "fecha": st.column_config.DatetimeColumn("Fecha", format="DD/MM/YYYY HH:mm"),
                 "proveedor": "Proveedor",
+                "cargada_por": "La cargó",
                 "total": st.column_config.NumberColumn("Total ($)", format="localized"),
             },
         )

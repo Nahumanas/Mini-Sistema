@@ -41,7 +41,7 @@ from config import CARPETA_PROYECTO, URL_BASE
 metadata = MetaData()
 
 # Al crear un comercio, el empleado ve (además de la Caja) el Panel del día y el Stock
-PERMISOS_EMPLEADO_INICIALES = "panel_del_dia,stock"
+PERMISOS_EMPLEADO_INICIALES = "panel_del_dia,stock,compras"  # el jefe le saca lo que quiera desde Mis comercios
 
 duenos = Table(
     "duenos",
@@ -104,6 +104,7 @@ compras = Table(
     Column("proveedor_id", Integer, ForeignKey("proveedores.id")),
     Column("fecha", DateTime, nullable=False),
     Column("total", Float, nullable=False),
+    Column("cargada_por", String(100)),  # quién la cargó (jefe o empleado)
 )
 
 compras_detalle = Table(
@@ -195,6 +196,7 @@ def actualizar_base(motor):
         ("duenos", "pin_hash", "VARCHAR(200)"),
         ("ventas", "caja_id", "INTEGER REFERENCES cajas(id)"),
         ("productos", "codigo_barras", "VARCHAR(30)"),
+        ("compras", "cargada_por", "VARCHAR(100)"),
     ]
     for tabla, columna, tipo in nuevas:
         if columna not in {c["name"] for c in revisor.get_columns(tabla)}:

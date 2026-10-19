@@ -381,17 +381,18 @@ def _siguiente_numero_ticket(con, comercio_id):
     return f"{comercio_id:04d}-{siguiente:08d}"
 
 
-def registrar_compra(comercio_id, proveedor_id, items):
+def registrar_compra(comercio_id, proveedor_id, items, cargada_por=None):
     """Guarda una compra a un proveedor, suma el stock y actualiza el precio de costo.
 
     items: lista de diccionarios con producto_id, cantidad y costo_unitario.
+    cargada_por: nombre de quien la cargó, para que el jefe sepa quién sumó stock.
     """
     with motor.begin() as con:
         total = sum(i["cantidad"] * i["costo_unitario"] for i in items)
         compra_id = con.execute(
             bd.compras.insert().values(
                 comercio_id=comercio_id, proveedor_id=proveedor_id,
-                fecha=datetime.now(), total=total,
+                fecha=datetime.now(), total=total, cargada_por=cargada_por,
             )
         ).inserted_primary_key[0]
         for i in items:
@@ -426,7 +427,8 @@ def listar_gastos(comercio_id, desde, hasta):
 
 def listar_compras(comercio_id, limite=20):
     consulta = (
-        select(bd.compras.c.fecha, bd.proveedores.c.nombre.label("proveedor"), bd.compras.c.total)
+        select(bd.compras.c.fecha, bd.proveedores.c.nombre.label("proveedor"), bd.compras.c.cargada_por,
+               bd.compras.c.total)
         .select_from(bd.compras.outerjoin(bd.proveedores, bd.proveedores.c.id == bd.compras.c.proveedor_id))
         .where(bd.compras.c.comercio_id == comercio_id)
         .order_by(bd.compras.c.fecha.desc())
