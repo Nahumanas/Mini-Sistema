@@ -1,7 +1,17 @@
 """Configuración general del Mini-Sistema."""
 
 import os
+import time
 from pathlib import Path
+
+# Hora argentina (UTC-3, sin horario de verano) para todo el sistema.
+# En la PC del comercio ya es la hora local, pero los servidores en internet (como Streamlit Cloud)
+# usan la hora de Londres (UTC) y las ventas quedaban 3 horas adelantadas.
+# "<-03>3" es la forma corta de decir "3 horas menos que UTC" y no necesita nada instalado.
+# En Windows no hace falta (y no se puede): ahí se usa la hora de la PC.
+if hasattr(time, "tzset"):
+    os.environ["TZ"] = "<-03>3"
+    time.tzset()
 
 # Carpeta donde está este archivo (la carpeta del proyecto)
 CARPETA_PROYECTO = Path(__file__).parent
