@@ -16,7 +16,7 @@ import streamlit as st
 
 # Los archivos del sistema, en el orden en que se importan entre sí.
 MODULOS_PROPIOS = ["config", "base_datos", "operaciones", "comun", "ticket", "reportes", "ingreso",
-                   "generar_datos_prueba"]
+                   "generar_datos_prueba", "demo_panaderia"]
 
 
 @st.cache_resource
@@ -46,7 +46,7 @@ import operaciones as op  # noqa: E402 (va después de recargar)
 import reportes
 from ingreso import pantalla_ingreso
 from comun import RUBROS, a_python, aplicar_estilos, correr_script, permisos_de
-from config import FORMULARIO_RESENAS, MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE
+from config import EN_STREAMLIT_CLOUD, FORMULARIO_RESENAS, MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE
 
 _fechas_al_arrancar().update(_fechas_actuales())  # anota cómo estaban los archivos que se usaron
 
@@ -64,6 +64,9 @@ def preparar_base():
         for dueno_id in op.listar_duenos()["id"]:
             if not op.tiene_pin(int(dueno_id)):
                 op.guardar_pin(int(dueno_id), PIN_DEMO)
+    if EN_STREAMLIT_CLOUD:  # solo en la demo en línea: una panadería para ver los vencimientos
+        import demo_panaderia
+        demo_panaderia.crear()
     return True
 
 
