@@ -697,15 +697,27 @@ def listar_gastos(comercio_id, desde, hasta):
 
 
 def listar_compras(comercio_id, limite=20):
+    """Las últimas compras, con qué llegó en cada una (por ejemplo: "6 Medialunas, 2 Prepizza")."""
     consulta = (
-        select(bd.compras.c.fecha, bd.proveedores.c.nombre.label("proveedor"), bd.compras.c.cargada_por,
-               bd.compras.c.total)
+        select(bd.compras.c.id, bd.compras.c.fecha, bd.proveedores.c.nombre.label("proveedor"),
+               bd.compras.c.cargada_por, bd.compras.c.total)
         .select_from(bd.compras.outerjoin(bd.proveedores, bd.proveedores.c.id == bd.compras.c.proveedor_id))
         .where(bd.compras.c.comercio_id == comercio_id)
         .order_by(bd.compras.c.fecha.desc())
         .limit(limite)
     )
-    return pd.read_sql(consulta, motor)
+    compras = pd.read_sql(consulta, motor)
+    detalle = pd.read_sql(
+        select(bd.compras_detalle.c.compra_id, bd.compras_detalle.c.cantidad, bd.productos.c.nombre)
+        .select_from(bd.compras_detalle.join(bd.productos, bd.productos.c.id == bd.compras_detalle.c.producto_id))
+        .where(bd.compras_detalle.c.compra_id.in_(compras["id"].tolist())),
+        motor,
+    )
+    lineas = detalle.groupby("compra_id").apply(
+        lambda d: ", ".join(f"{c} {n}" for c, n in zip(d["cantidad"], d["nombre"])), include_groups=False
+    ) if not detalle.empty else pd.Series(dtype=str)
+    compras.insert(3, "llego", compras["id"].map(lineas).fillna(""))
+    return compras.drop(columns="id")
 
 
 # ---------------------------------------------------------------------------

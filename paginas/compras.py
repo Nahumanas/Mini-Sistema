@@ -19,9 +19,10 @@ compra = st.session_state.setdefault(clave, [])
 productos = op.listar_productos(comercio["id"]).set_index("id")
 proveedores = op.listar_proveedores(comercio["id"]).set_index("id")
 
-if st.session_state.pop("compra_guardada", None):
-    st.success("Compra guardada. El stock y los precios de costo ya están actualizados." if jefe
-               else "Listo, lo que llegó ya está sumado al stock.")
+if guardada := st.session_state.pop("compra_guardada", None):
+    sumado = ", ".join(f"{i['cantidad']} {i['nombre']} (ahora hay {productos.loc[i['producto_id'], 'stock']})"
+                       for i in guardada)
+    st.success(("Compra guardada. " if jefe else "Listo. ") + f"Se sumó al stock: {sumado}.")
 
 izquierda, derecha = st.columns([3, 2], gap="large")
 
@@ -163,25 +164,26 @@ with derecha:
         if st.button("Guardar compra", type="primary", disabled=not compra or proveedor_id is None):
             op.registrar_compra(comercio["id"], int(proveedor_id), compra,
                                 cargada_por=f"{st.session_state.get('nombre', '')} ({'jefe' if jefe else 'empleado'})")
+            st.session_state["compra_guardada"] = list(compra)
             compra.clear()
-            st.session_state["compra_guardada"] = True
             st.rerun()
         if compra and proveedor_id is None:
             st.caption("Elegí el proveedor para poder guardar.")
 
-    st.subheader("Últimas compras")
-    ultimas = op.listar_compras(comercio["id"])
-    if not jefe:
-        ultimas = ultimas.drop(columns="total")
-    if ultimas.empty:
-        st.caption("Todavía no hay compras.")
-    else:
-        st.dataframe(
-            ultimas, hide_index=True,
-            column_config={
-                "fecha": st.column_config.DatetimeColumn("Fecha", format="DD/MM/YYYY HH:mm"),
-                "proveedor": "Proveedor",
-                "cargada_por": "La cargó",
-                "total": st.column_config.NumberColumn("Total ($)", format="localized"),
-            },
-        )
+st.subheader("Últimas compras")
+ultimas = op.listar_compras(comercio["id"])
+if not jefe:
+    ultimas = ultimas.drop(columns="total")
+if ultimas.empty:
+    st.caption("Todavía no hay compras.")
+else:
+    st.dataframe(
+        ultimas, hide_index=True,
+        column_config={
+            "fecha": st.column_config.DatetimeColumn("Fecha", format="DD/MM/YYYY HH:mm"),
+            "proveedor": "Proveedor",
+            "llego": "Qué llegó",
+            "cargada_por": "La cargó",
+            "total": st.column_config.NumberColumn("Total ($)", format="localized"),
+        },
+    )
