@@ -12,7 +12,7 @@ Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 
 ## Qué hace
 
-- **Caja:** se abre con el efectivo inicial, se cobra producto por producto (descuenta el stock solo) y al cerrar hace el **arqueo**: cuánto efectivo debería haber, cuánto se contó y si sobra o falta. Una caja cerrada no se puede modificar.
+- **Caja:** se abre con el efectivo inicial, se cobra producto por producto (descuenta el stock solo) y al cerrar hace el **arqueo**: cuánto efectivo debería haber, cuánto se contó y si sobra o falta. Si pagan en efectivo, calcula el **vuelto**. Una caja cerrada no se puede modificar: si hubo un error, el jefe le hace un **ajuste** (anular una venta o corregir el conteo) que queda anotado con fecha, quién y por qué.
 - **Lector de código de barras:** en la Caja cada pasada suma el producto a la venta; en Compras pide la cantidad que llegó. Los códigos se cargan en el Excel de productos (o con el lector en Stock), y si aparece uno desconocido el jefe lo da de alta en el momento.
 - **Jefe y empleado:** el jefe entra con su PIN y ve todo; el empleado ve la Caja y solo lo que el jefe le habilite.
 - **Reportes** por semana, mes o fechas, en pantalla y en Excel con gráficos. El del mes pasado se guarda solo; el semanal se activa en temporada alta.
@@ -53,9 +53,9 @@ Al abrir el sistema elegís el **dueño** y el **comercio**, y entrás como **je
 | Pantalla | Para qué sirve |
 |---|---|
 | 🏠 Inicio | El "launcher": todos tus comercios con lo vendido hoy y en el mes, avisos de stock bajo y un botón para abrir la caja de cada uno. |
-| 💵 Caja | Primero se **abre la caja** con el efectivo inicial. Después cargás cada venta en el momento: pasás el **lector de código de barras** por cada producto (cada pasada suma 1) o, si no tiene código, lo buscás en la lista; elegís el medio de pago y cobrás (descuenta el stock solo). Si el lector lee un código que no está cargado, el jefe puede crear el producto ahí mismo. Al final del turno se **cierra la caja**: contás el efectivo y el sistema muestra cuánto debería haber y si sobra o falta. Una caja cerrada no se puede modificar. |
+| 💵 Caja | Primero se **abre la caja** con el efectivo inicial. Después cargás cada venta en el momento: pasás el **lector de código de barras** por cada producto (cada pasada suma 1) o, si no tiene código, lo buscás en la lista; elegís el medio de pago y cobrás (descuenta el stock solo). Si pagan en efectivo, escribís con cuánto pagan y el sistema muestra el **vuelto** (si no alcanza, avisa cuánto falta). Si el lector lee un código que no está cargado, el jefe puede crear el producto ahí mismo. Al final del turno se **cierra la caja**: contás el efectivo y el sistema muestra cuánto debería haber y si sobra o falta. Una caja cerrada no se puede modificar, pero el jefe, en **Cajas anteriores**, le puede hacer un **ajuste**: anular una venta (deja de contar y la mercadería vuelve al stock) o anotar un nuevo conteo del efectivo. Cada ajuste queda anotado con fecha, quién y motivo, y el historial muestra la diferencia antes y después. |
 | 🧾 Ticket | En los comercios que usan ticket, al cobrar podés tildar "El cliente pide ticket" y se descarga un PDF de 80 mm listo para imprimir. Es un comprobante interno, no una factura de ARCA. |
-| 📦 Compras | Cargar lo que le comprás a un proveedor. Con el lector: pasás el producto, escribís la cantidad que llegó y Enter. Suma al stock y actualiza el precio de costo. |
+| 📦 Compras | Cargar lo que le comprás a un proveedor. Con el lector: pasás el producto, escribís la cantidad que llegó y Enter. Suma al stock y actualiza el precio de costo. El empleado también puede cargar lo que llega (viene habilitado; el jefe se lo saca en Mis comercios), pero solo pone cantidades, sin ver costos. Cada compra guarda quién la cargó. |
 | 🧾 Gastos | Alquiler, luz, sueldos, etc. Sirve para calcular la ganancia real del mes. |
 | 📊 Panel del día | Cómo viene el día: vendido, cantidad de ventas, ganancia, ventas por hora, medios de pago y lo más vendido. Se actualiza solo cada 10 segundos y compara con el mismo día de la semana pasada. |
 | 📋 Stock | Todos los productos con su estado (✅ OK / ⚠️ Reponer). Podés cambiar precios, cantidades y códigos de barras en la tabla y tocar **Guardar cambios**, o agregar productos nuevos. También podés cargar con el lector los códigos de barras que falten. |
@@ -68,9 +68,9 @@ Al abrir el sistema elegís el **dueño** y el **comercio**, y entrás como **je
 | | Jefe | Empleado |
 |---|---|---|
 | Cómo entra | Con su PIN (la primera vez lo crea, de 4 a 6 números) | Con su nombre |
-| Qué ve | Todo | La Caja y lo que el jefe le habilite en **Mis comercios**: Panel del día (sin la ganancia), Stock (solo mirar, sin costos), Compras o Gastos |
+| Qué ve | Todo | La Caja y lo que el jefe le habilite en **Mis comercios**: Panel del día (sin la ganancia), Stock (solo mirar, sin costos), Compras (cargar lo que llega, sin costos) o Gastos. En los comercios nuevos vienen habilitados Panel del día, Stock y Compras. |
 | Comercio | Cambia de comercio en el menú de la izquierda | Queda fijo en el comercio con el que entró |
-| Cajas anteriores | Ve el historial con el arqueo de cada caja | No lo ve |
+| Cajas anteriores | Ve el historial con el arqueo de cada caja y puede ajustarlas | No lo ve |
 
 Si escribís mal el PIN 3 veces, hay que esperar 30 segundos. Si te olvidaste el PIN, en la carpeta del sistema corré `python olvide_mi_pin.py "Tu nombre"` y al entrar te pide uno nuevo. Si recargás la página, el sistema vuelve a pedir que ingreses.
 

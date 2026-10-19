@@ -31,11 +31,11 @@ El sistema tiene tres partes, una encima de la otra:
 1. **Abrir el sistema:** doble clic en `iniciar.bat`. Se abre el navegador.
 2. **Ingresar:** se elige el dueño y el comercio, y se entra como **jefe** (con PIN) o como **empleado** (con su nombre).
 3. **Abrir la caja:** se pone quién atiende y el efectivo inicial para dar cambio. Sin caja abierta no se puede cobrar.
-4. **Vender:** se pasa el **lector de código de barras** por cada producto (o se busca en la lista), se elige el medio de pago y se toca **Cobrar**. El stock se descuenta solo y, si el cliente lo pide, sale el **ticket en PDF**.
-5. **Recibir mercadería:** en **Compras** se pasa el lector por lo que llegó, se escribe la cantidad y se guarda. Suma al stock y actualiza el precio de costo.
+4. **Vender:** se pasa el **lector de código de barras** por cada producto (o se busca en la lista), se elige el medio de pago y se toca **Cobrar**. Si pagan en efectivo, se puede escribir con cuánto pagan y el sistema muestra el **vuelto**. El stock se descuenta solo y, si el cliente lo pide, sale el **ticket en PDF**.
+5. **Recibir mercadería:** en **Compras** se pasa el lector por lo que llegó, se escribe la cantidad y se guarda. Suma al stock y actualiza el precio de costo. Lo puede hacer también el empleado (sin ver costos), y queda anotado quién la cargó.
 6. **Cargar gastos:** luz, alquiler, sueldos, en **Gastos**.
 7. **Mirar el día:** el **Panel del día** se actualiza solo cada 10 segundos y compara con el mismo día de la semana pasada.
-8. **Cerrar la caja:** se cuenta el efectivo. El sistema muestra cuánto debería haber (efectivo inicial + ventas en efectivo) y si sobra o falta (**arqueo**). Una caja cerrada ya no se puede modificar.
+8. **Cerrar la caja:** se cuenta el efectivo. El sistema muestra cuánto debería haber (efectivo inicial + ventas en efectivo) y si sobra o falta (**arqueo**). Una caja cerrada ya no se puede modificar. Si hubo un error, el jefe le hace un **ajuste** (ver más abajo).
 9. **Reportes:** el Excel del mes pasado se guarda solo al abrir el sistema. En **Reportes** se puede ver cualquier semana, mes o fechas.
 
 ## 4. Las pantallas
@@ -43,8 +43,8 @@ El sistema tiene tres partes, una encima de la otra:
 | Pantalla | Qué hace | Quién la ve |
 |---|---|---|
 | 🏠 Inicio | Cada comercio con lo vendido hoy y en el mes y el estado de la caja, más los totales y la ganancia bruta del mes. Botón para ir a la caja. | Jefe |
-| 💵 Caja | Abrir caja, vender con el lector o la lista, cobrar, ticket, cerrar caja con arqueo. El jefe ve el historial de cajas. | Jefe y empleado |
-| 📦 Compras | Cargar lo que llega del proveedor: con el lector pide la cantidad. Suma al stock. | Jefe (y empleado si tiene permiso) |
+| 💵 Caja | Abrir caja, vender con el lector o la lista, vuelto, cobrar, ticket, cerrar caja con arqueo. El jefe ve el historial de cajas y las ajusta. | Jefe y empleado |
+| 📦 Compras | Cargar lo que llega del proveedor: con el lector pide la cantidad. Suma al stock. El empleado no ve costos. | Jefe y empleado (viene habilitado; el jefe lo puede sacar) |
 | 🧾 Gastos | Cargar gastos del comercio. | Jefe (y empleado si tiene permiso) |
 | 📊 Panel del día | Lo vendido hoy, en vivo. El empleado no ve la ganancia. | Jefe (y empleado si tiene permiso) |
 | 📋 Stock | Productos, precios, cantidades y códigos de barras; avisa qué reponer. El empleado solo mira, sin costos. | Jefe (y empleado si tiene permiso) |
@@ -59,13 +59,23 @@ El sistema tiene tres partes, una encima de la otra:
 | Cómo entra | Con su PIN (la primera vez lo crea) | Con su nombre |
 | Qué ve | Todo, en todos sus comercios | Solo la Caja y lo que el jefe le habilite |
 | Costos y ganancia | Sí | No |
-| Historial de cajas | Sí | No |
+| Historial y ajustes de cajas | Sí | No |
+| Cargar lo que llega (Compras) | Sí | Sí, sin ver costos (el jefe se lo puede sacar) |
 | Crear productos | Sí (en Stock, o en el momento desde la Caja o Compras) | No: le avisa al jefe |
 
 - Si el PIN se pone mal 3 veces, hay que esperar 30 segundos.
 - Si el jefe se olvida el PIN, en la PC del sistema se corre `python olvide_mi_pin.py "Nombre"` y al entrar crea uno nuevo.
 - El PIN no se guarda tal cual: se guarda "mezclado" (con un método llamado hash), así nadie lo puede leer en la base.
 - Cuando el sistema esté en la nube, el ingreso pasa a ser con **Gmail y contraseña**.
+
+### Ajustes de una caja cerrada
+
+Una caja cerrada no se cambia, porque la plata ya se contó. Si después aparece un error, el jefe entra a **Caja → Cajas anteriores → Ajustar una caja cerrada**, elige la caja y hace uno de estos ajustes:
+
+- **Anular una venta** (por ejemplo, se cobró dos veces): la venta no se borra, queda marcada como anulada. Deja de contar en reportes y paneles, y lo vendido vuelve al stock.
+- **Corregir el efectivo contado** (por ejemplo, se contó mal un billete): se anota el nuevo conteo; el original queda guardado.
+
+Cada ajuste pide un **motivo** y guarda la fecha, la hora y quién lo hizo. El historial muestra la diferencia del arqueo antes y después de los ajustes. Así nada desaparece y todo queda anotado.
 
 ## 6. El lector de código de barras
 
@@ -96,7 +106,7 @@ duenos
         ├── productos
         ├── proveedores
         ├── compras ── compras_detalle
-        ├── cajas
+        ├── cajas   ── ajustes_caja
         ├── ventas  ── ventas_detalle
         │     └── tickets
         └── gastos
@@ -108,9 +118,10 @@ duenos
 | `comercios` | Cada comercio: rubro, dirección, si da ticket, si guarda el resumen semanal y qué ve el empleado. |
 | `productos` | Código interno, código de barras, nombre, categoría, costo, precio, stock y stock mínimo. |
 | `proveedores` | A quién le compra cada comercio. |
-| `compras` y `compras_detalle` | Cada compra (fecha, proveedor, total) y sus productos. |
+| `compras` y `compras_detalle` | Cada compra (fecha, proveedor, total, quién la cargó) y sus productos. |
 | `cajas` | Quién abrió, cuándo, efectivo inicial; al cerrar, efectivo esperado, contado y nota. |
-| `ventas` y `ventas_detalle` | Cada venta (fecha, medio de pago, total, caja) y sus productos con el precio **y el costo de ese día**. |
+| `ajustes_caja` | Las correcciones a cajas cerradas: cuándo, quién, qué (anular venta o recontar), monto y motivo. |
+| `ventas` y `ventas_detalle` | Cada venta (fecha, medio de pago, total, caja, si se anuló) y sus productos con el precio **y el costo de ese día**. |
 | `tickets` | El número de ticket de las ventas que lo pidieron. |
 | `gastos` | Gastos del comercio por fecha y categoría. |
 
