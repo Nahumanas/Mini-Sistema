@@ -12,7 +12,7 @@ import streamlit as st
 
 import operaciones as op
 from comun import (MEDIOS_DE_PAGO, alta_rapida, buscar_por_codigo, comercio_actual, dejar_listo_el_lector,
-                   encabezado, es_jefe, pesos, plural)
+                   encabezado, es_jefe, permisos_de, pesos, plural)
 
 
 def pesos_md(valor):
@@ -49,11 +49,16 @@ def mostrar_cierre(resumen):
         st.caption(f"Nota: {caja['nota']}")
 
 
+def puede_ajustar():
+    """El jefe, o el empleado al que el jefe le dio el permiso "Ajustar cajas" en Mis comercios."""
+    return es_jefe() or "ajustar_caja" in permisos_de(comercio)
+
+
 def cajas_anteriores():
-    """Solo el jefe: el historial de cajas con su arqueo."""
-    if not es_jefe():
+    """El historial de cajas con su arqueo y los ajustes. Lo ve el jefe y a quien él se lo habilite."""
+    if not puede_ajustar():
         return
-    with st.expander("🗂️ Cajas anteriores (solo las ve el jefe)"):
+    with st.expander("🗂️ Cajas anteriores (solo el jefe y a quien él habilite)"):
         cajas = op.listar_cajas(comercio["id"])
         if cajas.empty:
             st.caption("Todavía no se cerró ninguna caja.")
@@ -84,7 +89,7 @@ def cajas_anteriores():
 
 
 def ajustar_caja(cerradas):
-    """Solo el jefe: corregir un error en una caja cerrada sin borrar nada (queda anotado quién, cuándo y por qué)."""
+    """Corregir un error en una caja cerrada sin borrar nada (queda anotado quién, cuándo y por qué)."""
     st.markdown("#### ✏️ Ajustar una caja cerrada")
     st.caption("¿Hubo un error? Corregilo acá. La caja no se borra ni se cambia: el ajuste queda anotado "
                "con la fecha, quién lo hizo y el motivo.")
@@ -136,7 +141,7 @@ def ajustar_caja(cerradas):
                                        placeholder="Cuánto hay de verdad")
         motivo = st.text_input("Motivo", placeholder="Ej.: se cobró dos veces / se contó mal un billete")
         if st.form_submit_button("Guardar ajuste", type="primary"):
-            quien = st.session_state.get("nombre", "Jefe")
+            quien = f"{st.session_state.get('nombre', '')} ({'jefe' if es_jefe() else 'empleado'})"
             try:
                 if not motivo.strip():
                     st.error("Escribí el motivo: es lo que explica el ajuste más adelante.")
@@ -214,7 +219,7 @@ def cerrar_caja():
                               placeholder="Escribí cuánto contaste")
     nota = st.text_input("Nota (opcional)", placeholder="Ej.: retiré $ 20.000 para pagar al proveedor")
     st.warning("Una vez cerrada, la caja **no se puede modificar**. Para seguir cobrando hay que abrir una nueva. "
-               "Si hubo un error, el jefe lo corrige con un **ajuste**, que queda anotado.")
+               "Si hubo un error, el jefe (o quien él habilite) lo corrige con un **ajuste**, que queda anotado.")
     if st.button("Cerrar caja", type="primary"):
         if contado is None:
             st.error("Escribí cuánto efectivo contaste.")

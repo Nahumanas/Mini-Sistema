@@ -59,7 +59,7 @@ El sistema tiene tres partes, una encima de la otra:
 | Cómo entra | Con su PIN (la primera vez lo crea) | Con su nombre |
 | Qué ve | Todo, en todos sus comercios | Solo la Caja y lo que el jefe le habilite |
 | Costos y ganancia | Sí | No |
-| Historial y ajustes de cajas | Sí | No |
+| Historial y ajustes de cajas | Sí | Solo si el jefe le da el permiso "Ajustar cajas cerradas" |
 | Cargar lo que llega (Compras) | Sí | Sí, sin ver costos (el jefe se lo puede sacar) |
 | Crear productos | Sí (en Stock, o en el momento desde la Caja o Compras) | No: le avisa al jefe |
 
@@ -70,7 +70,7 @@ El sistema tiene tres partes, una encima de la otra:
 
 ### Ajustes de una caja cerrada
 
-Una caja cerrada no se cambia, porque la plata ya se contó. Si después aparece un error, el jefe entra a **Caja → Cajas anteriores → Ajustar una caja cerrada**, elige la caja y hace uno de estos ajustes:
+Una caja cerrada no se cambia, porque la plata ya se contó. Si después aparece un error, el jefe (o el empleado al que le haya dado el permiso **Ajustar cajas cerradas** en Mis comercios) entra a **Caja → Cajas anteriores → Ajustar una caja cerrada**, elige la caja y hace uno de estos ajustes:
 
 - **Anular una venta** (por ejemplo, se cobró dos veces): la venta no se borra, queda marcada como anulada. Deja de contar en reportes y paneles, y lo vendido vuelve al stock.
 - **Corregir el efectivo contado** (por ejemplo, se contó mal un billete): se anota el nuevo conteo; el original queda guardado.

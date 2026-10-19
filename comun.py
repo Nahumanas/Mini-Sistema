@@ -31,6 +31,7 @@ PERMISOS_EMPLEADO = {
     "stock": "📋 Stock (solo mirar)",
     "compras": "📦 Compras (cargar lo que llega)",
     "gastos": "🧾 Gastos",
+    "ajustar_caja": "✏️ Ajustar cajas cerradas (ve las cajas anteriores)",
 }
 
 # Temporada alta (verano): en estos meses el sistema sugiere activar el resumen semanal
