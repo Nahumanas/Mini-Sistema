@@ -26,6 +26,7 @@ WITH ventas_comercio AS (
            SUM(d.cantidad * d.costo_unitario)         AS costo_mercaderia
     FROM ventas v
     JOIN ventas_detalle d ON d.venta_id = v.id
+    WHERE v.anulada IS NULL  -- las ventas anuladas con un ajuste de caja no cuentan
     GROUP BY v.comercio_id
 ),
 gastos_comercio AS (
@@ -55,6 +56,7 @@ WITH v AS (
     SELECT v.comercio_id, strftime('%Y-%m', v.fecha) AS mes,
            SUM(d.subtotal - d.cantidad * d.costo_unitario) AS ganancia_bruta
     FROM ventas v JOIN ventas_detalle d ON d.venta_id = v.id
+    WHERE v.anulada IS NULL
     GROUP BY 1, 2
 ),
 g AS (
@@ -74,6 +76,7 @@ ORDER BY c.nombre, v.mes
 SQL_PRODUCTOS = """
 SELECT c.nombre AS comercio, p.nombre AS producto, SUM(d.cantidad) AS unidades
 FROM ventas_detalle d
+JOIN ventas v    ON v.id = d.venta_id AND v.anulada IS NULL
 JOIN productos p ON p.id = d.producto_id
 JOIN comercios c ON c.id = p.comercio_id
 JOIN duenos du   ON du.id = c.dueno_id

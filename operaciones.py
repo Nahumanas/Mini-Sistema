@@ -14,6 +14,7 @@ from sqlalchemy import func, inspect, select
 import base_datos as bd
 
 motor = bd.obtener_motor()
+VALIDA = bd.ventas.c.anulada.is_(None)  # las ventas anuladas con un ajuste de caja no cuentan en ningún lado
 bd.actualizar_base(motor)  # si la base es de una versión anterior, le suma las columnas nuevas
 
 
@@ -150,7 +151,7 @@ def resumen_caja(caja_id):
         caja = dict(con.execute(select(bd.cajas).where(bd.cajas.c.id == caja_id)).mappings().one())
         filas = con.execute(
             select(bd.ventas.c.medio_pago, func.count(), func.sum(bd.ventas.c.total))
-            .where(bd.ventas.c.caja_id == caja_id)
+            .where(bd.ventas.c.caja_id == caja_id, VALIDA)
             .group_by(bd.ventas.c.medio_pago)
         ).all()
     por_medio = {medio: total for medio, _, total in filas}
@@ -181,20 +182,127 @@ def listar_cajas(comercio_id, limite=30):
     """Las últimas cajas del comercio (abiertas y cerradas), con lo cobrado y la diferencia del arqueo."""
     cobrado = (
         select(bd.ventas.c.caja_id, func.count().label("ventas"), func.sum(bd.ventas.c.total).label("total"))
+        .where(VALIDA)
         .group_by(bd.ventas.c.caja_id)
+        .subquery()
+    )
+    ajustes = (
+        select(bd.ajustes_caja.c.caja_id, func.count().label("ajustes"))
+        .group_by(bd.ajustes_caja.c.caja_id)
         .subquery()
     )
     consulta = (
         select(bd.cajas, func.coalesce(cobrado.c.ventas, 0).label("ventas"),
-               func.coalesce(cobrado.c.total, 0).label("total"))
-        .select_from(bd.cajas.outerjoin(cobrado, cobrado.c.caja_id == bd.cajas.c.id))
+               func.coalesce(cobrado.c.total, 0).label("total"),
+               func.coalesce(ajustes.c.ajustes, 0).label("ajustes"))
+        .select_from(bd.cajas.outerjoin(cobrado, cobrado.c.caja_id == bd.cajas.c.id)
+                     .outerjoin(ajustes, ajustes.c.caja_id == bd.cajas.c.id))
         .where(bd.cajas.c.comercio_id == comercio_id)
         .order_by(bd.cajas.c.abierta.desc())
         .limit(limite)
     )
     df = pd.read_sql(consulta, motor, parse_dates=["abierta", "cerrada"])
     df["diferencia"] = df["efectivo_contado"] - df["efectivo_esperado"]
+    df["diferencia_ajustada"] = df["diferencia"]  # la diferencia después de los ajustes (si los hubo)
+    for i, caja in df[df["ajustes"] > 0].iterrows():
+        df.at[i, "diferencia_ajustada"] = arqueo_ajustado(caja)["diferencia"]
     return df
+
+
+# ---------------------------------------------------------------------------
+# Ajustes de una caja cerrada (solo el jefe)
+# ---------------------------------------------------------------------------
+class AjusteInvalido(Exception):
+    """El ajuste no se puede hacer (la caja sigue abierta, la venta ya estaba anulada, etc.)."""
+
+
+def _caja_cerrada(con, caja_id):
+    caja = con.execute(select(bd.cajas).where(bd.cajas.c.id == caja_id)).mappings().one()
+    if caja["cerrada"] is None:
+        raise AjusteInvalido("La caja sigue abierta: los ajustes son para cajas cerradas.")
+    return caja
+
+
+def ventas_de_caja(caja_id):
+    """Las ventas cobradas en una caja (sin las anuladas), con lo que se llevó el cliente."""
+    consulta = (
+        select(
+            bd.ventas.c.id, bd.ventas.c.fecha, bd.ventas.c.medio_pago, bd.ventas.c.total,
+            bd.ventas_detalle.c.cantidad, bd.productos.c.nombre,
+        )
+        .select_from(
+            bd.ventas.join(bd.ventas_detalle, bd.ventas_detalle.c.venta_id == bd.ventas.c.id)
+            .join(bd.productos, bd.productos.c.id == bd.ventas_detalle.c.producto_id)
+        )
+        .where(bd.ventas.c.caja_id == caja_id, VALIDA)
+    )
+    lineas = pd.read_sql(consulta, motor, parse_dates=["fecha"])
+    lineas["producto"] = lineas["cantidad"].astype(str) + " x " + lineas["nombre"]
+    return (
+        lineas.groupby(["id", "fecha", "medio_pago", "total"], as_index=False)["producto"].agg(", ".join)
+        .rename(columns={"producto": "productos"})
+        .sort_values("fecha", ascending=False)
+    )
+
+
+def anular_venta(caja_id, venta_id, hecho_por, motivo):
+    """Anula una venta de una caja cerrada: deja de contar en todos lados y la mercadería vuelve al stock.
+
+    La venta no se borra: queda marcada como anulada y el ajuste dice quién lo hizo, cuándo y por qué.
+    """
+    with motor.begin() as con:
+        _caja_cerrada(con, caja_id)
+        venta = con.execute(
+            select(bd.ventas).where(bd.ventas.c.id == venta_id, bd.ventas.c.caja_id == caja_id)
+        ).mappings().first()
+        if venta is None or venta["anulada"] is not None:
+            raise AjusteInvalido("Esa venta no está en la caja o ya se anuló.")
+        ahora = datetime.now()
+        con.execute(bd.ventas.update().where(bd.ventas.c.id == venta_id).values(anulada=ahora))
+        for linea in con.execute(select(bd.ventas_detalle).where(bd.ventas_detalle.c.venta_id == venta_id)).mappings():
+            con.execute(
+                bd.productos.update()
+                .where(bd.productos.c.id == linea["producto_id"])
+                .values(stock=bd.productos.c.stock + linea["cantidad"])
+            )
+        con.execute(bd.ajustes_caja.insert().values(
+            caja_id=caja_id, fecha=ahora, hecho_por=hecho_por, tipo="anular_venta",
+            venta_id=venta_id, monto=venta["total"], motivo=motivo,
+        ))
+
+
+def recontar_efectivo(caja_id, efectivo, hecho_por, motivo):
+    """Anota un nuevo conteo del efectivo de una caja cerrada (el conteo original queda guardado)."""
+    with motor.begin() as con:
+        _caja_cerrada(con, caja_id)
+        con.execute(bd.ajustes_caja.insert().values(
+            caja_id=caja_id, fecha=datetime.now(), hecho_por=hecho_por, tipo="recontar",
+            monto=efectivo, motivo=motivo,
+        ))
+
+
+def listar_ajustes(caja_id):
+    """Los ajustes de una caja, del más viejo al más nuevo, con el medio de pago de la venta anulada."""
+    consulta = (
+        select(bd.ajustes_caja, bd.ventas.c.medio_pago)
+        .select_from(bd.ajustes_caja.outerjoin(bd.ventas, bd.ventas.c.id == bd.ajustes_caja.c.venta_id))
+        .where(bd.ajustes_caja.c.caja_id == caja_id)
+        .order_by(bd.ajustes_caja.c.fecha, bd.ajustes_caja.c.id)
+    )
+    return pd.read_sql(consulta, motor, parse_dates=["fecha"])
+
+
+def arqueo_ajustado(caja):
+    """El arqueo de una caja cerrada después de sus ajustes.
+
+    Anular una venta en efectivo baja lo que debería haber; recontar cambia lo contado (vale el último conteo).
+    """
+    ajustes = listar_ajustes(caja["id"])
+    anuladas = ajustes[(ajustes["tipo"] == "anular_venta") & (ajustes["medio_pago"] == "efectivo")]
+    recuentos = ajustes[ajustes["tipo"] == "recontar"]
+    esperado = caja["efectivo_esperado"] - anuladas["monto"].sum()
+    contado = recuentos["monto"].iloc[-1] if not recuentos.empty else caja["efectivo_contado"]
+    return {"esperado": esperado, "contado": contado, "diferencia": contado - esperado, "ajustes": ajustes}
 
 
 # ---------------------------------------------------------------------------
@@ -452,7 +560,7 @@ def ventas_del_dia(comercio_id, dia):
             bd.ventas.join(bd.ventas_detalle, bd.ventas_detalle.c.venta_id == bd.ventas.c.id)
             .join(bd.productos, bd.productos.c.id == bd.ventas_detalle.c.producto_id)
         )
-        .where(bd.ventas.c.comercio_id == comercio_id, func.date(bd.ventas.c.fecha) == dia.isoformat())
+        .where(bd.ventas.c.comercio_id == comercio_id, func.date(bd.ventas.c.fecha) == dia.isoformat(), VALIDA)
     )
     df = pd.read_sql(consulta, motor, parse_dates=["fecha"])
     df["ganancia"] = df["subtotal"] - df["cantidad"] * df["costo_unitario"]
@@ -473,6 +581,7 @@ def resumen_periodo(comercio_id, desde, hasta):
         .where(
             bd.ventas.c.comercio_id == comercio_id,
             func.date(bd.ventas.c.fecha).between(desde.isoformat(), hasta.isoformat()),
+            VALIDA,
         )
     )
     with motor.connect() as con:
@@ -484,6 +593,7 @@ def ultimo_dia_con_ventas(comercio_id, antes_de):
     consulta = select(func.max(func.date(bd.ventas.c.fecha))).where(
         bd.ventas.c.comercio_id == comercio_id,
         func.date(bd.ventas.c.fecha) < antes_de.isoformat(),
+        VALIDA,
     )
     with motor.connect() as con:
         dia = con.execute(consulta).scalar()
@@ -528,7 +638,7 @@ def detalle_ventas(comercio_ids, desde=None, hasta=None):
             .join(bd.productos, bd.productos.c.id == bd.ventas_detalle.c.producto_id)
             .join(bd.comercios, bd.comercios.c.id == bd.ventas.c.comercio_id)
         )
-        .where(bd.ventas.c.comercio_id.in_(comercio_ids))
+        .where(bd.ventas.c.comercio_id.in_(comercio_ids), VALIDA)
         .order_by(bd.ventas.c.fecha, bd.ventas_detalle.c.id)
     )
     if desde is not None:
@@ -612,7 +722,7 @@ def productos_de(comercio_ids):
 def primera_y_ultima_venta(comercio_ids):
     """Fecha de la primera y de la última venta (o None, None si no hay ventas)."""
     consulta = select(func.min(bd.ventas.c.fecha), func.max(bd.ventas.c.fecha)).where(
-        bd.ventas.c.comercio_id.in_(comercio_ids)
+        bd.ventas.c.comercio_id.in_(comercio_ids), VALIDA
     )
     with motor.connect() as con:
         return tuple(con.execute(consulta).one())
@@ -620,7 +730,7 @@ def primera_y_ultima_venta(comercio_ids):
 
 def cantidad_de_ventas(comercio_ids, desde, hasta):
     consulta = select(func.count(bd.ventas.c.id)).where(
-        bd.ventas.c.comercio_id.in_(comercio_ids), _entre_dias(bd.ventas.c.fecha, desde, hasta)
+        bd.ventas.c.comercio_id.in_(comercio_ids), _entre_dias(bd.ventas.c.fecha, desde, hasta), VALIDA
     )
     with motor.connect() as con:
         return con.execute(consulta).scalar()

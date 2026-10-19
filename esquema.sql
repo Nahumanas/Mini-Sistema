@@ -92,9 +92,24 @@ CREATE TABLE ventas (
 	fecha DATETIME NOT NULL, 
 	medio_pago VARCHAR(20) NOT NULL, 
 	total FLOAT NOT NULL, 
+	anulada DATETIME, 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
 	FOREIGN KEY(caja_id) REFERENCES cajas (id)
+);
+
+CREATE TABLE ajustes_caja (
+	id INTEGER NOT NULL, 
+	caja_id INTEGER NOT NULL, 
+	fecha DATETIME NOT NULL, 
+	hecho_por VARCHAR(100) NOT NULL, 
+	tipo VARCHAR(20) NOT NULL, 
+	venta_id INTEGER, 
+	monto FLOAT NOT NULL, 
+	motivo VARCHAR(200) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(caja_id) REFERENCES cajas (id), 
+	FOREIGN KEY(venta_id) REFERENCES ventas (id)
 );
 
 CREATE TABLE compras_detalle (

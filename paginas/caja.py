@@ -1,7 +1,8 @@
 """Caja: abrir la caja, cobrar las ventas en el momento (como en el mostrador) y cerrarla con el arqueo.
 
 Solo se puede cobrar con la caja abierta. Una caja cerrada ya no se puede modificar:
-si hay otro turno, se abre una caja nueva.
+si hay otro turno, se abre una caja nueva. Si hubo un error, el jefe le hace un "ajuste"
+(anular una venta o corregir el efectivo contado), que queda anotado con fecha, quién y por qué.
 """
 
 from datetime import date, datetime
@@ -62,7 +63,8 @@ def cajas_anteriores():
         st.dataframe(
             cajas, hide_index=True,
             column_order=["estado", "responsable", "abierta", "cerrada", "ventas", "total", "monto_inicial",
-                          "efectivo_esperado", "efectivo_contado", "diferencia", "nota"],
+                          "efectivo_esperado", "efectivo_contado", "diferencia", "ajustes", "diferencia_ajustada",
+                          "nota"],
             column_config={
                 "estado": "Estado", "responsable": "Atendió",
                 "abierta": st.column_config.DatetimeColumn("Abrió", format="DD/MM HH:mm"),
@@ -73,9 +75,84 @@ def cajas_anteriores():
                 "efectivo_esperado": st.column_config.NumberColumn("Debía haber ($)", format="localized"),
                 "efectivo_contado": st.column_config.NumberColumn("Contado ($)", format="localized"),
                 "diferencia": st.column_config.NumberColumn("Diferencia ($)", format="localized"),
+                "ajustes": "Ajustes",
+                "diferencia_ajustada": st.column_config.NumberColumn("Diferencia con ajustes ($)", format="localized"),
                 "nota": "Nota",
             },
         )
+        ajustar_caja(cajas[cajas["cerrada"].notna()])
+
+
+def ajustar_caja(cerradas):
+    """Solo el jefe: corregir un error en una caja cerrada sin borrar nada (queda anotado quién, cuándo y por qué)."""
+    st.markdown("#### ✏️ Ajustar una caja cerrada")
+    st.caption("¿Hubo un error? Corregilo acá. La caja no se borra ni se cambia: el ajuste queda anotado "
+               "con la fecha, quién lo hizo y el motivo.")
+    if aviso := st.session_state.pop("ajuste_guardado", None):
+        st.success(aviso)
+    if cerradas.empty:
+        return
+    cerradas = cerradas.set_index("id")
+    caja_id = st.selectbox(
+        "Caja", cerradas.index, index=None, placeholder="Elegí la caja que querés ajustar",
+        format_func=lambda i: f"{cerradas.loc[i, 'responsable']} · {cerradas.loc[i, 'abierta']:%d/%m %H:%M} a "
+                              f"{cerradas.loc[i, 'cerrada']:%H:%M} · {pesos(cerradas.loc[i, 'total'])}",
+    )
+    if caja_id is None:
+        return
+    arqueo = op.arqueo_ajustado({**cerradas.loc[caja_id].to_dict(), "id": caja_id})
+    a1, a2, a3 = st.columns(3)
+    a1.metric("Debería haber", pesos(arqueo["esperado"]))
+    a2.metric("Contado", pesos(arqueo["contado"]))
+    a3.metric("Diferencia", pesos(arqueo["diferencia"]))
+
+    ajustes = arqueo["ajustes"]
+    if not ajustes.empty:
+        ajustes["que"] = ajustes.apply(
+            lambda a: f"Anuló una venta de {pesos(a['monto'])} ({MEDIOS_DE_PAGO.get(a['medio_pago'], '')})"
+            if a["tipo"] == "anular_venta" else f"Recontó el efectivo: {pesos(a['monto'])}", axis=1,
+        )
+        st.dataframe(
+            ajustes, hide_index=True, column_order=["fecha", "hecho_por", "que", "motivo"],
+            column_config={
+                "fecha": st.column_config.DatetimeColumn("Cuándo", format="DD/MM/YYYY HH:mm"),
+                "hecho_por": "Quién", "que": "Qué se corrigió", "motivo": "Motivo",
+            },
+        )
+
+    ANULAR, RECONTAR = "Anular una venta", "Corregir el efectivo contado"
+    tipo = st.radio("¿Qué querés corregir?", [ANULAR, RECONTAR], horizontal=True, key=f"tipo_ajuste_{caja_id}")
+    ventas = op.ventas_de_caja(caja_id).set_index("id") if tipo == ANULAR else None
+    with st.form(f"ajuste_{caja_id}", clear_on_submit=True, border=False):
+        if tipo == ANULAR:
+            venta_id = st.selectbox(
+                "Venta a anular", ventas.index, index=None, placeholder="Elegí la venta",
+                format_func=lambda v: f"{ventas.loc[v, 'fecha']:%H:%M} · {pesos(ventas.loc[v, 'total'])} · "
+                                      f"{MEDIOS_DE_PAGO.get(ventas.loc[v, 'medio_pago'])} · {ventas.loc[v, 'productos']}",
+            )
+            st.caption("La venta deja de contar en los reportes y lo vendido vuelve al stock.")
+        else:
+            efectivo = st.number_input("Efectivo recontado ($)", min_value=0.0, value=None, step=100.0, format="%.0f",
+                                       placeholder="Cuánto hay de verdad")
+        motivo = st.text_input("Motivo", placeholder="Ej.: se cobró dos veces / se contó mal un billete")
+        if st.form_submit_button("Guardar ajuste", type="primary"):
+            quien = st.session_state.get("nombre", "Jefe")
+            try:
+                if not motivo.strip():
+                    st.error("Escribí el motivo: es lo que explica el ajuste más adelante.")
+                elif tipo == ANULAR and venta_id is None:
+                    st.error("Elegí la venta a anular.")
+                elif tipo == RECONTAR and efectivo is None:
+                    st.error("Escribí cuánto efectivo hay.")
+                else:
+                    if tipo == ANULAR:
+                        op.anular_venta(caja_id, int(venta_id), quien, motivo.strip())
+                    else:
+                        op.recontar_efectivo(caja_id, efectivo, quien, motivo.strip())
+                    st.session_state["ajuste_guardado"] = "Ajuste guardado. Quedó anotado en la caja."
+                    st.rerun()
+            except op.AjusteInvalido as error:
+                st.error(str(error))
 
 
 # --- Si se acaba de cerrar la caja, mostrar el arqueo ---
@@ -136,7 +213,8 @@ def cerrar_caja():
     contado = st.number_input("Efectivo contado ($)", min_value=0.0, value=None, step=100.0, format="%.0f",
                               placeholder="Escribí cuánto contaste")
     nota = st.text_input("Nota (opcional)", placeholder="Ej.: retiré $ 20.000 para pagar al proveedor")
-    st.warning("Una vez cerrada, la caja **no se puede modificar**. Para seguir cobrando hay que abrir una nueva.")
+    st.warning("Una vez cerrada, la caja **no se puede modificar**. Para seguir cobrando hay que abrir una nueva. "
+               "Si hubo un error, el jefe lo corrige con un **ajuste**, que queda anotado.")
     if st.button("Cerrar caja", type="primary"):
         if contado is None:
             st.error("Escribí cuánto efectivo contaste.")

@@ -141,6 +141,22 @@ ventas = Table(
     Column("fecha", DateTime, nullable=False),
     Column("medio_pago", String(20), nullable=False),  # efectivo, debito, credito, transferencia
     Column("total", Float, nullable=False),
+    Column("anulada", DateTime),  # vacío = venta válida; con fecha = se anuló con un ajuste de caja
+)
+
+# Correcciones que el jefe hace sobre una caja ya cerrada. La caja no se toca: cada ajuste queda anotado
+# con fecha, quién y por qué, y el arqueo muestra la diferencia antes y después de los ajustes.
+ajustes_caja = Table(
+    "ajustes_caja",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("caja_id", Integer, ForeignKey("cajas.id"), nullable=False),
+    Column("fecha", DateTime, nullable=False),
+    Column("hecho_por", String(100), nullable=False),
+    Column("tipo", String(20), nullable=False),  # anular_venta o recontar
+    Column("venta_id", Integer, ForeignKey("ventas.id")),  # la venta anulada (solo en anular_venta)
+    Column("monto", Float, nullable=False),  # anular_venta: total de la venta; recontar: el efectivo recontado
+    Column("motivo", String(200), nullable=False),
 )
 
 ventas_detalle = Table(
@@ -197,6 +213,7 @@ def actualizar_base(motor):
         ("ventas", "caja_id", "INTEGER REFERENCES cajas(id)"),
         ("productos", "codigo_barras", "VARCHAR(30)"),
         ("compras", "cargada_por", "VARCHAR(100)"),
+        ("ventas", "anulada", "DATETIME"),
     ]
     for tabla, columna, tipo in nuevas:
         if columna not in {c["name"] for c in revisor.get_columns(tabla)}:
