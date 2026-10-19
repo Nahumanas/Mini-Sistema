@@ -97,10 +97,10 @@ m2.metric("Gastos del período", pesos(este["gastos"]), cambio("gastos"), delta_
           help="Los gastos del mes (alquiler, luz, sueldos...) repartidos por día: "
                f"a este período le tocan {plural(periodo.dias, 'día', 'días')}.")
 if hubo_vencidos:
-    m4.metric("Vencido que se tiró", pesos(este["vencido"]), cambio("vencido"), delta_color="inverse",
-              help="Lo que se retiró por vencido en Vencimientos, a precio de costo. Es plata perdida.")
+    m4.metric("Tirado o regalado", pesos(este["vencido"]), cambio("vencido"), delta_color="inverse",
+              help="Lo que se sacó en Vencimientos por vencido, tirado o regalado, a precio de costo. Es plata perdida.")
 m3.metric("Ganancia neta", pesos(este["ganancia_neta"]), cambio("ganancia_neta"),
-          help="Ganancia bruta menos gastos" + (" y menos lo vencido" if hubo_vencidos else "")
+          help="Ganancia bruta menos gastos" + (" y menos lo tirado o regalado" if hubo_vencidos else "")
                + ". Si es negativa, es pérdida.")
 verbo = "viene" if periodo.en_curso else "cerró"
 if este["ganancia_neta"] >= 0:

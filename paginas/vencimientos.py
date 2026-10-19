@@ -67,7 +67,36 @@ with izquierda:
                 "vence": st.column_config.DateColumn("Vence", format="DD/MM"),
             },
         )
-        st.caption("Se cuenta que siempre se vende primero lo más viejo.")
+        st.caption("Se cuenta que siempre se vende primero lo más viejo. Si no fue así, usá **Sacar de una tanda**.")
+
+        # --- Sacar unidades de una tanda elegida ---
+        with st.expander("✋ Sacar de una tanda"):
+            por_id = tandas.set_index("lote_id")
+            with st.form("sacar_de_tanda", clear_on_submit=True):
+                lote_id = st.selectbox(
+                    "Tanda", por_id.index, index=None, placeholder="Elegí la tanda",
+                    format_func=lambda i: (f"{por_id.loc[i, 'producto']} · entró el {por_id.loc[i, 'fecha']:%d/%m %H:%M}"
+                                           f" · vence el {por_id.loc[i, 'vence']:%d/%m} · quedan {por_id.loc[i, 'quedan']}"),
+                )
+                cantidad_sacar = st.number_input("Cuántas salieron", min_value=1, value=1, step=1)
+                motivo = st.radio("Por qué", list(op.MOTIVOS_SACAR), horizontal=True,
+                                  format_func=op.MOTIVOS_SACAR.get)
+                if st.form_submit_button("Sacar de esta tanda", type="primary"):
+                    if lote_id is None:
+                        st.error("Elegí la tanda.")
+                    else:
+                        try:
+                            op.sacar_de_tanda(comercio["id"], int(lote_id), int(cantidad_sacar), motivo,
+                                              st.session_state.get("nombre"))
+                        except ValueError as error:
+                            st.error(str(error))
+                        else:
+                            st.session_state["aviso_vencimientos"] = (
+                                f"Listo: se sacaron {cantidad_sacar} de {por_id.loc[lote_id, 'producto']} "
+                                f"(tanda del {por_id.loc[lote_id, 'fecha']:%d/%m}).")
+                            st.rerun()
+            st.caption("**Se vendió:** la venta ya se cobró en la Caja; solo se corrige de qué tanda salió. "
+                       "**Se tiró / Se regaló:** sale del stock y queda como pérdida.")
 
 # --- Cargar lo que se horneó o preparó ---
 with derecha:
@@ -101,7 +130,7 @@ if es_jefe():
     if mermas.empty:
         st.caption("Este mes no se tiró nada. 👌")
     else:
-        st.metric("Pérdida por vencidos (a costo)", pesos(mermas["perdida"].sum()))
+        st.metric("Pérdida por lo tirado o regalado (a costo)", pesos(mermas["perdida"].sum()))
         por_producto = (mermas.groupby("producto", as_index=False)[["cantidad", "perdida"]].sum()
                         .sort_values("perdida", ascending=False))
         st.dataframe(

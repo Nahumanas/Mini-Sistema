@@ -629,6 +629,38 @@ def retirar_vencidos(comercio_id, hecho_por=None):
     return int(vencidas["quedan"].sum()), float((vencidas["quedan"] * vencidas["costo_unitario"]).sum())
 
 
+MOTIVOS_SACAR = {
+    "vendido": "Se vendió (ya está cobrado en la Caja)",
+    "tirado": "Se tiró",
+    "regalado": "Se regaló",
+}
+
+
+def sacar_de_tanda(comercio_id, lote_id, cantidad, motivo, hecho_por=None):
+    """Saca unidades de una tanda elegida, en vez de la más vieja.
+
+    - vendido: la venta ya descontó el stock en la Caja (y el sistema la había asignado a la tanda más
+      vieja). Acá solo se corrige de qué tanda salió: baja esa tanda y el stock queda igual.
+    - tirado / regalado: baja esa tanda y el stock, y queda anotado como pérdida (a costo).
+    """
+    tanda = tandas_en_stock(comercio_id).set_index("lote_id").loc[lote_id]
+    if cantidad < 1 or cantidad > tanda["quedan"]:
+        raise ValueError(f"De esa tanda quedan {tanda['quedan']}.")
+    with motor.begin() as con:
+        con.execute(bd.lotes.update().where(bd.lotes.c.id == lote_id)
+                    .values(cantidad=bd.lotes.c.cantidad - cantidad))
+        if motivo != "vendido":
+            con.execute(
+                bd.productos.update().where(bd.productos.c.id == int(tanda["producto_id"]))
+                .values(stock=bd.productos.c.stock - cantidad)
+            )
+            con.execute(bd.mermas.insert().values(
+                comercio_id=comercio_id, producto_id=int(tanda["producto_id"]), fecha=datetime.now(),
+                cantidad=cantidad, costo_unitario=float(tanda["costo_unitario"]),
+                motivo=f"{MOTIVOS_SACAR[motivo]} (tanda del {tanda['fecha']:%d/%m})", hecho_por=hecho_por,
+            ))
+
+
 def mermas_de(comercio_ids, desde=None, hasta=None):
     """Lo que se tiró (vencido), con lo que costó: una fila por producto retirado."""
     consulta = (

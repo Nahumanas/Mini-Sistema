@@ -89,6 +89,8 @@ Pensado para panaderías y para cualquier comercio con productos que vencen (pos
 
 Para saber cuánto queda de cada tanda, el sistema cuenta que **siempre se vende primero lo más viejo** (así se trabaja en una panadería). Por eso las ventas no cambian: el cajero cobra igual que siempre.
 
+Si no fue así (por ejemplo, se vendió pan de la tanda de hoy y quedó el de ayer), en **Vencimientos → Sacar de una tanda** se elige la tanda, cuántas salieron y por qué: **se vendió** (ya cobrado en la Caja: solo corrige de qué tanda salió), **se tiró** o **se regaló** (salen del stock y quedan como pérdida).
+
 ## 6. El lector de código de barras
 
 El lector (la "pistola" del súper) se enchufa por USB y funciona como un teclado: lee el número del producto, lo "escribe" y aprieta Enter. No hay que instalar nada.

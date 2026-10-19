@@ -226,7 +226,7 @@ def datos_del_periodo(comercio_ids, periodo):
 def resumen(ventas, gastos, compras, mermas=None):
     """Los números del período: cuánto vendí, cuánto gané y cuánto gasté.
 
-    mermas: lo vencido que se tiró (a costo). Es plata perdida, así que se resta de la ganancia neta.
+    mermas: lo vencido, tirado o regalado (a costo). Es plata perdida, así que se resta de la ganancia neta.
     """
     total = ventas["subtotal"].sum()
     costo = ventas["costo_total"].sum()
@@ -488,8 +488,8 @@ def generar_reporte(comercios, periodo, nombre_alcance=None):
             ("Ganancia bruta (ventas − costo)", "ganancia_bruta", PESOS),
             ("Margen bruto", "margen", PORCENTAJE),
             ("Gastos que le tocan a este período", "gastos", PESOS),
-            *([("Mercadería vencida que se tiró (a costo)", "vencido", PESOS)] if hubo_vencidos else []),
-            ("Ganancia neta (bruta − gastos" + (" − vencidos)" if hubo_vencidos else ")"), "ganancia_neta", PESOS),
+            *([("Mercadería tirada o regalada (a costo)", "vencido", PESOS)] if hubo_vencidos else []),
+            ("Ganancia neta (bruta − gastos" + (" − lo tirado)" if hubo_vencidos else ")"), "ganancia_neta", PESOS),
         ]),
         ("3. ¿Cuánto gasté?", [
             ("Gastos (alquiler, luz, sueldos...)", "gastos", PESOS),
