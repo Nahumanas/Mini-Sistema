@@ -79,6 +79,7 @@ ESTILOS = """<style>
 
 /* Caja: el total y el botón Cobrar bien grandes, que es lo que se mira y se toca con apuro */
 .st-key-total_a_cobrar [data-testid="stMetricValue"] { font-size: 3.4rem; font-weight: 600; color: #1B1F2A; }
+.st-key-vuelto [data-testid="stMetricValue"], .st-key-vuelto [data-testid="stMetricValue"] p { font-size: 2.6rem; font-weight: 600; color: #15803D; }
 .st-key-boton_cobrar button { min-height: 3.6rem; }
 .st-key-boton_cobrar button p { font-size: 1.4rem; font-weight: 700; }
 

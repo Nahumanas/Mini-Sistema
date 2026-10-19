@@ -167,6 +167,8 @@ ultima = st.session_state.get("ultima_venta")
 if ultima and ultima["comercio_id"] == comercio["id"]:
     with st.container(border=True):
         st.success(f"Venta cobrada: {pesos(ultima['total'])} en {MEDIOS_DE_PAGO[ultima['medio_pago']].lower()}.")
+        if ultima.get("vuelto"):
+            st.info(f"💵 Vuelto a entregar: **{pesos_md(ultima['vuelto'])}**")
         for aviso in ultima["avisos"]:
             st.warning(aviso)
         if ultima.get("ticket_pdf"):
@@ -270,15 +272,30 @@ with derecha:
         medio_pago = st.radio(
             "Medio de pago", list(MEDIOS_DE_PAGO), format_func=MEDIOS_DE_PAGO.get, horizontal=True
         )
+        # Si paga en efectivo, el sistema calcula el vuelto (así no se da de más ni de menos)
+        clave_paga_con = f"paga_con_{comercio['id']}"
+        falta = 0
+        vuelto = None
+        if medio_pago == "efectivo" and carrito:
+            paga_con = st.number_input("Paga con ($)", min_value=0.0, value=None, step=100.0, format="%.0f",
+                                       key=clave_paga_con, placeholder="Opcional: con cuánto paga")
+            if paga_con is not None and paga_con < total:
+                falta = total - paga_con
+                st.error(f"Falta {pesos_md(falta)}. Con eso no alcanza para pagar.")
+            elif paga_con is not None:
+                vuelto = paga_con - total
+                st.container(key="vuelto").metric("Vuelto", pesos(vuelto))
+
         con_ticket = False
         if comercio["usa_ticket"]:
             con_ticket = st.checkbox("El cliente pide ticket")
 
         # Cobrar ocupa todo el ancho y es bien grande; Cancelar queda abajo, más chico, para no tocarlo sin querer
-        cobrar = st.container(key="boton_cobrar").button("💵 Cobrar", type="primary", disabled=not carrito,
+        cobrar = st.container(key="boton_cobrar").button("💵 Cobrar", type="primary", disabled=not carrito or falta > 0,
                                                           width="stretch")
         if st.button("Cancelar venta", disabled=not carrito):
             carrito.clear()
+            st.session_state.pop(clave_paga_con, None)
             st.rerun()
 
     if cobrar:
@@ -294,7 +311,7 @@ with derecha:
             st.stop()
         ultima = {
             "comercio_id": comercio["id"], "total": total, "medio_pago": medio_pago,
-            "numero": numero, "avisos": avisos,
+            "numero": numero, "avisos": avisos, "vuelto": vuelto,
         }
         if numero:
             ultima["ticket_pdf"] = generar_ticket_pdf(
@@ -303,6 +320,7 @@ with derecha:
                 total, medio_pago,
             )
         st.session_state["ultima_venta"] = ultima
+        st.session_state.pop(clave_paga_con, None)
         carrito.clear()
         st.rerun()
 
