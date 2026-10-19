@@ -6,17 +6,49 @@ Este archivo arma el ingreso (jefe con PIN o empleado), el menú de la izquierda
 (qué comercio ver) y la lista de pantallas que puede usar cada uno.
 """
 
+import importlib
 import os
+import sys
 import threading
 from datetime import date
 
 import streamlit as st
 
-import operaciones as op
+# Los archivos del sistema, en el orden en que se importan entre sí.
+MODULOS_PROPIOS = ["config", "base_datos", "operaciones", "comun", "ticket", "reportes", "ingreso",
+                   "generar_datos_prueba"]
+
+
+@st.cache_resource
+def _fechas_al_arrancar():
+    """Cuándo se modificó cada archivo del sistema la primera vez que se abrió (queda guardado)."""
+    return {}
+
+
+def _fechas_actuales():
+    return {nombre: os.path.getmtime(sys.modules[nombre].__file__)
+            for nombre in MODULOS_PROPIOS if nombre in sys.modules}
+
+
+def recargar_si_cambiaron():
+    """Si se subió código nuevo con el sistema prendido (la demo se actualiza sola desde GitHub),
+    Streamlit puede seguir usando los archivos viejos y fallar. Si alguno cambió, se recargan todos."""
+    fechas = _fechas_al_arrancar()
+    if any(fechas.get(nombre, fecha) != fecha for nombre, fecha in _fechas_actuales().items()):
+        for nombre in MODULOS_PROPIOS:
+            if nombre in sys.modules:
+                importlib.reload(sys.modules[nombre])
+
+
+recargar_si_cambiaron()
+
+import operaciones as op  # noqa: E402 (va después de recargar)
 import reportes
 from ingreso import pantalla_ingreso
 from comun import RUBROS, a_python, aplicar_estilos, correr_script, permisos_de
 from config import FORMULARIO_RESENAS, MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE
+
+_fechas_al_arrancar().update(_fechas_actuales())  # anota cómo estaban los archivos que se usaron
 
 st.set_page_config(page_title="Mini-Sistema", page_icon="🏪", layout="wide")
 
