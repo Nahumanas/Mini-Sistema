@@ -352,7 +352,31 @@ def generar():
          "activo": True}
         for p in filas["productos"]
     ]
+    agregar_vencimientos(filas)
     return filas
+
+
+# Productos que vencen en los kioscos de prueba (cuántos días duran), para mostrar los vencimientos
+DURACION_DEMO = {"Pan lactal": 6, "Leche 1 L": 10}
+
+
+def agregar_vencimientos(filas):
+    """Cada compra de un producto que vence queda anotada como una tanda (lote), con su fecha de vencimiento."""
+    duracion = {}
+    for p in filas["productos"]:
+        if p["nombre"] in DURACION_DEMO:
+            p["dias_duracion"] = DURACION_DEMO[p["nombre"]]
+            duracion[p["id"]] = (p["comercio_id"], p["dias_duracion"])
+    fecha_compra = {c["id"]: c["fecha"] for c in filas["compras"]}
+    for d in filas["compras_detalle"]:
+        if d["producto_id"] in duracion:
+            comercio_id, dias = duracion[d["producto_id"]]
+            fecha = fecha_compra[d["compra_id"]]
+            filas["lotes"].append({
+                "id": len(filas["lotes"]) + 1, "comercio_id": comercio_id, "producto_id": d["producto_id"],
+                "fecha": fecha, "cantidad": d["cantidad"], "vence": fecha.date() + timedelta(days=dias),
+                "origen": "compra",
+            })
 
 
 def main():

@@ -41,7 +41,7 @@ from config import CARPETA_PROYECTO, URL_BASE
 metadata = MetaData()
 
 # Al crear un comercio, el empleado ve (además de la Caja) el Panel del día y el Stock
-PERMISOS_EMPLEADO_INICIALES = "panel_del_dia,stock,compras"  # el jefe le saca lo que quiera desde Mis comercios
+PERMISOS_EMPLEADO_INICIALES = "panel_del_dia,stock,compras,vencimientos"  # el jefe le saca lo que quiera desde Mis comercios
 
 duenos = Table(
     "duenos",
@@ -85,6 +85,8 @@ productos = Table(
     Column("stock", Integer, nullable=False, default=0),
     Column("stock_minimo", Integer, nullable=False, default=0),
     Column("activo", Boolean, nullable=False, default=True),
+    # Cuántos días dura desde que entra (exhibición y heladera juntas). Vacío = no vence (kiosco, ferretería).
+    Column("dias_duracion", Integer),
 )
 
 proveedores = Table(
@@ -191,6 +193,36 @@ gastos = Table(
     Column("monto", Float, nullable=False),
 )
 
+# Cada tanda que entra de un producto que vence (lo que se hornea o lo que llega del proveedor).
+# No se guarda cuánto queda de cada tanda: se calcula con el stock, suponiendo que siempre se vende
+# primero lo más viejo. Así no hay que tocar nada al vender ni al corregir el stock.
+lotes = Table(
+    "lotes",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
+    Column("producto_id", Integer, ForeignKey("productos.id"), nullable=False),
+    Column("fecha", DateTime, nullable=False),  # cuándo entró
+    Column("cantidad", Integer, nullable=False),
+    Column("vence", Date, nullable=False),  # fecha + días de duración del producto
+    Column("origen", String(20), nullable=False),  # compra o produccion
+    Column("cargado_por", String(100)),
+)
+
+# Mercadería que se tira (por ahora, lo vencido). Resta del stock y cuenta como pérdida en los reportes.
+mermas = Table(
+    "mermas",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
+    Column("producto_id", Integer, ForeignKey("productos.id"), nullable=False),
+    Column("fecha", DateTime, nullable=False),
+    Column("cantidad", Integer, nullable=False),
+    Column("costo_unitario", Float, nullable=False),  # lo que costó cada unidad (lo que se pierde)
+    Column("motivo", String(100), nullable=False),
+    Column("hecho_por", String(100)),
+)
+
 
 def obtener_motor():
     """Devuelve la conexión a la base de datos."""
@@ -214,6 +246,7 @@ def actualizar_base(motor):
         ("productos", "codigo_barras", "VARCHAR(30)"),
         ("compras", "cargada_por", "VARCHAR(100)"),
         ("ventas", "anulada", "DATETIME"),
+        ("productos", "dias_duracion", "INTEGER"),
     ]
     for tabla, columna, tipo in nuevas:
         if columna not in {c["name"] for c in revisor.get_columns(tabla)}:

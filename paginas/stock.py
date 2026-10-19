@@ -73,7 +73,7 @@ vista["estado"] = vista.apply(
 vista["margen"] = (vista["precio_venta"] / vista["precio_costo"] - 1).where(vista["precio_costo"] > 0)
 # El stock va al lado del nombre, así se ve aunque la pantalla sea angosta
 columnas = ["id", "estado", "codigo", "nombre", "stock", "stock_minimo", "categoria", "precio_costo", "precio_venta",
-            "margen", "activo", "codigo_barras"]
+            "margen", "dias_duracion", "activo", "codigo_barras"]
 
 # Tabla editable: se puede cambiar precio, stock, etc. y después tocar "Guardar cambios".
 version = st.session_state.setdefault("version_stock", 0)
@@ -93,13 +93,17 @@ editado = st.data_editor(
         "margen": st.column_config.NumberColumn("Margen", format="percent"),
         "stock": st.column_config.NumberColumn("Stock", step=1),
         "stock_minimo": st.column_config.NumberColumn("Stock mínimo", step=1, min_value=0),
+        "dias_duracion": st.column_config.NumberColumn(
+            "Dura (días)", step=1, min_value=1,
+            help="Para lo que vence (postres, prepizzas, lácteos): cuántos días dura desde que entra, "
+                 "contando exhibición y heladera. Vacío = no vence. Ver la pantalla Vencimientos."),
         "activo": st.column_config.CheckboxColumn("Activo"),
         "codigo_barras": st.column_config.TextColumn("Código de barras", max_chars=30),
     },
 )
 
-editables = ["nombre", "categoria", "precio_costo", "precio_venta", "stock", "stock_minimo", "activo",
-             "codigo_barras"]
+editables = ["nombre", "categoria", "precio_costo", "precio_venta", "stock", "stock_minimo", "dias_duracion",
+             "activo", "codigo_barras"]
 original = vista.set_index("id")[editables]
 nuevo = editado.set_index("id")[editables]
 cambiados = nuevo[(nuevo.fillna("") != original.fillna("")).any(axis=1)]
@@ -122,6 +126,7 @@ if st.button(f"Guardar cambios ({len(cambiados)})", type="primary", disabled=cam
             "categoria": fila["categoria"] if fila["categoria"] else None,
             "precio_costo": float(fila["precio_costo"]), "precio_venta": float(fila["precio_venta"]),
             "stock": int(fila["stock"]), "stock_minimo": int(fila["stock_minimo"]),
+            "dias_duracion": None if pd.isna(fila["dias_duracion"]) else int(fila["dias_duracion"]),
             "activo": bool(fila["activo"]),
             "codigo_barras": op.limpiar_codigo_barras(fila["codigo_barras"]),
         })
@@ -180,8 +185,10 @@ with st.expander("➕ Agregar producto nuevo"):
         venta = c5.number_input("Precio de venta ($)", min_value=0.0, step=10.0)
         stock_inicial = c6.number_input("Stock inicial", min_value=0, step=1)
         minimo = c7.number_input("Stock mínimo", min_value=0, step=1, value=2)
-        c8, c9 = st.columns(2)
+        c8, c9, c10 = st.columns([2, 2, 1])
         codigo_barras = c8.text_input("Código de barras (opcional)", placeholder="Pasá el lector por el producto")
+        dias_duracion = c10.number_input("Dura (días)", min_value=0, step=1, value=0,
+                                         help="Para lo que vence. 0 = no vence.")
         proveedor_id = c9.selectbox(
             "Proveedor (opcional)", proveedores.index, index=None,
             format_func=lambda i: proveedores.loc[i, "nombre"],
@@ -198,7 +205,7 @@ with st.expander("➕ Agregar producto nuevo"):
                     comercio["id"], codigo.strip(), nombre.strip(), categoria.strip() or None,
                     costo, venta, int(stock_inicial), int(minimo),
                     int(proveedor_id) if proveedor_id is not None else None,
-                    codigo_barras,
+                    codigo_barras, dias_duracion=int(dias_duracion) or None,
                 )
                 st.session_state["version_stock"] += 1
                 st.session_state["stock_guardado"] = True

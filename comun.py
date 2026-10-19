@@ -31,6 +31,7 @@ PERMISOS_EMPLEADO = {
     "stock": "📋 Stock (solo mirar)",
     "compras": "📦 Compras (cargar lo que llega)",
     "gastos": "🧾 Gastos",
+    "vencimientos": "🗓️ Vencimientos (cargar tandas y retirar lo vencido)",
     "ajustar_caja": "✏️ Ajustar cajas cerradas (ve las cajas anteriores)",
 }
 
@@ -101,6 +102,16 @@ ESTILOS = """<style>
 def aplicar_estilos():
     """Pone los retoques visuales (ESTILOS) en la página. Se llama una vez desde app.py."""
     st.html(ESTILOS)
+
+
+def texto_vencimientos(avisos):
+    """'2 vencidas · 5 vencen hoy' (vacío si no hay nada que avisar). avisos viene de op.avisos_vencimientos."""
+    partes = []
+    if avisos["vencidas"]:
+        partes.append(f"{plural(avisos['vencidas'], 'unidad vencida', 'unidades vencidas')} para retirar")
+    if avisos["hoy"]:
+        partes.append(f"{plural(avisos['hoy'], 'vence', 'vencen')} hoy")
+    return " · ".join(partes)
 
 
 def plural(cantidad, singular, plural_):

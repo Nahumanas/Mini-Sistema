@@ -63,8 +63,10 @@ else:
     periodo = rep.periodo_fechas(*fechas)
 
 datos = rep.datos_del_periodo(ids, periodo)
-este = rep.resumen(datos["ventas"], datos["gastos"], datos["compras"])
-anterior = rep.resumen(datos["ventas_anterior"], datos["gastos_anterior"], datos["compras_anterior"])
+este = rep.resumen(datos["ventas"], datos["gastos"], datos["compras"], datos["mermas"])
+anterior = rep.resumen(datos["ventas_anterior"], datos["gastos_anterior"], datos["compras_anterior"],
+                       datos["mermas_anterior"])
+hubo_vencidos = bool(este["vencido"] or anterior["vencido"])
 
 
 def cambio(clave):
@@ -85,14 +87,21 @@ m3.metric("Ticket promedio", pesos(este["ticket_promedio"] or 0), cambio("ticket
 
 # --- 2. ¿Cuánto gané? ---
 st.markdown("#### 2. ¿Cuánto gané?")
-m1, m2, m3 = st.columns(3)
+if hubo_vencidos:
+    m1, m2, m4, m3 = st.columns(4)
+else:
+    m1, m2, m3 = st.columns(3)
 m1.metric("Ganancia bruta", pesos(este["ganancia_bruta"]), cambio("ganancia_bruta"),
           help="Lo vendido menos lo que costó esa mercadería.")
 m2.metric("Gastos del período", pesos(este["gastos"]), cambio("gastos"), delta_color="inverse",
           help="Los gastos del mes (alquiler, luz, sueldos...) repartidos por día: "
                f"a este período le tocan {plural(periodo.dias, 'día', 'días')}.")
+if hubo_vencidos:
+    m4.metric("Vencido que se tiró", pesos(este["vencido"]), cambio("vencido"), delta_color="inverse",
+              help="Lo que se retiró por vencido en Vencimientos, a precio de costo. Es plata perdida.")
 m3.metric("Ganancia neta", pesos(este["ganancia_neta"]), cambio("ganancia_neta"),
-          help="Ganancia bruta menos gastos. Si es negativa, es pérdida.")
+          help="Ganancia bruta menos gastos" + (" y menos lo vencido" if hubo_vencidos else "")
+               + ". Si es negativa, es pérdida.")
 verbo = "viene" if periodo.en_curso else "cerró"
 if este["ganancia_neta"] >= 0:
     st.success(f"{verbo.capitalize()} con **ganancia** de {pesos(este['ganancia_neta'])}.")

@@ -216,18 +216,24 @@ def datos_del_periodo(comercio_ids, periodo):
         "ventas_anterior": op.detalle_ventas(comercio_ids, p.desde_anterior, p.hasta_anterior),
         "compras_anterior": op.detalle_compras(comercio_ids, p.desde_anterior, p.hasta_anterior),
         "gastos_anterior": gastos_del_periodo(comercio_ids, p.desde_anterior, p.hasta_anterior),
+        "mermas": op.mermas_de(comercio_ids, p.desde, p.hasta),
+        "mermas_anterior": op.mermas_de(comercio_ids, p.desde_anterior, p.hasta_anterior),
         # Para "qué comprar" siempre se miran las últimas 4 semanas hasta hoy
         "ventas_recientes": op.detalle_ventas(comercio_ids, hoy - timedelta(days=DIAS_HISTORIA - 1), hoy),
     }
 
 
-def resumen(ventas, gastos, compras):
-    """Los números del período: cuánto vendí, cuánto gané y cuánto gasté."""
+def resumen(ventas, gastos, compras, mermas=None):
+    """Los números del período: cuánto vendí, cuánto gané y cuánto gasté.
+
+    mermas: lo vencido que se tiró (a costo). Es plata perdida, así que se resta de la ganancia neta.
+    """
     total = ventas["subtotal"].sum()
     costo = ventas["costo_total"].sum()
     cantidad = ventas["venta_id"].nunique()
     total_gastos = gastos["parte"].sum() if not gastos.empty else 0
     total_compras = compras["subtotal"].sum()
+    vencido = mermas["perdida"].sum() if mermas is not None and not mermas.empty else 0
     return {
         "ventas": total,
         "cantidad": cantidad,
@@ -237,7 +243,8 @@ def resumen(ventas, gastos, compras):
         "ganancia_bruta": total - costo,
         "margen": (total - costo) / total if total else None,
         "gastos": total_gastos,
-        "ganancia_neta": total - costo - total_gastos,
+        "vencido": vencido,
+        "ganancia_neta": total - costo - total_gastos - vencido,
         "compras": total_compras,
         "salio": total_gastos + total_compras,
     }
@@ -307,12 +314,13 @@ def que_comprar(productos, ventas_recientes):
     return tabla[tabla["comprar"] > 0].sort_values(["proveedor", "urgencia", "nombre"])
 
 
-def por_comercio(ventas, gastos, compras, comercios):
+def por_comercio(ventas, gastos, compras, comercios, mermas=None):
     """Un renglón por comercio con sus números del período."""
     filas = []
     for c in comercios:
         r = resumen(ventas[ventas["comercio_id"] == c["id"]], gastos[gastos["comercio_id"] == c["id"]],
-                    compras[compras["comercio_id"] == c["id"]])
+                    compras[compras["comercio_id"] == c["id"]],
+                    None if mermas is None else mermas[mermas["comercio_id"] == c["id"]])
         filas.append({"comercio": c["nombre"], "rubro": RUBROS.get(c["rubro"], "· " + c["rubro"]).split(" ", 1)[1], **r})
     return pd.DataFrame(filas)
 
@@ -434,8 +442,10 @@ def generar_reporte(comercios, periodo, nombre_alcance=None):
     varios = len(comercios) > 1
     datos = datos_del_periodo(ids, p)
     ventas, compras, gastos = datos["ventas"], datos["compras"], datos["gastos"]
-    este = resumen(ventas, gastos, compras)
-    anterior = resumen(datos["ventas_anterior"], datos["gastos_anterior"], datos["compras_anterior"])
+    este = resumen(ventas, gastos, compras, datos["mermas"])
+    anterior = resumen(datos["ventas_anterior"], datos["gastos_anterior"], datos["compras_anterior"],
+                       datos["mermas_anterior"])
+    hubo_vencidos = bool(este["vencido"] or anterior["vencido"])
     ranking = ranking_productos(ventas, datos["productos"])
     comprar = que_comprar(datos["productos"], datos["ventas_recientes"])
     if varios:
@@ -478,7 +488,8 @@ def generar_reporte(comercios, periodo, nombre_alcance=None):
             ("Ganancia bruta (ventas − costo)", "ganancia_bruta", PESOS),
             ("Margen bruto", "margen", PORCENTAJE),
             ("Gastos que le tocan a este período", "gastos", PESOS),
-            ("Ganancia neta (bruta − gastos)", "ganancia_neta", PESOS),
+            *([("Mercadería vencida que se tiró (a costo)", "vencido", PESOS)] if hubo_vencidos else []),
+            ("Ganancia neta (bruta − gastos" + (" − vencidos)" if hubo_vencidos else ")"), "ganancia_neta", PESOS),
         ]),
         ("3. ¿Cuánto gasté?", [
             ("Gastos (alquiler, luz, sueldos...)", "gastos", PESOS),
@@ -615,7 +626,7 @@ def generar_reporte(comercios, periodo, nombre_alcance=None):
     if varios:
         hoja = libro.create_sheet("Por comercio")
         _titulo(hoja, f"Cada comercio · {p.nombre}", "Cuánto vendió, cuánto ganó y cuánto gastó cada uno")
-        tabla = por_comercio(ventas, gastos, compras, comercios)
+        tabla = por_comercio(ventas, gastos, compras, comercios, datos["mermas"])
         fin = _tabla(hoja, tabla, 4, 1, [
             ("comercio", "Comercio", None, 26), ("rubro", "Rubro", None, 12),
             ("ventas", "Ventas", PESOS, 15), ("cantidad", "Cantidad de ventas", ENTERO, 18),

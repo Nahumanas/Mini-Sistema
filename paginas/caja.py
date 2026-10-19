@@ -12,7 +12,7 @@ import streamlit as st
 
 import operaciones as op
 from comun import (MEDIOS_DE_PAGO, alta_rapida, buscar_por_codigo, comercio_actual, dejar_listo_el_lector,
-                   encabezado, es_jefe, permisos_de, pesos, plural)
+                   encabezado, es_jefe, permisos_de, pesos, plural, texto_vencimientos)
 
 
 def pesos_md(valor):
@@ -27,6 +27,8 @@ from ticket import generar_ticket_pdf
 
 comercio = comercio_actual()
 encabezado("💵", "Caja", comercio)
+if aviso := texto_vencimientos(op.avisos_vencimientos(comercio["id"])):
+    st.warning(f"🗓️ {aviso}. Revisalo en **Vencimientos**.")
 
 
 def mostrar_cierre(resumen):

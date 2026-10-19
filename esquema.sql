@@ -16,7 +16,7 @@ CREATE TABLE comercios (
 	direccion VARCHAR(150), 
 	usa_ticket BOOLEAN NOT NULL, 
 	resumen_semanal BOOLEAN DEFAULT 0 NOT NULL, 
-	permisos_empleado VARCHAR(200) DEFAULT 'panel_del_dia,stock,compras' NOT NULL, 
+	permisos_empleado VARCHAR(200) DEFAULT 'panel_del_dia,stock,compras,vencimientos' NOT NULL, 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(dueno_id) REFERENCES duenos (id)
 );
@@ -80,6 +80,7 @@ CREATE TABLE productos (
 	stock INTEGER NOT NULL, 
 	stock_minimo INTEGER NOT NULL, 
 	activo BOOLEAN NOT NULL, 
+	dias_duracion INTEGER, 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
 	FOREIGN KEY(proveedor_id) REFERENCES proveedores (id)
@@ -121,6 +122,34 @@ CREATE TABLE compras_detalle (
 	subtotal FLOAT NOT NULL, 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(compra_id) REFERENCES compras (id), 
+	FOREIGN KEY(producto_id) REFERENCES productos (id)
+);
+
+CREATE TABLE lotes (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	producto_id INTEGER NOT NULL, 
+	fecha DATETIME NOT NULL, 
+	cantidad INTEGER NOT NULL, 
+	vence DATE NOT NULL, 
+	origen VARCHAR(20) NOT NULL, 
+	cargado_por VARCHAR(100), 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
+	FOREIGN KEY(producto_id) REFERENCES productos (id)
+);
+
+CREATE TABLE mermas (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	producto_id INTEGER NOT NULL, 
+	fecha DATETIME NOT NULL, 
+	cantidad INTEGER NOT NULL, 
+	costo_unitario FLOAT NOT NULL, 
+	motivo VARCHAR(100) NOT NULL, 
+	hecho_por VARCHAR(100), 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
 	FOREIGN KEY(producto_id) REFERENCES productos (id)
 );
 

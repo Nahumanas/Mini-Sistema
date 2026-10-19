@@ -6,7 +6,7 @@ Así, si mañana cambia la base (por ejemplo, a la nube), solo se toca este arch
 
 import hashlib
 import secrets
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 from sqlalchemy import func, inspect, select
@@ -317,7 +317,7 @@ def listar_productos(comercio_id, solo_activos=True):
 
 
 def crear_producto(comercio_id, codigo, nombre, categoria, precio_costo, precio_venta,
-                   stock, stock_minimo, proveedor_id=None, codigo_barras=None):
+                   stock, stock_minimo, proveedor_id=None, codigo_barras=None, dias_duracion=None):
     """Crea el producto y devuelve su id."""
     with motor.begin() as con:
         resultado = con.execute(
@@ -326,10 +326,13 @@ def crear_producto(comercio_id, codigo, nombre, categoria, precio_costo, precio_
                 codigo_barras=limpiar_codigo_barras(codigo_barras),
                 nombre=nombre, categoria=categoria, precio_costo=precio_costo,
                 precio_venta=precio_venta, stock=stock, stock_minimo=stock_minimo,
-                activo=True,
+                activo=True, dias_duracion=dias_duracion or None,
             )
         )
-    return resultado.inserted_primary_key[0]
+        producto_id = resultado.inserted_primary_key[0]
+        if stock:  # el stock inicial es la primera tanda
+            _anotar_tanda(con, comercio_id, producto_id, stock, datetime.now(), "produccion")
+    return producto_id
 
 
 def limpiar_codigo_barras(valor):
@@ -372,9 +375,14 @@ def actualizar_productos(cambios):
         for fila in cambios:
             fila = dict(fila)
             producto_id = fila.pop("id")
+            antes = con.execute(select(bd.productos).where(bd.productos.c.id == producto_id)).mappings().one()
             con.execute(
                 bd.productos.update().where(bd.productos.c.id == producto_id).values(**fila)
             )
+            # Si recién se le cargan los días de duración, el stock que ya había cuenta como entrado hoy
+            if fila.get("dias_duracion") and not antes["dias_duracion"] and fila.get("stock", antes["stock"]) > 0:
+                _anotar_tanda(con, antes["comercio_id"], producto_id, fila.get("stock", antes["stock"]),
+                              datetime.now(), "produccion")
 
 
 def importar_productos(comercio_id, df):
@@ -403,6 +411,9 @@ def importar_productos(comercio_id, df):
             }
             if "codigo_barras" in fila:  # columna opcional: si el Excel no la trae, no se toca
                 datos["codigo_barras"] = limpiar_codigo_barras(fila["codigo_barras"])
+            if "dias_duracion" in fila:  # columna opcional: días que dura el producto (vacío = no vence)
+                dias = fila["dias_duracion"]
+                datos["dias_duracion"] = None if pd.isna(dias) or int(dias) <= 0 else int(dias)
             if datos["codigo"] in id_por_codigo:
                 con.execute(
                     bd.productos.update()
@@ -496,15 +507,17 @@ def registrar_compra(comercio_id, proveedor_id, items, cargada_por=None):
     items: lista de diccionarios con producto_id, cantidad y costo_unitario.
     cargada_por: nombre de quien la cargó, para que el jefe sepa quién sumó stock.
     """
+    ahora = datetime.now()
     with motor.begin() as con:
         total = sum(i["cantidad"] * i["costo_unitario"] for i in items)
         compra_id = con.execute(
             bd.compras.insert().values(
                 comercio_id=comercio_id, proveedor_id=proveedor_id,
-                fecha=datetime.now(), total=total, cargada_por=cargada_por,
+                fecha=ahora, total=total, cargada_por=cargada_por,
             )
         ).inserted_primary_key[0]
         for i in items:
+            _anotar_tanda(con, comercio_id, i["producto_id"], i["cantidad"], ahora, "compra", cargada_por)
             con.execute(bd.compras_detalle.insert().values(
                 compra_id=compra_id, producto_id=i["producto_id"], cantidad=i["cantidad"],
                 costo_unitario=i["costo_unitario"], subtotal=i["cantidad"] * i["costo_unitario"],
@@ -515,6 +528,123 @@ def registrar_compra(comercio_id, proveedor_id, items, cargada_por=None):
                 .values(stock=bd.productos.c.stock + i["cantidad"], precio_costo=i["costo_unitario"])
             )
     return compra_id
+
+
+# ---------------------------------------------------------------------------
+# Vencimientos (productos con "Dura X días", como los postres de una panadería)
+# ---------------------------------------------------------------------------
+def _anotar_tanda(con, comercio_id, producto_id, cantidad, fecha, origen, cargado_por=None):
+    """Si el producto vence, anota la tanda que entró con su fecha de vencimiento."""
+    dias = con.execute(select(bd.productos.c.dias_duracion).where(bd.productos.c.id == producto_id)).scalar()
+    if dias:
+        con.execute(bd.lotes.insert().values(
+            comercio_id=comercio_id, producto_id=producto_id, fecha=fecha, cantidad=cantidad,
+            vence=fecha.date() + timedelta(days=int(dias)), origen=origen, cargado_por=cargado_por,
+        ))
+
+
+def usa_vencimientos(comercio_id):
+    """True si algún producto del comercio tiene días de duración cargados."""
+    consulta = select(func.count()).where(
+        bd.productos.c.comercio_id == comercio_id, bd.productos.c.dias_duracion > 0, bd.productos.c.activo.is_(True)
+    )
+    with motor.connect() as con:
+        return con.execute(consulta).scalar() > 0
+
+
+def cargar_tanda(comercio_id, producto_id, cantidad, cargado_por=None):
+    """Lo que se horneó o preparó hoy: suma al stock y queda anotado con su vencimiento."""
+    with motor.begin() as con:
+        con.execute(
+            bd.productos.update().where(bd.productos.c.id == producto_id)
+            .values(stock=bd.productos.c.stock + cantidad)
+        )
+        _anotar_tanda(con, comercio_id, producto_id, cantidad, datetime.now(), "produccion", cargado_por)
+
+
+def tandas_en_stock(comercio_id, hoy=None):
+    """Lo que queda de cada tanda, con su vencimiento y estado.
+
+    No se guarda cuánto queda de cada tanda: se reparte el stock actual empezando por la tanda más nueva
+    (porque se vende primero lo más viejo). Lo que sobra del stock y no tiene tanda (por ejemplo, lo que
+    había antes de cargar los días de duración) no se muestra, porque no se sabe cuándo entró.
+    """
+    hoy = hoy or date.today()
+    productos = pd.read_sql(
+        select(bd.productos.c.id, bd.productos.c.nombre, bd.productos.c.stock, bd.productos.c.precio_costo)
+        .where(bd.productos.c.comercio_id == comercio_id, bd.productos.c.dias_duracion > 0,
+               bd.productos.c.activo.is_(True), bd.productos.c.stock > 0),
+        motor,
+    ).set_index("id")
+    columnas = ["lote_id", "producto_id", "producto", "fecha", "vence", "quedan", "dias", "costo_unitario"]
+    if productos.empty:
+        return pd.DataFrame(columns=columnas)
+    tandas = pd.read_sql(
+        select(bd.lotes.c.id, bd.lotes.c.producto_id, bd.lotes.c.fecha, bd.lotes.c.cantidad, bd.lotes.c.vence)
+        .where(bd.lotes.c.comercio_id == comercio_id, bd.lotes.c.producto_id.in_(productos.index.tolist()))
+        .order_by(bd.lotes.c.fecha.desc(), bd.lotes.c.id.desc()),
+        motor, parse_dates=["fecha"],
+    )
+    filas = []
+    sin_repartir = productos["stock"].to_dict()
+    for t in tandas.itertuples():
+        quedan = min(t.cantidad, sin_repartir[t.producto_id])
+        if quedan <= 0:
+            continue
+        sin_repartir[t.producto_id] -= quedan
+        vence = pd.Timestamp(t.vence).date()
+        filas.append({
+            "lote_id": t.id, "producto_id": t.producto_id, "producto": productos.loc[t.producto_id, "nombre"],
+            "fecha": t.fecha, "vence": vence, "quedan": int(quedan), "dias": (vence - hoy).days,
+            "costo_unitario": float(productos.loc[t.producto_id, "precio_costo"]),
+        })
+    return pd.DataFrame(filas, columns=columnas).sort_values(["vence", "producto"])
+
+
+def avisos_vencimientos(comercio_id, hoy=None):
+    """Unidades vencidas, que vencen hoy y que vencen mañana (para los avisos de Inicio y Caja)."""
+    tandas = tandas_en_stock(comercio_id, hoy)
+    return {
+        "vencidas": int(tandas.loc[tandas["dias"] < 0, "quedan"].sum()),
+        "hoy": int(tandas.loc[tandas["dias"] == 0, "quedan"].sum()),
+        "manana": int(tandas.loc[tandas["dias"] == 1, "quedan"].sum()),
+    }
+
+
+def retirar_vencidos(comercio_id, hecho_por=None):
+    """Saca del stock todo lo vencido y lo anota como pérdida. Devuelve (unidades, plata perdida)."""
+    vencidas = tandas_en_stock(comercio_id)
+    vencidas = vencidas[vencidas["dias"] < 0]
+    ahora = datetime.now()
+    with motor.begin() as con:
+        for t in vencidas.itertuples():
+            con.execute(
+                bd.productos.update().where(bd.productos.c.id == t.producto_id)
+                .values(stock=bd.productos.c.stock - t.quedan)
+            )
+            con.execute(bd.mermas.insert().values(
+                comercio_id=comercio_id, producto_id=t.producto_id, fecha=ahora, cantidad=t.quedan,
+                costo_unitario=t.costo_unitario, motivo=f"Vencido el {t.vence:%d/%m}", hecho_por=hecho_por,
+            ))
+    return int(vencidas["quedan"].sum()), float((vencidas["quedan"] * vencidas["costo_unitario"]).sum())
+
+
+def mermas_de(comercio_ids, desde=None, hasta=None):
+    """Lo que se tiró (vencido), con lo que costó: una fila por producto retirado."""
+    consulta = (
+        select(bd.mermas, bd.productos.c.nombre.label("producto"), bd.comercios.c.nombre.label("comercio"))
+        .select_from(
+            bd.mermas.join(bd.productos, bd.productos.c.id == bd.mermas.c.producto_id)
+            .join(bd.comercios, bd.comercios.c.id == bd.mermas.c.comercio_id)
+        )
+        .where(bd.mermas.c.comercio_id.in_(comercio_ids))
+        .order_by(bd.mermas.c.fecha)
+    )
+    if desde is not None:
+        consulta = consulta.where(_entre_dias(bd.mermas.c.fecha, desde, hasta))
+    df = pd.read_sql(consulta, motor, parse_dates=["fecha"])
+    df["perdida"] = df["cantidad"] * df["costo_unitario"]
+    return df
 
 
 def registrar_gasto(comercio_id, fecha, categoria, descripcion, monto):

@@ -165,10 +165,14 @@ compras = st.Page("paginas/compras.py", title="Compras", icon="📦")
 gastos = st.Page("paginas/gastos.py", title="Gastos", icon="🧾")
 panel = st.Page("paginas/panel_del_dia.py", title="Panel del día", icon="📊")
 stock = st.Page("paginas/stock.py", title="Stock", icon="📋")
+vencimientos = st.Page("paginas/vencimientos.py", title="Vencimientos", icon="🗓️")
+# Vencimientos aparece solo donde sirve: en panaderías o si algún producto tiene días de duración
+actual = st.session_state.get("comercio")
+con_vencimientos = bool(actual) and (actual["rubro"] == "panaderia" or op.usa_vencimientos(actual["id"]))
 if rol == "jefe":
     paginas = {
         "": [st.Page("paginas/inicio.py", title="Inicio", icon="🏠", default=True)],
-        "Día a día": [caja, compras, gastos],
+        "Día a día": [caja, compras, gastos] + ([vencimientos] if con_vencimientos else []),
         "Control": [panel, stock, st.Page("paginas/reportes.py", title="Reportes", icon="📑")],
         "Configuración": [
             st.Page("paginas/mis_comercios.py", title="Mis comercios", icon="🏬"),
@@ -180,5 +184,7 @@ else:
     permisos = permisos_de(st.session_state["comercio"])
     caja = st.Page("paginas/caja.py", title="Caja", icon="💵", default=True)
     habilitadas = {"compras": compras, "gastos": gastos, "panel_del_dia": panel, "stock": stock}
+    if con_vencimientos:
+        habilitadas["vencimientos"] = vencimientos
     paginas = [caja] + [pagina for clave, pagina in habilitadas.items() if clave in permisos]
 st.navigation(paginas, position="top").run()

@@ -5,7 +5,7 @@ from datetime import date
 import streamlit as st
 
 import operaciones as op
-from comun import RUBROS, aviso_temporada, pesos, plural
+from comun import RUBROS, aviso_temporada, pesos, plural, texto_vencimientos
 
 dueno = st.session_state["dueno"]
 st.title(f"Hola, {dueno['nombre'].split()[0]} 👋")
@@ -64,6 +64,8 @@ for i, c in enumerate(comercios.itertuples()):
             st.caption(f"Hoy todavía no hay ventas · {pesos(del_mes['total'])} en el mes")
         if stock_bajo:
             st.warning(f"{plural(stock_bajo, 'producto', 'productos')} con stock bajo")
+        if aviso := texto_vencimientos(op.avisos_vencimientos(c.id)):
+            st.error(f"🗓️ {aviso}")
         caja = op.caja_abierta(c.id)
         st.caption(f"🟢 Caja abierta por {caja['responsable']} desde las {caja['abierta']:%H:%M}" if caja
                    else "🔒 Caja cerrada")

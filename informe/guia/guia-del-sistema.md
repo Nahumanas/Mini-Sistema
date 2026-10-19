@@ -45,6 +45,7 @@ El sistema tiene tres partes, una encima de la otra:
 | 🏠 Inicio | Cada comercio con lo vendido hoy y en el mes y el estado de la caja, más los totales y la ganancia bruta del mes. Botón para ir a la caja. | Jefe |
 | 💵 Caja | Abrir caja, vender con el lector o la lista, vuelto, cobrar, ticket, cerrar caja con arqueo. El jefe ve el historial de cajas y las ajusta. | Jefe y empleado |
 | 📦 Compras | Cargar lo que llega del proveedor: con el lector pide la cantidad. Suma al stock. El empleado no ve costos. | Jefe y empleado (viene habilitado; el jefe lo puede sacar) |
+| 🗓️ Vencimientos | Lo que hay por tanda con su fecha de vencimiento, avisos de vencido / vence hoy / vence mañana, cargar lo que se horneó y retirar lo vencido como pérdida. Solo aparece si el comercio es panadería o tiene productos con "Dura (días)". | Jefe y empleado (viene habilitado; el jefe lo puede sacar) |
 | 🧾 Gastos | Cargar gastos del comercio. | Jefe (y empleado si tiene permiso) |
 | 📊 Panel del día | Lo vendido hoy, en vivo. El empleado no ve la ganancia. | Jefe (y empleado si tiene permiso) |
 | 📋 Stock | Productos, precios, cantidades y códigos de barras; avisa qué reponer. El empleado solo mira, sin costos. | Jefe (y empleado si tiene permiso) |
@@ -77,6 +78,17 @@ Una caja cerrada no se cambia, porque la plata ya se contó. Si después aparece
 
 Cada ajuste pide un **motivo** y guarda la fecha, la hora y quién lo hizo. El historial muestra la diferencia del arqueo antes y después de los ajustes. Así nada desaparece y todo queda anotado.
 
+### Vencimientos (lo que dura pocos días)
+
+Pensado para panaderías y para cualquier comercio con productos que vencen (postres, prepizzas, lácteos):
+
+1. **Una sola vez:** en **Stock**, columna **Dura (días)**, se pone cuánto dura cada producto contando exhibición y heladera (por ejemplo, un postre: 4). Si queda vacío, el producto no vence. También se puede cargar con la columna `dias_duracion` del Excel.
+2. **Cada vez que entra mercadería** queda una **tanda** con su fecha: lo que llega del proveedor se anota solo al cargarlo en **Compras**; lo que se hornea o prepara en el local se carga en **Vencimientos → Cargar lo que salió hoy**.
+3. **Avisos:** el Inicio y la Caja muestran "N unidades vencidas para retirar · N vencen hoy". En **Vencimientos** se ve cada tanda con cuánto queda y cuándo vence.
+4. **Retirar:** se saca lo vencido de la vitrina y se toca **Ya lo retiré**. Sale del stock y queda anotado como **pérdida** (a precio de costo) con quién lo hizo. El jefe ve lo que se tiró en el mes y en **Reportes** aparece como "Mercadería vencida que se tiró", restada de la ganancia neta.
+
+Para saber cuánto queda de cada tanda, el sistema cuenta que **siempre se vende primero lo más viejo** (así se trabaja en una panadería). Por eso las ventas no cambian: el cajero cobra igual que siempre.
+
 ## 6. El lector de código de barras
 
 El lector (la "pistola" del súper) se enchufa por USB y funciona como un teclado: lee el número del producto, lo "escribe" y aprieta Enter. No hay que instalar nada.
@@ -103,7 +115,7 @@ Un dueño tiene uno o más comercios, y cada comercio tiene sus propias tablas:
 ```
 duenos
   └── comercios
-        ├── productos
+        ├── productos ── lotes, mermas
         ├── proveedores
         ├── compras ── compras_detalle
         ├── cajas   ── ajustes_caja
@@ -116,7 +128,9 @@ duenos
 |---|---|
 | `duenos` | Los dueños y su PIN (mezclado). |
 | `comercios` | Cada comercio: rubro, dirección, si da ticket, si guarda el resumen semanal y qué ve el empleado. |
-| `productos` | Código interno, código de barras, nombre, categoría, costo, precio, stock y stock mínimo. |
+| `productos` | Código interno, código de barras, nombre, categoría, costo, precio, stock, stock mínimo y cuántos días dura (si vence). |
+| `lotes` | Cada tanda que entró de un producto que vence: fecha, cantidad, cuándo vence, si vino de una compra o se hizo en el local, y quién la cargó. |
+| `mermas` | Lo que se retiró por vencido: fecha, cantidad, costo de cada unidad y quién lo retiró. |
 | `proveedores` | A quién le compra cada comercio. |
 | `compras` y `compras_detalle` | Cada compra (fecha, proveedor, total, quién la cargó) y sus productos. |
 | `cajas` | Quién abrió, cuándo, efectivo inicial; al cerrar, efectivo esperado, contado y nota. |
@@ -141,7 +155,7 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 
 ## 8. Los Excel del sistema
 
-- **Importar:** plantilla con `codigo`, `nombre`, `precio_costo`, `precio_venta`, `stock` (obligatorias) y `categoria`, `stock_minimo`, `codigo_barras` (opcionales). Si el código ya existe actualiza el producto; si no, lo crea. Las filas con errores se muestran aparte y no se importan.
+- **Importar:** plantilla con `codigo`, `nombre`, `precio_costo`, `precio_venta`, `stock` (obligatorias) y `categoria`, `stock_minimo`, `codigo_barras`, `dias_duracion` (opcionales). Si el código ya existe actualiza el producto; si no, lo crea. Las filas con errores se muestran aparte y no se importan.
 - **Exportar:** baja los productos a Excel para cambiar muchos precios juntos y volver a subirlos.
 - **Reportes:** un Excel con gráficos y las hojas Resumen, Por comercio, Productos, Qué comprar, Ventas, Compras y Gastos. El del mes pasado se guarda solo en `reportes/<comercio>/mensuales`. El semanal se prende por comercio (conviene en temporada alta; de diciembre a febrero el Inicio lo sugiere).
 
@@ -179,6 +193,7 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 ## 11. Cuánto cobrarlo (propuesta)
 
 - **Un solo plan de $19.900 por mes** (unos US$13), con sucursales gratis.
+- **Sin límite de facturación** en ningún plan: cada empleado cobra todo lo que venda. Otros sistemas limitan cuánto puede facturar cada empleado según el plan (por ejemplo, $250.000), y una panadería lo marcó como un problema.
 - Los sistemas parecidos que facturan ARCA cobran entre $19.000 y $35.000 por mes (o de US$20 a US$79). Como todavía no factura, conviene entrar más abajo.
 - Descuento de lanzamiento para los primeros clientes, a cambio de que digan qué mejorar.
 - Cobro único opcional por cargarle los productos al cliente.
@@ -199,6 +214,8 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 |---|---|
 | ERP | Sistema que junta en un lugar ventas, compras, stock y caja de un negocio. |
 | Base de datos | Donde se guarda la información, ordenada en tablas. |
+| Tanda (lote) | Lo que entró de un producto en un mismo momento: una horneada o una entrega del proveedor. Cada una tiene su fecha de vencimiento. |
+| Merma | Mercadería que se pierde (por ejemplo, porque venció). Se anota a precio de costo. |
 | Tabla | Como una hoja de Excel: filas (registros) y columnas (datos). |
 | SQL | El idioma para pedirle o guardar datos en una base. |
 | SQLite | Una base de datos que es un solo archivo en la PC. |

@@ -15,7 +15,7 @@ import operaciones as op
 from comun import comercio_actual, encabezado, plural
 
 OBLIGATORIAS = ["codigo", "nombre", "precio_costo", "precio_venta", "stock"]
-OPCIONALES = ["categoria", "stock_minimo", "codigo_barras"]
+OPCIONALES = ["categoria", "stock_minimo", "codigo_barras", "dias_duracion"]
 
 # Otros nombres con los que puede venir cada columna (por ejemplo, en la lista de un proveedor)
 SINONIMOS = {
@@ -28,6 +28,7 @@ SINONIMOS = {
     "stock": ["cantidad", "existencia"],
     "stock_minimo": ["stock_min", "minimo"],
     "categoria": ["rubro", "familia"],
+    "dias_duracion": ["dura", "dura_dias", "duracion", "dias", "vida_util", "dias_de_duracion"],
 }
 
 
@@ -51,23 +52,26 @@ c1, c2 = st.columns(2)
 with c1.container(border=True):
     st.markdown("**Plantilla vacía**  \nPara cargar productos nuevos.")
     plantilla = pd.DataFrame(
-        [["COD-001", "Producto de ejemplo", "Categoría", 1000, 1500, 10, 3, "7799999999992"],
-         ["COD-002", "Producto suelto, sin código", "Categoría", 500, 800, 20, 5, ""]],
-        columns=OBLIGATORIAS[:2] + ["categoria"] + OBLIGATORIAS[2:] + ["stock_minimo", "codigo_barras"],
+        [["COD-001", "Producto de ejemplo", "Categoría", 1000, 1500, 10, 3, "7799999999992", None],
+         ["COD-002", "Producto suelto, sin código", "Categoría", 500, 800, 20, 5, "", None],
+         ["COD-003", "Postre (vence a los 4 días)", "Postres", 2000, 3500, 6, 2, "", 4]],
+        columns=OBLIGATORIAS[:2] + ["categoria"] + OBLIGATORIAS[2:] + ["stock_minimo", "codigo_barras",
+                                                                      "dias_duracion"],
     )
     st.download_button("Descargar plantilla", a_excel(plantilla), "plantilla_productos.xlsx")
 with c2.container(border=True):
     st.markdown("**Mis productos**  \nPara cambiar precios o stock en Excel.")
     actuales = op.listar_productos(comercio["id"])
     exportar = actuales[["codigo", "nombre", "categoria", "precio_costo", "precio_venta", "stock", "stock_minimo",
-                         "codigo_barras"]]
+                         "codigo_barras", "dias_duracion"]]
     st.download_button("Descargar mis productos", a_excel(exportar), f"productos_{comercio['nombre']}.xlsx")
 
 # --- Importar ---
 st.subheader("Importar")
 st.caption("Si el código ya existe, se actualiza el producto. Si no existe, se crea.  \n"
            "En la columna **codigo_barras** va el número que está debajo de las barras del producto "
-           "(podés pasar el lector sobre la celda de Excel). Si un producto no tiene, dejala vacía.")
+           "(podés pasar el lector sobre la celda de Excel). Si un producto no tiene, dejala vacía.  \n"
+           "En **dias_duracion** van los días que dura lo que vence (por ejemplo, un postre: 4). Vacío = no vence.")
 archivo = st.file_uploader("Subí el Excel", type=["xlsx", "xls"])
 if archivo:
     df = pd.read_excel(archivo)
@@ -94,7 +98,7 @@ if archivo:
         st.stop()
 
     df = df[[c for c in OBLIGATORIAS + OPCIONALES if c in df.columns]].dropna(how="all")
-    for columna in ["precio_costo", "precio_venta", "stock", "stock_minimo"]:
+    for columna in ["precio_costo", "precio_venta", "stock", "stock_minimo", "dias_duracion"]:
         if columna in df.columns:
             df[columna] = pd.to_numeric(df[columna], errors="coerce")
     con_error = df[OBLIGATORIAS].isna().any(axis=1)
