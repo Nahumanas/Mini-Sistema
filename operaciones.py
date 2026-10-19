@@ -237,7 +237,8 @@ def ventas_de_caja(caja_id):
         .where(bd.ventas.c.caja_id == caja_id, VALIDA)
     )
     lineas = pd.read_sql(consulta, motor, parse_dates=["fecha"])
-    lineas["producto"] = lineas["cantidad"].astype(str) + " x " + lineas["nombre"]
+    # Armado con f-string (no con "+"), así funciona aunque la caja no tenga ventas
+    lineas["producto"] = [f"{cantidad} x {nombre}" for cantidad, nombre in zip(lineas["cantidad"], lineas["nombre"])]
     return (
         lineas.groupby(["id", "fecha", "medio_pago", "total"], as_index=False)["producto"].agg(", ".join)
         .rename(columns={"producto": "productos"})

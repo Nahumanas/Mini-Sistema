@@ -135,7 +135,8 @@ def ajustar_caja(cerradas):
                 format_func=lambda v: f"{ventas.loc[v, 'fecha']:%H:%M} · {pesos(ventas.loc[v, 'total'])} · "
                                       f"{MEDIOS_DE_PAGO.get(ventas.loc[v, 'medio_pago'])} · {ventas.loc[v, 'productos']}",
             )
-            st.caption("La venta deja de contar en los reportes y lo vendido vuelve al stock.")
+            st.caption("La venta deja de contar en los reportes y lo vendido vuelve al stock." if not ventas.empty
+                       else "Esta caja no tiene ventas para anular.")
         else:
             efectivo = st.number_input("Efectivo recontado ($)", min_value=0.0, value=None, step=100.0, format="%.0f",
                                        placeholder="Cuánto hay de verdad")
