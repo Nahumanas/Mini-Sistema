@@ -160,6 +160,7 @@ with st.sidebar:
     st.title("🏪 Mini-Sistema")
     if rol == "jefe":
         st.caption(f"🔑 Jefe · **{dueno['nombre']}**")
+        switch_tema()  # modo claro / oscuro (tema.py), arriba para que se encuentre fácil
         # 2) El jefe elige qué comercio ver (solo los suyos)
         if comercios.empty:
             st.session_state["comercio"] = None
@@ -187,8 +188,6 @@ with st.sidebar:
         st.markdown(f"{RUBROS.get(comercio['rubro'], '🏪')[:1]} **{comercio['nombre']}**")
 
     st.divider()
-    if rol == "jefe":
-        switch_tema()  # modo claro / oscuro (tema.py)
     if st.button("🚪 Salir", width="stretch", help="Vuelve a la pantalla para ingresar."):
         # Para que al volver a entrar ya estén elegidos el mismo dueño y el mismo comercio
         st.session_state["ultimo_ingreso"] = ((st.session_state.get("dueno") or {}).get("nombre"),

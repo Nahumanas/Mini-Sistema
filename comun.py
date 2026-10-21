@@ -69,7 +69,12 @@ ESTILOS = """<style>
 [data-testid="stHeader"] { background: var(--lateral) !important; border-bottom: 1px solid var(--borde); }
 [data-testid="stSidebar"] { background: var(--lateral) !important; border-right: 1px solid var(--borde); }
 [data-testid="stSidebarCollapseButton"] button, [data-testid="stExpandSidebarButton"],
-[data-testid="stSidebarCollapsedControl"] button { color: var(--texto-suave) !important; }
+[data-testid="stSidebarCollapsedControl"] button, [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"],
+[data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] { color: var(--texto-suave) !important; }
+/* La lista de pantallas en la barra de la izquierda (algunas versiones de Streamlit la muestran ahí también) */
+[data-testid="stSidebarNavLink"] span, [data-testid="stSidebarNavLink"] p { color: var(--texto) !important; }
+[data-testid="stNavSectionHeader"], [data-testid="stNavSectionHeader"] span { color: var(--texto-suave) !important; }
+[data-testid="stSidebarNavLink"]:hover, [data-testid="stSidebarNavLink"][aria-current="page"] { background: var(--tarjeta-suave) !important; }
 [data-testid="stMainBlockContainer"] { max-width: 1200px; padding-top: 4.5rem; }
 .stApp hr { border-color: var(--borde) !important; }
 
@@ -81,7 +86,8 @@ ESTILOS = """<style>
 .stApp [data-testid="stSidebar"] h1 { font-size: 1.35rem !important; }
 
 /* Menú de arriba: letra más grande; la pantalla en la que estás, marcada como pestaña */
-[data-testid="stTopNavLink"] p, [data-testid="stTopNavSection"] p { font-size: 1.05rem; font-weight: 600; color: var(--texto) !important; }
+[data-testid="stTopNavLink"] p, [data-testid="stTopNavSection"] p,
+[data-testid="stTopNavLink"] span, [data-testid="stTopNavSection"] span { font-size: 1.05rem; font-weight: 600; color: var(--texto) !important; }
 [data-testid="stTopNavSection"] svg { color: var(--texto-suave); }
 [data-testid="stTopNavLink"][aria-current="page"] { background: var(--tarjeta-suave) !important; border-radius: 8px; }
 [data-testid="stTopNavLink"]:hover, [data-testid="stTopNavSection"]:hover { background: var(--tarjeta-suave) !important; border-radius: 8px; }
@@ -116,6 +122,8 @@ ESTILOS = """<style>
 [data-testid="stMetricLabel"] p { font-size: 0.85rem !important; font-weight: 600; text-transform: uppercase;
                                   letter-spacing: 0.04em; color: var(--texto-suave) !important; }
 [data-testid="stMetricValue"], [data-testid="stMetricValue"] div { font-weight: 500; color: var(--texto) !important; }
+/* La flechita de "vs. el período anterior": en el tema oscuro, más clara para que se lea */
+[data-testid="stMetricDelta"] { filter: var(--filtro-flechas); }
 
 /* Avisos (info, éxito, cuidado, error): fondo suave del color, con borde, que se lee en los dos temas */
 [data-testid="stAlertContainer"] { border: 1px solid var(--borde); border-radius: 12px; }
@@ -174,22 +182,32 @@ ESTILOS = """<style>
 .stApp [data-testid="stRadioOption"] > div > div:first-child { background: var(--tarjeta) !important; border-color: var(--borde-fuerte) !important; }
 .stApp [data-testid="stRadioOption"][data-selected] > div > div:first-child { background: var(--acento) !important; border-color: var(--acento) !important; }
 .stApp [data-testid="stRadioOption"] > div > div:first-child > div { background: var(--tarjeta) !important; }
-/* El interruptor (Modo oscuro, Solo stock bajo...): gris apagado, verde prendido, la bolita siempre blanca */
-.stApp [data-testid="stCheckbox"] label:has(input[role="switch"]) > div:not([data-testid]) { background: var(--borde-fuerte) !important; }
-.stApp [data-testid="stCheckbox"] label[data-selected]:has(input[role="switch"]) > div:not([data-testid]) { background: var(--acento) !important; }
-.stApp [data-testid="stCheckbox"] label:has(input[role="switch"]) > div:not([data-testid]) > div { background: #FFFFFF !important; }
+/* El interruptor (Modo oscuro, Solo stock bajo...): gris apagado, verde prendido, la bolita siempre blanca.
+   Ojo: cada versión de Streamlit arma el interruptor distinto. Las nuevas (1.6x) usan data-rac y
+   las anteriores data-baseweb="checkbox"; por eso hay reglas para las dos */
+.stApp [data-testid="stCheckbox"] label[data-rac]:has(input[role="switch"]) > div:not([data-testid]) { background: var(--borde-fuerte) !important; }
+.stApp [data-testid="stCheckbox"] label[data-rac][data-selected]:has(input[role="switch"]) > div:not([data-testid]) { background: var(--acento) !important; }
+.stApp [data-testid="stCheckbox"] label[data-rac]:has(input[role="switch"]) > div:not([data-testid]) > div { background: #FFFFFF !important; }
 /* La casilla para marcar (El cliente pide ticket...): vacía con borde, verde cuando está marcada */
-.stApp [data-testid="stCheckbox"] label:not(:has(input[role="switch"])) > div:not([data-testid]) {
+.stApp [data-testid="stCheckbox"] label[data-rac]:not(:has(input[role="switch"])) > div:not([data-testid]) {
     background: var(--tarjeta) !important; border-color: var(--borde-fuerte) !important;
 }
-.stApp [data-testid="stCheckbox"] label[data-selected]:not(:has(input[role="switch"])) > div:not([data-testid]) {
+.stApp [data-testid="stCheckbox"] label[data-rac][data-selected]:not(:has(input[role="switch"])) > div:not([data-testid]) {
     background: var(--acento) !important; border-color: var(--acento) !important; color: var(--texto-acento) !important;
 }
+/* Versiones anteriores: el interruptor es una barrita (más ancha que alta) y la casilla un cuadradito */
+.stApp label[data-baseweb="checkbox"] > div:first-child:has(> div) { background: var(--borde-fuerte) !important; }
+.stApp label[data-baseweb="checkbox"]:has(input:checked) > div:first-child:has(> div) { background: var(--acento) !important; }
+.stApp label[data-baseweb="checkbox"] > div:first-child > div { background: #FFFFFF !important; }
 /* Lo elegido en una lista de varias opciones (por ejemplo los permisos del empleado) */
 .stApp [data-testid="stMultiSelect"] [data-tag] {
     background: color-mix(in srgb, var(--acento) 16%, var(--tarjeta)) !important; border: 1px solid color-mix(in srgb, var(--acento) 45%, transparent);
 }
 .stApp [data-testid="stMultiSelect"] [data-tag] span, .stApp [data-testid="stMultiSelect"] [data-tag] button { color: var(--texto) !important; }
+.stApp [data-baseweb="tag"] {
+    background: color-mix(in srgb, var(--acento) 16%, var(--tarjeta)) !important; border: 1px solid color-mix(in srgb, var(--acento) 45%, transparent);
+}
+.stApp [data-baseweb="tag"] span, .stApp [data-baseweb="tag"] svg { color: var(--texto) !important; }
 /* El "?" de ayuda al lado de algunos nombres */
 .stApp [data-testid="stTooltipIcon"] svg { color: var(--texto-suave) !important; stroke: var(--texto-suave) !important; }
 

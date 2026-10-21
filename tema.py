@@ -39,6 +39,7 @@ PALETAS = {
         "sombra": "0 1px 2px rgba(16, 24, 40, 0.04)",
         "filtro-tablas": "none",     # las tablas se ven tal cual
         "borde-tablas": "#E2E5E9",
+        "filtro-flechas": "none",
     },
     "oscuro": {
         "fondo": "#11161D",
@@ -61,6 +62,7 @@ PALETAS = {
         # Las tablas no toman colores de CSS: se "dan vuelta" (blanco ↔ negro) sin cambiar los colores
         "filtro-tablas": "invert(0.88) hue-rotate(180deg)",
         "borde-tablas": "#EDEFF2",  # al darse vuelta con la tabla queda gris oscuro, como los otros bordes
+        "filtro-flechas": "brightness(1.7)",  # el verde y el rojo de "+24% vs. ..." más claros
     },
 }
 
