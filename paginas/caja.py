@@ -95,11 +95,6 @@ def puede_ajustar():
     return es_jefe() or "ajustar_caja" in permisos_de(comercio)
 
 
-def puede_relevar():
-    """El relevo de turno lo hace el jefe, o el empleado al que el jefe le dio ese permiso en Mis comercios."""
-    return es_jefe() or "relevo_turno" in permisos_de(comercio)
-
-
 def cajas_anteriores():
     """El historial de cajas con su arqueo y los ajustes. Lo ve el jefe y a quien él se lo habilite."""
     if not puede_ajustar():
@@ -266,11 +261,8 @@ if turno_actual["relevos_previos"]:
 else:
     estado[0].info(f"🟢 Caja abierta por **{caja['responsable']}** desde el "
                    f"{caja['abierta']:%d/%m a las %H:%M} · efectivo inicial {pesos_md(caja['monto_inicial'])}")
-relevar = estado[1].button(
-    "🔄 Relevo de turno", width="stretch", disabled=not abierta_hoy or not puede_relevar(),
-    help="Cambia quien atiende sin cerrar la caja. El que se va cuenta el efectivo." if puede_relevar()
-    else "Lo hace el jefe o quien él autorice en Mis comercios. Avisale al jefe.",
-)
+relevar = estado[1].button("🔄 Relevo de turno", width="stretch", disabled=not abierta_hoy,
+                           help="Cambia quien atiende sin cerrar la caja. El que se va cuenta el efectivo.")
 cerrar = estado[2].button("🔒 Cerrar caja", width="stretch")
 
 # Avisos según los horarios que cargó el jefe (en Mis comercios)
@@ -279,8 +271,7 @@ turno_de_ahora = op.turno_de_la_hora(horarios["turnos"], ahora)
 turno_de_quien_atiende = op.turno_entre(horarios["turnos"], turno_actual["desde"], ahora)
 if abierta_hoy and turno_de_quien_atiende and turno_de_ahora != turno_de_quien_atiende:
     st.info(f"🕑 Terminó el turno {turno_de_quien_atiende['nombre']} ({turno_de_quien_atiende['desde']} a "
-            f"{turno_de_quien_atiende['hasta']}). Si cambia quien atiende, "
-            + ("tocá **🔄 Relevo de turno**." if puede_relevar() else "avisale al jefe para hacer el relevo."))
+            f"{turno_de_quien_atiende['hasta']}). Si cambia quien atiende, tocá **🔄 Relevo de turno**.")
 elif abierta_hoy and not op.dentro_del_horario(horarios, ahora):
     st.info(f"🕑 Estás fuera del horario del local ({horarios['hora_apertura']} a {horarios['hora_cierre']}). "
             "Al terminar el día, acordate de **cerrar la caja**.")
@@ -377,7 +368,7 @@ def cerrar_caja():
 clave_carrito = f"carrito_{comercio['id']}"
 if cerrar:
     cerrar_caja()
-if relevar and puede_relevar():
+if relevar:
     relevo_de_turno()
 if not abierta_hoy:
     st.warning("Esta caja quedó abierta de otro día. **Cerrala** para empezar el día con una caja nueva.")
