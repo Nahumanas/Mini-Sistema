@@ -15,7 +15,7 @@ from datetime import date
 import streamlit as st
 
 # Los archivos del sistema, en el orden en que se importan entre sí.
-MODULOS_PROPIOS = ["config", "base_datos", "operaciones", "comun", "ticket", "reportes", "ingreso",
+MODULOS_PROPIOS = ["config", "base_datos", "operaciones", "tema", "comun", "ticket", "reportes", "ingreso",
                    "generar_datos_prueba", "demo_panaderia"]
 
 
