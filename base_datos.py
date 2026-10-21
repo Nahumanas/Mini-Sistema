@@ -8,6 +8,7 @@ Cómo se relacionan las tablas:
             ├── proveedores    (a quién le compra cada comercio)
             ├── compras ── compras_detalle   (lo que el comercio compra a proveedores)
             ├── cajas          (cada apertura y cierre de caja, con el arqueo)
+            │     └── relevos_caja (cambios de turno con la caja abierta, con su conteo)
             ├── ventas  ── ventas_detalle    (lo que el comercio vende a clientes)
             │     └── tickets  (si el cliente pidió ticket)
             └── gastos         (alquiler, luz, sueldos, etc.)
@@ -29,6 +30,7 @@ from sqlalchemy import (
     MetaData,
     String,
     Table,
+    Text,
     create_engine,
     false,
     inspect,
@@ -69,6 +71,11 @@ comercios = Table(
     # Qué pantallas ve el empleado además de la Caja, separadas por coma (las elige el jefe)
     Column("permisos_empleado", String(200), nullable=False, default=PERMISOS_EMPLEADO_INICIALES,
            server_default=PERMISOS_EMPLEADO_INICIALES),
+    # Horario habitual del local, como texto "08:00" (vacío = el jefe todavía no lo cargó)
+    Column("hora_apertura", String(5)),
+    Column("hora_cierre", String(5)),
+    # Los turnos, como texto JSON: [{"nombre": "Mañana", "desde": "08:00", "hasta": "14:00"}, ...]
+    Column("turnos_config", Text),
 )
 
 productos = Table(
@@ -146,6 +153,26 @@ ventas = Table(
     Column("medio_pago", String(20), nullable=False),  # efectivo, debito, credito, transferencia
     Column("total", Float, nullable=False),
     Column("anulada", DateTime),  # vacío = venta válida; con fecha = se anuló con un ajuste de caja
+    Column("responsable_turno", String(100)),  # quién atendía la caja cuando se cobró (cambia con cada relevo)
+)
+
+# Relevos de turno: cambia quien atiende, pero la caja sigue abierta. El que se va cuenta el efectivo
+# y queda anotado si faltaba o sobraba algo EN SU TURNO. La caja se cierra una sola vez, al final del día.
+relevos_caja = Table(
+    "relevos_caja",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("caja_id", Integer, ForeignKey("cajas.id"), nullable=False),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
+    Column("fecha_hora", DateTime, nullable=False),
+    Column("turno", String(50)),  # el turno que termina (según los horarios del jefe), si hay
+    Column("empleado_sale", String(100), nullable=False),  # quién entrega la caja
+    Column("empleado_entra", String(100), nullable=False),  # quién la recibe
+    # Lo que debería haber: lo contado al empezar el turno (inicial o relevo anterior) + ventas en efectivo del turno
+    Column("efectivo_esperado_turno", Float, nullable=False),
+    Column("efectivo_contado", Float, nullable=False),  # lo que contó el que se va (con eso arranca el que entra)
+    Column("diferencia", Float, nullable=False),  # contado - esperado: lo que faltó o sobró en ESE turno
+    Column("nota", String(200)),
 )
 
 # Correcciones que el jefe hace sobre una caja ya cerrada. La caja no se toca: cada ajuste queda anotado
@@ -250,6 +277,10 @@ def actualizar_base(motor):
         ("ventas", "anulada", "DATETIME"),
         ("productos", "dias_duracion", "INTEGER"),
         ("duenos", "tema", "VARCHAR(10) NOT NULL DEFAULT 'claro'"),
+        ("comercios", "hora_apertura", "VARCHAR(5)"),
+        ("comercios", "hora_cierre", "VARCHAR(5)"),
+        ("comercios", "turnos_config", "TEXT"),
+        ("ventas", "responsable_turno", "VARCHAR(100)"),
     ]
     for tabla, columna, tipo in nuevas:
         if columna not in {c["name"] for c in revisor.get_columns(tabla)}:

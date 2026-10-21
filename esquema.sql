@@ -18,6 +18,9 @@ CREATE TABLE comercios (
 	usa_ticket BOOLEAN NOT NULL, 
 	resumen_semanal BOOLEAN DEFAULT 0 NOT NULL, 
 	permisos_empleado VARCHAR(200) DEFAULT 'panel_del_dia,stock,compras,vencimientos' NOT NULL, 
+	hora_apertura VARCHAR(5), 
+	hora_cierre VARCHAR(5), 
+	turnos_config TEXT, 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(dueno_id) REFERENCES duenos (id)
 );
@@ -87,6 +90,23 @@ CREATE TABLE productos (
 	FOREIGN KEY(proveedor_id) REFERENCES proveedores (id)
 );
 
+CREATE TABLE relevos_caja (
+	id INTEGER NOT NULL, 
+	caja_id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	fecha_hora DATETIME NOT NULL, 
+	turno VARCHAR(50), 
+	empleado_sale VARCHAR(100) NOT NULL, 
+	empleado_entra VARCHAR(100) NOT NULL, 
+	efectivo_esperado_turno FLOAT NOT NULL, 
+	efectivo_contado FLOAT NOT NULL, 
+	diferencia FLOAT NOT NULL, 
+	nota VARCHAR(200), 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(caja_id) REFERENCES cajas (id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id)
+);
+
 CREATE TABLE ventas (
 	id INTEGER NOT NULL, 
 	comercio_id INTEGER NOT NULL, 
@@ -95,6 +115,7 @@ CREATE TABLE ventas (
 	medio_pago VARCHAR(20) NOT NULL, 
 	total FLOAT NOT NULL, 
 	anulada DATETIME, 
+	responsable_turno VARCHAR(100), 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
 	FOREIGN KEY(caja_id) REFERENCES cajas (id)

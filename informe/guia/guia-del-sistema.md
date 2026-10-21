@@ -35,22 +35,23 @@ El sistema tiene tres partes, una encima de la otra:
 5. **Recibir mercadería:** en **Compras** se pasa el lector por lo que llegó, se escribe la cantidad y se guarda. Suma al stock y actualiza el precio de costo. Lo puede hacer también el empleado (sin ver costos), y queda anotado quién la cargó.
 6. **Cargar gastos:** luz, alquiler, sueldos, en **Gastos**.
 7. **Mirar el día:** el **Panel del día** se actualiza solo cada 10 segundos y compara con el mismo día de la semana pasada.
-8. **Cerrar la caja:** se cuenta el efectivo. El sistema muestra cuánto debería haber (efectivo inicial + ventas en efectivo) y si sobra o falta (**arqueo**). Una caja cerrada ya no se puede modificar. Si hubo un error, el jefe le hace un **ajuste** (ver más abajo).
-9. **Reportes:** el Excel del mes pasado se guarda solo al abrir el sistema. En **Reportes** se puede ver cualquier semana, mes o fechas.
+8. **Cambio de turno (si hay mañana y tarde):** no se cierra la caja. Se toca **🔄 Relevo de turno**: el que se va cuenta el efectivo, escribe quién lo recibe, y queda anotado si en **su** turno faltó o sobró plata. La caja sigue abierta y el que entra arranca con lo que se contó.
+9. **Cerrar la caja (al final del día):** se cuenta el efectivo. El sistema muestra cuánto debería haber (efectivo inicial + ventas en efectivo) y si sobra o falta (**arqueo**). Una caja cerrada ya no se puede modificar. Si hubo un error, el jefe le hace un **ajuste** (ver más abajo).
+10. **Reportes:** el Excel del mes pasado se guarda solo al abrir el sistema. En **Reportes** se puede ver cualquier semana, mes o fechas.
 
 ## 4. Las pantallas
 
 | Pantalla | Qué hace | Quién la ve |
 |---|---|---|
 | 🏠 Inicio | Cada comercio con lo vendido hoy y en el mes y el estado de la caja, más los totales y la ganancia bruta del mes. Botón para ir a la caja. | Jefe |
-| 💵 Caja | Abrir caja, vender con el lector o la lista, vuelto, cobrar, ticket, cerrar caja con arqueo. El jefe ve el historial de cajas y las ajusta. | Jefe y empleado |
+| 💵 Caja | Abrir caja, vender con el lector o la lista, vuelto, cobrar, ticket, relevo de turno, cerrar caja con arqueo. El jefe ve el historial de cajas, los turnos de cada una y las ajusta. | Jefe y empleado |
 | 📦 Compras | Cargar lo que llega del proveedor: con el lector pide la cantidad. Suma al stock. El empleado no ve costos. | Jefe y empleado (viene habilitado; el jefe lo puede sacar) |
 | 🗓️ Vencimientos | Lo que hay por tanda con su fecha de vencimiento, avisos de vencido / vence hoy / vence mañana, cargar lo que se horneó y retirar lo vencido como pérdida. Solo aparece si el comercio es panadería o tiene productos con "Dura (días)". | Jefe y empleado (viene habilitado; el jefe lo puede sacar) |
 | 🧾 Gastos | Cargar gastos del comercio. | Jefe (y empleado si tiene permiso) |
 | 📊 Panel del día | Lo vendido hoy, en vivo. El empleado no ve la ganancia. | Jefe (y empleado si tiene permiso) |
 | 📋 Stock | Productos, precios, cantidades y códigos de barras; avisa qué reponer. El empleado solo mira, sin costos. | Jefe (y empleado si tiene permiso) |
 | 📑 Reportes | Las 5 preguntas (cuánto vendí, gané y gasté, qué se vende más y qué me falta comprar) y el Excel con gráficos. | Jefe |
-| 🏬 Mis comercios | Crear comercios, prender el ticket, el resumen semanal, elegir qué ve el empleado y cambiar el PIN. | Jefe |
+| 🏬 Mis comercios | Crear comercios, prender el ticket, el resumen semanal, elegir qué ve el empleado, cargar los **horarios y turnos** del local y cambiar el PIN. | Jefe |
 | 📥 Importar / exportar Excel | Cargar o actualizar muchos productos de una vez con Excel. | Jefe |
 
 ### Modo claro u oscuro
@@ -69,6 +70,8 @@ Las tablas se dibujan como imagen y no toman colores de CSS: en modo oscuro se "
 | Qué ve | Todo, en todos sus comercios | Solo la Caja y lo que el jefe le habilite |
 | Costos y ganancia | Sí | No |
 | Historial y ajustes de cajas | Sí | Solo si el jefe le da el permiso "Ajustar cajas cerradas" |
+| Relevo de turno | Sí | Sí (ve solo lo de su turno) |
+| Horarios y turnos del local | Los carga en Mis comercios | No |
 | Cargar lo que llega (Compras) | Sí | Sí, sin ver costos (el jefe se lo puede sacar) |
 | Crear productos | Sí (en Stock, o en el momento desde la Caja o Compras) | No: le avisa al jefe |
 
@@ -76,6 +79,35 @@ Las tablas se dibujan como imagen y no toman colores de CSS: en modo oscuro se "
 - Si el jefe se olvida el PIN, en la PC del sistema se corre `python olvide_mi_pin.py "Nombre"` y al entrar crea uno nuevo.
 - El PIN no se guarda tal cual: se guarda "mezclado" (con un método llamado hash), así nadie lo puede leer en la base.
 - Cuando el sistema esté en la nube, el ingreso pasa a ser con **Gmail y contraseña**.
+
+### Relevo de turno (cambio de mañana a tarde sin cerrar la caja)
+
+La caja se abre una vez a la mañana y se cierra una vez a la noche. En el medio, cuando cambia quien atiende, se hace un **relevo**:
+
+1. En la Caja, el que se va toca **🔄 Relevo de turno**.
+2. El sistema muestra cuánto debería haber en **su** turno: con lo que arrancó (el efectivo inicial, o lo que recibió en el relevo anterior) más lo que cobró en efectivo.
+3. Cuenta la plata, escribe cuánto hay y quién recibe la caja. Ve al instante si dio justo, si falta o si sobra.
+4. Toca **Registrar relevo**. La caja **sigue abierta** y ahora queda a nombre del que entró. Cada venta guarda quién estaba atendiendo.
+
+El que entra arranca con lo que se contó recién. Así, si a la noche faltan $ 500, se sabe que faltaron en el turno tarde y no en el de la mañana. La diferencia total de la caja es la suma de lo que dio cada turno.
+
+En **Cajas anteriores → Turnos de una caja** se ve la línea de tiempo del día, por ejemplo:
+
+- 07:00 hs · Abrió Lucía con $ 10.000
+- 14:02 hs · Relevo: Lucía le entregó a Martín · Turno Mañana: 5 ventas · contado $ 32.200 (debía haber $ 32.200) · 🟢 dio justo
+- 21:05 hs · Cerró Martín · Turno Tarde: 4 ventas · contado $ 48.800 (debía haber $ 49.300) · 🔴 faltan $ 500
+
+El empleado puede hacer el relevo, pero los turnos de otros solo los ve el jefe (o quien tenga el permiso **Ajustar cajas cerradas**).
+
+### Horarios y turnos del local
+
+En **Mis comercios**, cada comercio tiene **🕗 Horarios y turnos**: a qué hora abre y cierra, y cuántos turnos hay (por ejemplo, Mañana de 08:00 a 14:00 y Tarde de 14:00 a 21:00). Es opcional y se cambia cuando quieras. Sirve para que:
+
+- La Caja avise cuando terminó un turno ("Si cambia quien atiende, tocá Relevo de turno").
+- La Caja avise si está abierta fuera del horario del local, para acordarse de cerrarla.
+- Cada relevo y cada cierre digan a qué turno corresponden (el sistema lo elige solo; en el relevo se puede cambiar).
+
+Si un turno pasa la medianoche (de 20:00 a 02:00), se pone igual y el sistema lo entiende.
 
 ### Ajustes de una caja cerrada
 
@@ -128,7 +160,7 @@ duenos
         ├── productos ── lotes, mermas
         ├── proveedores
         ├── compras ── compras_detalle
-        ├── cajas   ── ajustes_caja
+        ├── cajas   ── ajustes_caja, relevos_caja
         ├── ventas  ── ventas_detalle
         │     └── tickets
         └── gastos
@@ -137,7 +169,7 @@ duenos
 | Tabla | Qué guarda |
 |---|---|
 | `duenos` | Los dueños y su PIN (mezclado). |
-| `comercios` | Cada comercio: rubro, dirección, si da ticket, si guarda el resumen semanal y qué ve el empleado. |
+| `comercios` | Cada comercio: rubro, dirección, si da ticket, si guarda el resumen semanal, qué ve el empleado y sus horarios (`hora_apertura`, `hora_cierre` y los turnos en `turnos_config`, como texto JSON). |
 | `productos` | Código interno, código de barras, nombre, categoría, costo, precio, stock, stock mínimo y cuántos días dura (si vence). |
 | `lotes` | Cada tanda que entró de un producto que vence: fecha, cantidad, cuándo vence, si vino de una compra o se hizo en el local, y quién la cargó. |
 | `mermas` | Lo que se retiró por vencido: fecha, cantidad, costo de cada unidad y quién lo retiró. |
@@ -145,7 +177,8 @@ duenos
 | `compras` y `compras_detalle` | Cada compra (fecha, proveedor, total, quién la cargó) y sus productos. |
 | `cajas` | Quién abrió, cuándo, efectivo inicial; al cerrar, efectivo esperado, contado y nota. |
 | `ajustes_caja` | Las correcciones a cajas cerradas: cuándo, quién, qué (anular venta o recontar), monto y motivo. |
-| `ventas` y `ventas_detalle` | Cada venta (fecha, medio de pago, total, caja, si se anuló) y sus productos con el precio **y el costo de ese día**. |
+| `relevos_caja` | Cada cambio de turno con la caja abierta: cuándo, qué turno terminó, quién entregó, quién recibió, cuánto debía haber, cuánto se contó y la diferencia de ese turno. |
+| `ventas` y `ventas_detalle` | Cada venta (fecha, medio de pago, total, caja, quién atendía, si se anuló) y sus productos con el precio **y el costo de ese día**. |
 | `tickets` | El número de ticket de las ventas que lo pidieron. |
 | `gastos` | Gastos del comercio por fecha y categoría. |
 
@@ -234,6 +267,8 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 | SQLAlchemy | Librería de Python para hablar con cualquier base sin cambiar el código. |
 | Streamlit | Librería de Python para hacer páginas web con botones y tablas. |
 | Arqueo | Contar el efectivo al cerrar la caja y compararlo con lo que debería haber. |
+| Relevo de turno | Cuando cambia quien atiende: se cuenta la plata sin cerrar la caja, para saber en qué turno faltó o sobró. |
+| JSON | Una forma de guardar una lista (por ejemplo, los turnos) como texto dentro de una sola columna. |
 | EAN-13 | El código de barras de 13 números de los productos (en Argentina empieza con 779). |
 | Repositorio | La carpeta del proyecto en GitHub, con todo su historial de cambios. |
 | Modo demo | El sistema con datos inventados, para mostrarlo sin riesgo. |

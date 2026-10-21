@@ -1,5 +1,8 @@
 """Mis comercios: ver los comercios del dueño, crear uno nuevo, elegir quién usa tickets,
-quién guarda el resumen semanal (para la temporada), qué ve el empleado y cambiar el PIN del jefe."""
+quién guarda el resumen semanal (para la temporada), qué ve el empleado, los horarios y turnos
+del local y cambiar el PIN del jefe."""
+
+from datetime import datetime, timedelta
 
 import streamlit as st
 
@@ -17,6 +20,51 @@ comercios = op.listar_comercios(dueno["id"])
 if comercios.empty:
     st.info("Todavía no tenés comercios. Creá el primero acá abajo.")
 aviso_temporada(comercios.to_dict("records"))
+
+def _hora(texto):
+    return datetime.strptime(texto, "%H:%M").time()
+
+
+def horarios_y_turnos(comercio_id):
+    """El horario del local y los turnos (por ejemplo Mañana de 08:00 a 14:00 y Tarde de 14:00 a 21:00).
+
+    Sirven para que la Caja avise cuándo termina un turno (para hacer el relevo) y para que en el
+    historial cada relevo diga a qué turno corresponde."""
+    guardado = op.horarios_comercio(comercio_id)
+    base = guardado if guardado["hora_apertura"] else op.HORARIO_SUGERIDO
+    turnos = guardado["turnos"] if guardado["hora_apertura"] else op.HORARIO_SUGERIDO["turnos"]
+    with st.expander("🕗 Horarios y turnos" + (f" · {guardado['hora_apertura']} a {guardado['hora_cierre']}"
+                                               if guardado["hora_apertura"] else " · sin cargar")):
+        h1, h2 = st.columns(2)
+        apertura = h1.time_input("Abre a las", _hora(base["hora_apertura"]), step=timedelta(minutes=15),
+                                 key=f"apertura_{comercio_id}")
+        cierre = h2.time_input("Cierra a las", _hora(base["hora_cierre"]), step=timedelta(minutes=15),
+                               key=f"cierre_{comercio_id}")
+        cantidad = st.number_input("¿Cuántos turnos hay?", min_value=0, max_value=4, value=len(turnos), step=1,
+                                   key=f"cantidad_turnos_{comercio_id}",
+                                   help="0 = un solo turno todo el día (no hace falta relevo).")
+        nuevos = []
+        for i in range(int(cantidad)):
+            t = turnos[i] if i < len(turnos) else {"nombre": f"Turno {i + 1}", "desde": base["hora_cierre"],
+                                                  "hasta": base["hora_cierre"]}
+            t1, t2, t3 = st.columns([2, 1, 1])
+            nuevos.append({
+                "nombre": t1.text_input("Nombre del turno", t["nombre"], key=f"turno_nombre_{comercio_id}_{i}"),
+                "desde": t2.time_input("Desde", _hora(t["desde"]), step=timedelta(minutes=15),
+                                       key=f"turno_desde_{comercio_id}_{i}"),
+                "hasta": t3.time_input("Hasta", _hora(t["hasta"]), step=timedelta(minutes=15),
+                                       key=f"turno_hasta_{comercio_id}_{i}"),
+            })
+        st.caption("Si un turno termina después de la medianoche (por ejemplo de 20:00 a 02:00), ponelo igual: "
+                   "el sistema lo entiende.")
+        if st.button("Guardar horarios", type="primary", key=f"guardar_horarios_{comercio_id}"):
+            try:
+                op.actualizar_horarios_comercio(comercio_id, apertura, cierre, nuevos)
+                st.session_state["mensaje_comercios"] = "Listo, guardaste los horarios y turnos."
+                st.rerun()
+            except op.HorarioInvalido as error:
+                st.error(str(error))
+
 
 for c in comercios.itertuples():
     with st.container(border=True):
@@ -42,6 +90,7 @@ for c in comercios.itertuples():
         if elegidos != actuales:
             op.cambiar_permisos_empleado(c.id, elegidos)
             st.toast("Listo: el empleado lo ve la próxima vez que toque algo.")
+        horarios_y_turnos(c.id)
 
 st.subheader("Agregar un comercio")
 with st.form("nuevo_comercio", clear_on_submit=True):

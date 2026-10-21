@@ -1,7 +1,9 @@
 """Caja: abrir la caja, cobrar las ventas en el momento (como en el mostrador) y cerrarla con el arqueo.
 
-Solo se puede cobrar con la caja abierta. Una caja cerrada ya no se puede modificar:
-si hay otro turno, se abre una caja nueva. Si hubo un error, el jefe le hace un "ajuste"
+Solo se puede cobrar con la caja abierta. La caja se abre una vez por día y se cierra al final:
+si cambia quien atiende (turno mañana / tarde), se hace un "relevo de turno". El que se va cuenta
+el efectivo y queda anotado si faltaba o sobraba algo en su turno, sin cerrar la caja.
+Una caja cerrada ya no se puede modificar. Si hubo un error, el jefe le hace un "ajuste"
 (anular una venta o corregir el efectivo contado), que queda anotado con fecha, quién y por qué.
 """
 
@@ -26,9 +28,42 @@ def ventas_texto(cantidad):
 from ticket import generar_ticket_pdf
 
 comercio = comercio_actual()
+horarios = op.horarios_comercio(comercio["id"])
 encabezado("💵", "Caja", comercio)
 if aviso := texto_vencimientos(op.avisos_vencimientos(comercio["id"])):
     st.warning(f"🗓️ {aviso}. Revisalo en **Vencimientos**.")
+
+
+def resultado_texto(diferencia):
+    """ "justo", "faltan $ 500" o "sobran $ 200", con un color que se ve de un vistazo."""
+    if abs(diferencia) < 1:
+        return "🟢 dio justo"
+    if diferencia > 0:
+        return f"🟡 sobran {pesos_md(diferencia)}"
+    return f"🔴 faltan {pesos_md(-diferencia)}"
+
+
+def mostrar_turnos(caja_id):
+    """La línea de tiempo de una caja: quién abrió, cada relevo de turno y el cierre, con lo que dio cada turno."""
+    lineas = []
+    for e in op.linea_de_tiempo(comercio["id"], caja_id):
+        hora = f"**{e['hora']:%H:%M} hs**"
+        if e["tipo"] == "apertura":
+            lineas.append(f"- {hora} · Abrió **{e['quien']}** con {pesos_md(e['efectivo'])}")
+            continue
+        turno = f"Turno {e['turno']}" if e.get("turno") else f"Turno de {e['quien']}"
+        vendido = f"{ventas_texto(e['cantidad'])} por {pesos_md(e['total'])}"
+        if e["tipo"] == "en_curso":
+            lineas.append(f"- **Ahora** · {turno} (atiende **{e['quien']}** desde las {e['inicio']:%H:%M}) · "
+                          f"{vendido} · debería haber {pesos_md(e['esperado'])}")
+            continue
+        que = f"Relevo: **{e['quien']}** le entregó a **{e['entra']}**" if e["tipo"] == "relevo" \
+            else f"Cerró **{e['quien']}**"
+        lineas.append(f"- {hora} · {que} · {turno}: {vendido} · contado {pesos_md(e['contado'])} "
+                      f"(debía haber {pesos_md(e['esperado'])}) · {resultado_texto(e['diferencia'])}")
+        if e.get("nota"):
+            lineas.append(f"    - Nota: {e['nota']}")
+    st.markdown("\n".join(lineas))
 
 
 def mostrar_cierre(resumen):
@@ -49,6 +84,10 @@ def mostrar_cierre(resumen):
         st.error(f"Faltan {pesos(-diferencia)} en efectivo.")
     if caja["nota"]:
         st.caption(f"Nota: {caja['nota']}")
+    if op.turno_en_curso(comercio["id"], caja["id"])["relevos_previos"]:
+        st.markdown("**Turnos del día**")
+        st.caption("La diferencia de la caja es la suma de lo que dio cada turno.")
+        mostrar_turnos(caja["id"])
 
 
 def puede_ajustar():
@@ -69,11 +108,11 @@ def cajas_anteriores():
         cajas["nota"] = cajas["nota"].fillna("")
         st.dataframe(
             cajas, hide_index=True,
-            column_order=["estado", "responsable", "abierta", "cerrada", "ventas", "total", "monto_inicial",
+            column_order=["estado", "atendieron", "abierta", "cerrada", "ventas", "total", "monto_inicial",
                           "efectivo_esperado", "efectivo_contado", "diferencia", "ajustes", "diferencia_ajustada",
                           "nota"],
             column_config={
-                "estado": "Estado", "responsable": "Atendió",
+                "estado": "Estado", "atendieron": "Atendió",
                 "abierta": st.column_config.DatetimeColumn("Abrió", format="DD/MM HH:mm"),
                 "cerrada": st.column_config.DatetimeColumn("Cerró", format="DD/MM HH:mm"),
                 "ventas": "Ventas",
@@ -87,7 +126,22 @@ def cajas_anteriores():
                 "nota": "Nota",
             },
         )
+        ver_turnos(cajas)
         ajustar_caja(cajas[cajas["cerrada"].notna()])
+
+
+def ver_turnos(cajas):
+    """Elegir una caja y ver sus turnos: quién atendió, cuánto vendió y en qué turno faltó o sobró plata."""
+    st.markdown("#### 🔄 Turnos de una caja")
+    st.caption("Para saber en qué turno faltó o sobró efectivo.")
+    cajas = cajas.set_index("id")
+    caja_id = st.selectbox(
+        "Caja", cajas.index, index=None, placeholder="Elegí la caja", key="ver_turnos_caja",
+        format_func=lambda i: f"{cajas.loc[i, 'atendieron']} · {cajas.loc[i, 'abierta']:%d/%m %H:%M} · "
+                              f"{plural(int(cajas.loc[i, 'relevos']) + 1, 'turno', 'turnos')}",
+    )
+    if caja_id is not None:
+        mostrar_turnos(int(caja_id))
 
 
 def ajustar_caja(cerradas):
@@ -197,10 +251,74 @@ if caja is None:
 
 # --- Caja abierta ---
 abierta_hoy = caja["abierta"].date() == date.today()
-estado = st.columns([4, 1], vertical_alignment="center")
-estado[0].info(f"🟢 Caja abierta por **{caja['responsable']}** desde el "
-               f"{caja['abierta']:%d/%m a las %H:%M} · efectivo inicial {pesos_md(caja['monto_inicial'])}")
-cerrar = estado[1].button("🔒 Cerrar caja", width="stretch")
+turno_actual = op.turno_en_curso(comercio["id"], caja["id"])
+if aviso := st.session_state.pop("relevo_guardado", None):
+    st.success(aviso)
+estado = st.columns([3, 1, 1], vertical_alignment="center")
+if turno_actual["relevos_previos"]:
+    estado[0].info(f"🟢 Caja abierta desde las {caja['abierta']:%H:%M} · ahora atiende **{caja['responsable']}** "
+                   f"(desde las {turno_actual['desde']:%H:%M}, recibió {pesos_md(turno_actual['inicial'])})")
+else:
+    estado[0].info(f"🟢 Caja abierta por **{caja['responsable']}** desde el "
+                   f"{caja['abierta']:%d/%m a las %H:%M} · efectivo inicial {pesos_md(caja['monto_inicial'])}")
+relevar = estado[1].button("🔄 Relevo de turno", width="stretch", disabled=not abierta_hoy,
+                           help="Cambia quien atiende sin cerrar la caja. El que se va cuenta el efectivo.")
+cerrar = estado[2].button("🔒 Cerrar caja", width="stretch")
+
+# Avisos según los horarios que cargó el jefe (en Mis comercios)
+ahora = datetime.now()
+turno_de_ahora = op.turno_de_la_hora(horarios["turnos"], ahora)
+turno_de_quien_atiende = op.turno_entre(horarios["turnos"], turno_actual["desde"], ahora)
+if abierta_hoy and turno_de_quien_atiende and turno_de_ahora != turno_de_quien_atiende:
+    st.info(f"🕑 Terminó el turno {turno_de_quien_atiende['nombre']} ({turno_de_quien_atiende['desde']} a "
+            f"{turno_de_quien_atiende['hasta']}). Si cambia quien atiende, tocá **🔄 Relevo de turno**.")
+elif abierta_hoy and not op.dentro_del_horario(horarios, ahora):
+    st.info(f"🕑 Estás fuera del horario del local ({horarios['hora_apertura']} a {horarios['hora_cierre']}). "
+            "Al terminar el día, acordate de **cerrar la caja**.")
+
+
+@st.dialog("🔄 Relevo de turno", width="large")
+def relevo_de_turno():
+    actual = op.turno_en_curso(comercio["id"], caja["id"])
+    st.write(f"**{actual['responsable']}** entrega la caja. La caja **sigue abierta**: no hace falta cerrarla.")
+    if horarios["turnos"]:
+        nombres = [t["nombre"] for t in horarios["turnos"]]
+        sugerido = op.turno_entre(horarios["turnos"], actual["desde"], datetime.now())
+        turno = st.selectbox("Turno que termina", nombres + ["Otro / fuera de turno"],
+                             index=nombres.index(sugerido["nombre"]) if sugerido else len(nombres))
+        turno = turno if turno in nombres else None
+    else:
+        turno = None
+    arranco = "del efectivo inicial" if not actual["relevos_previos"] else "que recibió en el relevo"
+    st.write(f"Desde las {actual['desde']:%H:%M}: {ventas_texto(actual['cantidad'])} por {pesos_md(actual['total'])}. "
+             f"Debería haber **{pesos_md(actual['esperado'])}** en efectivo ({pesos_md(actual['inicial'])} "
+             f"{arranco} + {pesos_md(actual['efectivo'])} de ventas en efectivo).")
+    contado = st.number_input("Efectivo contado ($)", min_value=0.0, value=None, step=100.0, format="%.0f",
+                              placeholder="Contá la plata de la caja y escribí cuánto hay")
+    if contado is not None:
+        st.markdown(f"Resultado del turno: {resultado_texto(contado - actual['esperado'])}")
+    entra = st.text_input("Quién recibe la caja", placeholder="Nombre de quien sigue atendiendo")
+    nota = st.text_input("Nota (opcional)", placeholder="Ej.: faltan $ 500, se dio mal un vuelto")
+    st.caption("El que entra arranca con lo que se contó recién. Así, si después falta plata, "
+               "se sabe en qué turno pasó.")
+    if st.button("Registrar relevo", type="primary"):
+        if contado is None:
+            st.error("Escribí cuánto efectivo contaste.")
+        elif not entra.strip():
+            st.error("Escribí quién recibe la caja.")
+        else:
+            try:
+                r = op.registrar_relevo_turno(comercio["id"], caja["id"], actual["responsable"], entra.strip(),
+                                              contado, nota.strip(), turno)
+            except op.CajaCerrada:
+                st.error("La caja se cerró (quizás desde otra pantalla).")
+                return
+            st.session_state["relevo_guardado"] = (
+                f"Relevo anotado: {r['empleado_sale']} le entregó la caja a {r['empleado_entra']} con "
+                f"{pesos_md(contado)}. {('Turno ' + turno) if turno else 'Su turno'}: "
+                f"{resultado_texto(r['diferencia'])}."
+            )
+            st.rerun()
 
 
 @st.dialog("🔒 Cerrar caja", width="large")
@@ -215,13 +333,23 @@ def cerrar_caja():
         hide_index=True,
         column_config={"Cobrado ($)": st.column_config.NumberColumn(format="localized")},
     )
-    st.write(f"Contá el efectivo que hay en la caja. Debería haber **{pesos_md(resumen['efectivo_esperado'])}** "
-             f"({pesos_md(caja['monto_inicial'])} del inicio + {pesos_md(resumen['por_medio'].get('efectivo', 0))} "
-             "de ventas en efectivo).")
+    actual = op.turno_en_curso(comercio["id"], caja["id"])
+    if actual["relevos_previos"]:
+        # Hubo relevos: lo que se compara es el último turno (lo que recibió + lo que cobró en efectivo)
+        st.write(f"Contá el efectivo que hay en la caja. Debería haber **{pesos_md(actual['esperado'])}** "
+                 f"({pesos_md(actual['inicial'])} que recibió {actual['responsable']} en el relevo de las "
+                 f"{actual['desde']:%H:%M} + {pesos_md(actual['efectivo'])} de ventas en efectivo de su turno).")
+        if abs(actual["diferencia_previa"]) >= 1 and puede_ajustar():
+            st.caption(f"En los turnos anteriores ya quedó anotado: {resultado_texto(actual['diferencia_previa'])}.")
+    else:
+        st.write(f"Contá el efectivo que hay en la caja. Debería haber **{pesos_md(resumen['efectivo_esperado'])}** "
+                 f"({pesos_md(caja['monto_inicial'])} del inicio + {pesos_md(resumen['por_medio'].get('efectivo', 0))} "
+                 "de ventas en efectivo).")
     contado = st.number_input("Efectivo contado ($)", min_value=0.0, value=None, step=100.0, format="%.0f",
                               placeholder="Escribí cuánto contaste")
     nota = st.text_input("Nota (opcional)", placeholder="Ej.: retiré $ 20.000 para pagar al proveedor")
-    st.warning("Una vez cerrada, la caja **no se puede modificar**. Para seguir cobrando hay que abrir una nueva. "
+    st.warning("Una vez cerrada, la caja **no se puede modificar**. Si solo cambia quien atiende, no la cierres: "
+               "usá **🔄 Relevo de turno**. "
                "Si hubo un error, el jefe (o quien él habilite) lo corrige con un **ajuste**, que queda anotado.")
     if st.button("Cerrar caja", type="primary"):
         if contado is None:
@@ -240,6 +368,8 @@ def cerrar_caja():
 clave_carrito = f"carrito_{comercio['id']}"
 if cerrar:
     cerrar_caja()
+if relevar:
+    relevo_de_turno()
 if not abierta_hoy:
     st.warning("Esta caja quedó abierta de otro día. **Cerrala** para empezar el día con una caja nueva.")
     cajas_anteriores()
@@ -412,5 +542,8 @@ with derecha:
 
     en_caja = op.resumen_caja(caja["id"])
     st.caption(f"En esta caja van {ventas_texto(en_caja['cantidad'])} por {pesos_md(en_caja['total'])}.")
+    if turno_actual["relevos_previos"] and puede_ajustar():
+        with st.expander("🔄 Turnos de hoy"):
+            mostrar_turnos(caja["id"])
 
 cajas_anteriores()

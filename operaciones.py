@@ -5,8 +5,9 @@ Así, si mañana cambia la base (por ejemplo, a la nube), solo se toca este arch
 """
 
 import hashlib
+import json
 import secrets
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 import pandas as pd
 from sqlalchemy import func, inspect, select
@@ -79,6 +80,103 @@ def cambiar_permisos_empleado(comercio_id, permisos):
             .values(permisos_empleado=",".join(permisos))
         )
 
+
+# ---------------------------------------------------------------------------
+# Horarios del local y turnos (los configura el jefe en Mis comercios)
+# ---------------------------------------------------------------------------
+class HorarioInvalido(Exception):
+    """Los horarios o los turnos que se quisieron guardar no tienen sentido (falta un nombre, etc.)."""
+
+
+# Lo que se propone la primera vez, hasta que el jefe ponga los suyos
+HORARIO_SUGERIDO = {
+    "hora_apertura": "08:00", "hora_cierre": "21:00",
+    "turnos": [{"nombre": "Mañana", "desde": "08:00", "hasta": "14:00"},
+               {"nombre": "Tarde", "desde": "14:00", "hasta": "21:00"}],
+}
+
+
+def _hora_texto(hora):
+    """Pasa una hora (datetime.time o texto "8:00") a texto "08:00"."""
+    if isinstance(hora, time):
+        return hora.strftime("%H:%M")
+    try:
+        return datetime.strptime(str(hora).strip(), "%H:%M").strftime("%H:%M")
+    except ValueError:
+        raise HorarioInvalido(f"La hora «{hora}» no se entiende. Escribila como 08:00.") from None
+
+
+def horarios_comercio(comercio_id):
+    """El horario del local y sus turnos. Si el jefe todavía no los cargó, las horas vienen vacías y sin turnos."""
+    with motor.connect() as con:
+        fila = con.execute(
+            select(bd.comercios.c.hora_apertura, bd.comercios.c.hora_cierre, bd.comercios.c.turnos_config)
+            .where(bd.comercios.c.id == comercio_id)
+        ).mappings().one()
+    try:
+        turnos = json.loads(fila["turnos_config"]) if fila["turnos_config"] else []
+    except ValueError:
+        turnos = []
+    return {"hora_apertura": fila["hora_apertura"], "hora_cierre": fila["hora_cierre"], "turnos": turnos}
+
+
+def actualizar_horarios_comercio(comercio_id, hora_apertura, hora_cierre, turnos_config):
+    """Guarda el horario del local y los turnos (solo lo usa el jefe, desde Mis comercios).
+
+    turnos_config: lista de {"nombre", "desde", "hasta"}. Las horas pueden ser texto "08:00" o datetime.time.
+    Si un turno (o el local) termina más temprano de lo que empieza, se entiende que pasa la medianoche.
+    """
+    apertura, cierre = _hora_texto(hora_apertura), _hora_texto(hora_cierre)
+    if apertura == cierre:
+        raise HorarioInvalido("La hora de apertura y la de cierre no pueden ser iguales.")
+    turnos = []
+    for t in turnos_config:
+        nombre = str(t.get("nombre") or "").strip()
+        if not nombre:
+            raise HorarioInvalido("Cada turno necesita un nombre (por ejemplo: Mañana).")
+        desde, hasta = _hora_texto(t["desde"]), _hora_texto(t["hasta"])
+        if desde == hasta:
+            raise HorarioInvalido(f"El turno {nombre} empieza y termina a la misma hora.")
+        turnos.append({"nombre": nombre[:50], "desde": desde, "hasta": hasta})
+    nombres = [t["nombre"].lower() for t in turnos]
+    if len(set(nombres)) != len(nombres):
+        raise HorarioInvalido("Hay dos turnos con el mismo nombre.")
+    with motor.begin() as con:
+        con.execute(
+            bd.comercios.update()
+            .where(bd.comercios.c.id == comercio_id)
+            .values(hora_apertura=apertura, hora_cierre=cierre,
+                    turnos_config=json.dumps(turnos, ensure_ascii=False) if turnos else None)
+        )
+
+
+def _entre(hora, desde, hasta):
+    """¿La hora "HH:MM" está entre desde (incluida) y hasta? Si hasta < desde, el rango pasa la medianoche."""
+    if desde < hasta:
+        return desde <= hora < hasta
+    return hora >= desde or hora < hasta
+
+
+def turno_de_la_hora(turnos, momento):
+    """El turno (diccionario) que corresponde a esa hora, o None si ninguno."""
+    hora = momento.strftime("%H:%M")
+    return next((t for t in turnos if _entre(hora, t["desde"], t["hasta"])), None)
+
+
+def turno_entre(turnos, desde, hasta):
+    """El turno de un tramo de tiempo: el que corresponde a la mitad del tramo.
+
+    Así, si Juan abrió 07:55 y entregó 14:05, su turno es el de la mañana aunque haya empezado
+    unos minutos antes o terminado unos minutos después.
+    """
+    return turno_de_la_hora(turnos, desde + (hasta - desde) / 2)
+
+
+def dentro_del_horario(horarios, momento):
+    """True si el local está en horario (o si el jefe no cargó el horario)."""
+    if not horarios["hora_apertura"] or not horarios["hora_cierre"]:
+        return True
+    return _entre(momento.strftime("%H:%M"), horarios["hora_apertura"], horarios["hora_cierre"])
 
 # ---------------------------------------------------------------------------
 # PIN del jefe
@@ -202,12 +300,20 @@ def listar_cajas(comercio_id, limite=30):
         .group_by(bd.ajustes_caja.c.caja_id)
         .subquery()
     )
+    relevos = (
+        select(bd.relevos_caja.c.caja_id, func.count().label("relevos"))
+        .where(bd.relevos_caja.c.comercio_id == comercio_id)
+        .group_by(bd.relevos_caja.c.caja_id)
+        .subquery()
+    )
     consulta = (
         select(bd.cajas, func.coalesce(cobrado.c.ventas, 0).label("ventas"),
                func.coalesce(cobrado.c.total, 0).label("total"),
-               func.coalesce(ajustes.c.ajustes, 0).label("ajustes"))
+               func.coalesce(ajustes.c.ajustes, 0).label("ajustes"),
+               func.coalesce(relevos.c.relevos, 0).label("relevos"))
         .select_from(bd.cajas.outerjoin(cobrado, cobrado.c.caja_id == bd.cajas.c.id)
-                     .outerjoin(ajustes, ajustes.c.caja_id == bd.cajas.c.id))
+                     .outerjoin(ajustes, ajustes.c.caja_id == bd.cajas.c.id)
+                     .outerjoin(relevos, relevos.c.caja_id == bd.cajas.c.id))
         .where(bd.cajas.c.comercio_id == comercio_id)
         .order_by(bd.cajas.c.abierta.desc())
         .limit(limite)
@@ -217,8 +323,139 @@ def listar_cajas(comercio_id, limite=30):
     df["diferencia_ajustada"] = df["diferencia"]  # la diferencia después de los ajustes (si los hubo)
     for i, caja in df[df["ajustes"] > 0].iterrows():
         df.at[i, "diferencia_ajustada"] = arqueo_ajustado(caja)["diferencia"]
+    # Quiénes atendieron, en orden (si hubo relevos de turno): "Juan → María"
+    df["atendieron"] = df["responsable"]
+    if (df["relevos"] > 0).any():
+        with motor.connect() as con:
+            for i, caja in df[df["relevos"] > 0].iterrows():
+                lista = _relevos(con, comercio_id, int(caja["id"]))
+                df.at[i, "atendieron"] = " → ".join([lista[0]["empleado_sale"]] + [r["empleado_entra"] for r in lista])
     return df
 
+
+# ---------------------------------------------------------------------------
+# Relevo de turno: cambia quien atiende y la caja sigue abierta
+# ---------------------------------------------------------------------------
+def _caja_del_comercio(con, comercio_id, caja_id):
+    """La caja, solo si es de ese comercio (así nadie toca la caja de otro comercio)."""
+    caja = con.execute(
+        select(bd.cajas).where(bd.cajas.c.id == caja_id, bd.cajas.c.comercio_id == comercio_id)
+    ).mappings().first()
+    if caja is None:
+        raise CajaCerrada("No se encontró la caja de este comercio.")
+    return dict(caja)
+
+
+def _relevos(con, comercio_id, caja_id):
+    return [dict(r) for r in con.execute(
+        select(bd.relevos_caja)
+        .where(bd.relevos_caja.c.caja_id == caja_id, bd.relevos_caja.c.comercio_id == comercio_id)
+        .order_by(bd.relevos_caja.c.fecha_hora, bd.relevos_caja.c.id)
+    ).mappings()]
+
+
+def _ventas_del_tramo(con, caja_id, desde, hasta=None):
+    """Lo vendido en la caja entre dos momentos: cantidad y total (sin anuladas) y efectivo cobrado.
+
+    El efectivo cuenta también las ventas que después se anularon con un ajuste: así cada turno
+    da lo mismo que se calculó en el momento del relevo o del cierre (los ajustes se ven aparte).
+    """
+    condicion = [bd.ventas.c.caja_id == caja_id, bd.ventas.c.fecha > desde]
+    if hasta is not None:
+        condicion.append(bd.ventas.c.fecha <= hasta)
+    es_efectivo = bd.ventas.c.medio_pago == "efectivo"
+    cantidad, total, efectivo = con.execute(
+        select(
+            func.count().filter(VALIDA),
+            func.coalesce(func.sum(bd.ventas.c.total).filter(VALIDA), 0),
+            func.coalesce(func.sum(bd.ventas.c.total).filter(es_efectivo), 0),
+        ).where(*condicion)
+    ).one()
+    return {"cantidad": cantidad, "total": total, "efectivo": efectivo}
+
+
+def _turno_en_curso(con, comercio_id, caja, relevos, hasta=None):
+    """Desde cuándo atiende el responsable actual, con cuánto efectivo arrancó y cuánto debería haber."""
+    if relevos:
+        desde, inicial = relevos[-1]["fecha_hora"], relevos[-1]["efectivo_contado"]
+    else:
+        # Las ventas se buscan "después de" este momento: un segundo antes de abrir, para no perder ninguna
+        desde, inicial = caja["abierta"] - timedelta(seconds=1), caja["monto_inicial"]
+    ventas = _ventas_del_tramo(con, caja["id"], desde, hasta)
+    return {
+        "desde": relevos[-1]["fecha_hora"] if relevos else caja["abierta"],
+        "inicial": inicial, **ventas, "esperado": inicial + ventas["efectivo"],
+        "responsable": caja["responsable"], "relevos_previos": len(relevos),
+        "diferencia_previa": sum(r["diferencia"] for r in relevos),
+    }
+
+
+def turno_en_curso(comercio_id, caja_id):
+    """El turno de la persona que atiende ahora (sirve para el relevo y para el cierre)."""
+    with motor.connect() as con:
+        caja = _caja_del_comercio(con, comercio_id, caja_id)
+        return _turno_en_curso(con, comercio_id, caja, _relevos(con, comercio_id, caja_id))
+
+
+def registrar_relevo_turno(comercio_id, caja_id, empleado_sale, empleado_entra, efectivo_contado, nota=None,
+                           turno=None):
+    """Anota un cambio de turno sin cerrar la caja.
+
+    El que se va cuenta el efectivo. Se compara con lo que debería haber en SU turno (con lo que arrancó,
+    más lo que cobró en efectivo) y se guarda la diferencia. El que entra arranca con lo contado,
+    así un faltante de la tarde no se mezcla con uno de la mañana. La caja sigue abierta
+    y desde ahora queda a nombre del que entra.
+    Devuelve el relevo guardado (diccionario).
+    """
+    with motor.begin() as con:
+        caja = _caja_del_comercio(con, comercio_id, caja_id)
+        if caja["cerrada"] is not None:
+            raise CajaCerrada("La caja ya está cerrada. Abrí una nueva para seguir cobrando.")
+        actual = _turno_en_curso(con, comercio_id, caja, _relevos(con, comercio_id, caja_id))
+        relevo = {
+            "caja_id": caja_id, "comercio_id": comercio_id, "fecha_hora": datetime.now(), "turno": turno or None,
+            "empleado_sale": empleado_sale, "empleado_entra": empleado_entra,
+            "efectivo_esperado_turno": actual["esperado"], "efectivo_contado": efectivo_contado,
+            "diferencia": efectivo_contado - actual["esperado"], "nota": nota or None,
+        }
+        relevo["id"] = con.execute(bd.relevos_caja.insert().values(**relevo)).inserted_primary_key[0]
+        con.execute(bd.cajas.update().where(bd.cajas.c.id == caja_id).values(responsable=empleado_entra))
+    return {**relevo, "cantidad": actual["cantidad"], "total": actual["total"]}
+
+
+def linea_de_tiempo(comercio_id, caja_id):
+    """Los turnos de una caja, en orden: apertura, cada relevo y el cierre (o el turno que sigue en curso).
+
+    Cada tramo dice quién atendió, cuánto vendió y, al terminar, si el efectivo dio justo, faltó o sobró.
+    """
+    turnos = horarios_comercio(comercio_id)["turnos"]
+    with motor.connect() as con:
+        caja = _caja_del_comercio(con, comercio_id, caja_id)
+        relevos = _relevos(con, comercio_id, caja_id)
+        quien_abrio = relevos[0]["empleado_sale"] if relevos else caja["responsable"]
+        eventos = [{"tipo": "apertura", "hora": caja["abierta"], "quien": quien_abrio,
+                    "efectivo": caja["monto_inicial"]}]
+        desde = caja["abierta"] - timedelta(seconds=1)
+        inicio = caja["abierta"]
+        for r in relevos:
+            ventas = _ventas_del_tramo(con, caja_id, desde, r["fecha_hora"])
+            eventos.append({
+                "tipo": "relevo", "hora": r["fecha_hora"], "quien": r["empleado_sale"], "entra": r["empleado_entra"],
+                "turno": r["turno"], "esperado": r["efectivo_esperado_turno"], "contado": r["efectivo_contado"],
+                "diferencia": r["diferencia"], "nota": r["nota"], "inicio": inicio, **ventas,
+            })
+            desde = inicio = r["fecha_hora"]
+        actual = _turno_en_curso(con, comercio_id, caja, relevos, hasta=caja["cerrada"])
+    fin = caja["cerrada"] or datetime.now()
+    ultimo = {"hora": fin, "quien": caja["responsable"], "inicio": inicio, "esperado": actual["esperado"],
+              "cantidad": actual["cantidad"], "total": actual["total"], "efectivo": actual["efectivo"],
+              "turno": (turno_entre(turnos, inicio, fin) or {}).get("nombre")}
+    if caja["cerrada"] is not None:
+        eventos.append({**ultimo, "tipo": "cierre", "contado": caja["efectivo_contado"],
+                        "diferencia": caja["efectivo_contado"] - actual["esperado"], "nota": caja["nota"]})
+    else:
+        eventos.append({**ultimo, "tipo": "en_curso"})
+    return eventos
 
 # ---------------------------------------------------------------------------
 # Ajustes de una caja cerrada (solo el jefe)
@@ -468,8 +705,11 @@ def registrar_venta(comercio_id, items, medio_pago, con_ticket=False, caja_id=No
     """
     ahora = datetime.now()
     with motor.begin() as con:
+        responsable = None
         if caja_id is not None:
-            cerrada = con.execute(select(bd.cajas.c.cerrada).where(bd.cajas.c.id == caja_id)).scalar()
+            cerrada, responsable = con.execute(
+                select(bd.cajas.c.cerrada, bd.cajas.c.responsable).where(bd.cajas.c.id == caja_id)
+            ).one()
             if cerrada is not None:
                 raise CajaCerrada("La caja ya está cerrada. Abrí una nueva para seguir cobrando.")
         costos = dict(con.execute(
@@ -479,7 +719,8 @@ def registrar_venta(comercio_id, items, medio_pago, con_ticket=False, caja_id=No
         total = sum(i["cantidad"] * i["precio_unitario"] for i in items)
         venta_id = con.execute(
             bd.ventas.insert().values(
-                comercio_id=comercio_id, caja_id=caja_id, fecha=ahora, medio_pago=medio_pago, total=total
+                comercio_id=comercio_id, caja_id=caja_id, fecha=ahora, medio_pago=medio_pago, total=total,
+                responsable_turno=responsable,
             )
         ).inserted_primary_key[0]
 
