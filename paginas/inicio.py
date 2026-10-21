@@ -1,17 +1,18 @@
 """Inicio: el "launcher". Muestra todos los comercios del dueño y accesos rápidos."""
 
+import html
 from datetime import date
 
 import streamlit as st
 
 import operaciones as op
-from comun import RUBROS, aviso_temporada, pesos, plural, texto_vencimientos
+from comun import RUBROS, aviso_temporada, insignia, pesos, plural, texto_vencimientos
 
 dueno = st.session_state["dueno"]
-st.title(f"Hola, {dueno['nombre'].split()[0]} 👋")
-
 hoy = date.today()
-st.caption(f"Hoy es {hoy:%d/%m/%Y}. Los números se actualizan con cada venta que cargás.")
+with st.container(key="encabezado"):  # misma cabecera que las otras pantallas (ver comun.encabezado)
+    st.title(f"Hola, {dueno['nombre'].split()[0]} 👋")
+    st.caption(f"Hoy es {hoy:%d/%m/%Y}. Los números se actualizan con cada venta que cargás.")
 
 # Accesos rápidos a las pantallas
 accesos = st.columns(5)
@@ -46,8 +47,12 @@ for i, c in enumerate(comercios.itertuples()):
     total_mes += del_mes["total"]
     ganancia_mes += del_mes["ganancia"]
 
-    with columnas[i % len(columnas)].container(border=True):
-        st.markdown(f"### {c.nombre}")
+    caja = op.caja_abierta(c.id)
+    # Cada comercio en su tarjeta: arriba el nombre con el estado de la caja, como los proyectos en Supabase
+    with columnas[i % len(columnas)].container(border=True, key=f"tarjeta_comercio_{c.id}"):
+        estado = insignia("● Caja abierta", "verde") if caja else insignia("Caja cerrada")
+        st.markdown(f'<div class="tarjeta-titulo"><h3>{html.escape(c.nombre)}</h3>{estado}</div>',
+                    unsafe_allow_html=True)
         st.caption(f"{RUBROS.get(c.rubro, c.rubro)} · {c.direccion or ''}")
         if del_dia["cantidad"]:
             st.metric("Vendido hoy", pesos(del_dia["total"]))
@@ -62,13 +67,15 @@ for i, c in enumerate(comercios.itertuples()):
             else:
                 st.metric("Vendido hoy", pesos(0))
             st.caption(f"Hoy todavía no hay ventas · {pesos(del_mes['total'])} en el mes")
+        avisos = []
         if stock_bajo:
-            st.warning(f"{plural(stock_bajo, 'producto', 'productos')} con stock bajo")
+            avisos.append(insignia(f"{plural(stock_bajo, 'producto', 'productos')} con stock bajo", "amarilla"))
         if aviso := texto_vencimientos(op.avisos_vencimientos(c.id)):
-            st.error(f"🗓️ {aviso}")
-        caja = op.caja_abierta(c.id)
-        st.caption(f"🟢 Caja abierta por {caja['responsable']} desde las {caja['abierta']:%H:%M}" if caja
-                   else "🔒 Caja cerrada")
+            avisos.append(insignia(f"🗓️ {aviso}", "roja"))
+        if avisos:
+            st.markdown("".join(avisos), unsafe_allow_html=True)
+        if caja:
+            st.caption(f"Abierta por {caja['responsable']} desde las {caja['abierta']:%H:%M}")
         if st.button("Ir a la caja", key=f"abrir_{c.id}", on_click=elegir_comercio, args=(c.nombre,)):
             st.switch_page("paginas/caja.py")
 

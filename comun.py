@@ -1,5 +1,6 @@
 """Cosas que usan varias pantallas: formato de pesos, comercio elegido, etc."""
 
+import html
 import json
 from datetime import date
 
@@ -79,8 +80,12 @@ ESTILOS = """<style>
 .stApp hr { border-color: var(--borde) !important; }
 
 /* Títulos sobrios, como en Supabase: no tan gigantes ni tan gruesos */
-.stApp h1 { font-size: 2rem !important; font-weight: 700 !important; letter-spacing: -0.02em; }
-.stApp h2, .stApp h3 { font-weight: 650 !important; letter-spacing: -0.01em; }
+.stApp h1 { font-size: 1.85rem !important; font-weight: 600 !important; letter-spacing: -0.02em; }
+.stApp h2, .stApp h3 { font-weight: 600 !important; letter-spacing: -0.01em; }
+.stApp h3 { font-size: 1.3rem !important; }
+/* La cabecera de cada pantalla (encabezado() en este archivo): dónde estás, el título y una línea abajo */
+.st-key-encabezado { border-bottom: 1px solid var(--borde); border-radius: 0 !important; padding-bottom: 0.9rem; margin-bottom: 0.6rem; }
+.st-key-encabezado [data-testid="stCaptionContainer"] p { font-size: 0.95rem; font-weight: 500; }
 .stApp [data-testid="stHeaderActionElements"] { display: none; }
 /* El nombre del comercio en la barra de la izquierda: más chico, para que entre en una línea */
 .stApp [data-testid="stSidebar"] h1 { font-size: 1.35rem !important; }
@@ -96,7 +101,8 @@ ESTILOS = """<style>
 [data-testid="stTopNavDropdownLink"] p, [data-testid="stTopNavDropdownLink"] span { color: var(--texto) !important; }
 [data-testid="stTopNavDropdownLink"]:hover, [data-testid="stTopNavDropdownLink"][aria-current="page"] { background: var(--tarjeta-suave) !important; border-radius: 8px; }
 [data-testid="stPageLink"] a p { color: var(--texto) !important; }
-[data-testid="stPageLink"] a:hover { background: var(--tarjeta-suave) !important; }
+[data-testid="stMain"] [data-testid="stPageLink"] a { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 6px; padding: 0.45rem 0.8rem; }
+[data-testid="stPageLink"] a:hover { background: var(--tarjeta-suave) !important; border-color: var(--borde-fuerte) !important; }
 
 /* ---------- Textos ---------- */
 /* Nombres de los casilleros ("Día", "Producto", "Cantidad"...): más grandes y bien legibles */
@@ -109,24 +115,29 @@ ESTILOS = """<style>
 
 /* ---------- Tarjetas ---------- */
 /* Las cajas con borde (st.container(border=True)) y los desplegables: borde finito y esquinas suaves */
-.stApp [data-testid="stVerticalBlock"] { border-color: var(--borde) !important; border-radius: 12px; }
-[data-testid="stExpander"] details { border: 1px solid var(--borde) !important; border-radius: 12px !important; background: var(--tarjeta); }
+.stApp [data-testid="stVerticalBlock"] { border-color: var(--borde) !important; border-radius: 8px; }
+/* Las tarjetas de los comercios (Inicio): fondo propio, encabezado con el nombre y el estado */
+.stApp [class*="st-key-tarjeta"] { background: var(--tarjeta); border-radius: 8px; }
+[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [class*="st-key-tarjeta"]) { background: var(--tarjeta); border-color: var(--borde) !important; border-radius: 8px; }
+.tarjeta-titulo { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+.tarjeta-titulo h3 { margin: 0 !important; padding: 0 !important; }
+[class*="st-key-tarjeta"] [data-testid="stMetric"] { background: var(--tarjeta-suave); border-color: transparent; }
+[data-testid="stExpander"] details { border: 1px solid var(--borde) !important; border-radius: 8px !important; background: var(--tarjeta); }
 [data-testid="stExpander"] summary, [data-testid="stExpander"] summary p { color: var(--texto) !important; }
 [data-testid="stExpander"] summary:hover { background: var(--tarjeta-suave); }
 
 /* Cada número grande en su propia tarjeta, como los paneles de Supabase */
 [data-testid="stMetric"] {
-    background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px;
-    padding: 14px 18px; box-shadow: var(--sombra);
+    background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 8px;
+    padding: 14px 18px;
 }
-[data-testid="stMetricLabel"] p { font-size: 0.85rem !important; font-weight: 600; text-transform: uppercase;
-                                  letter-spacing: 0.04em; color: var(--texto-suave) !important; }
+[data-testid="stMetricLabel"] p { font-size: 0.95rem !important; font-weight: 500; color: var(--texto-suave) !important; }
 [data-testid="stMetricValue"], [data-testid="stMetricValue"] div { font-weight: 500; color: var(--texto) !important; }
 /* La flechita de "vs. el período anterior": en el tema oscuro, más clara para que se lea */
 [data-testid="stMetricDelta"] { filter: var(--filtro-flechas); }
 
 /* Avisos (info, éxito, cuidado, error): fondo suave del color, con borde, que se lee en los dos temas */
-[data-testid="stAlertContainer"] { border: 1px solid var(--borde); border-radius: 12px; }
+[data-testid="stAlertContainer"] { border: 1px solid var(--borde); border-radius: 8px; }
 [data-testid="stAlertContainer"]:has([data-testid="stAlertContentInfo"]) { background: color-mix(in srgb, #3B82F6 12%, transparent) !important; border-color: color-mix(in srgb, #3B82F6 35%, transparent); }
 [data-testid="stAlertContainer"]:has([data-testid="stAlertContentSuccess"]) { background: color-mix(in srgb, #22C55E 12%, transparent) !important; border-color: color-mix(in srgb, #22C55E 35%, transparent); }
 [data-testid="stAlertContainer"]:has([data-testid="stAlertContentWarning"]) { background: color-mix(in srgb, #EAB308 14%, transparent) !important; border-color: color-mix(in srgb, #EAB308 40%, transparent); }
@@ -136,13 +147,22 @@ ESTILOS = """<style>
 [data-testid="stAlertContentWarning"], [data-testid="stAlertContentWarning"] p { color: var(--aviso-cuidado) !important; }
 [data-testid="stAlertContentError"], [data-testid="stAlertContentError"] p { color: var(--aviso-error) !important; }
 
+/* ---------- Insignias ---------- */
+/* Etiquetitas de estado (Caja abierta, Stock bajo...), hechas con insignia() de este archivo */
+.insignia { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.15rem 0.6rem; border-radius: 999px;
+            font-size: 0.88rem; font-weight: 500; border: 1px solid var(--borde); color: var(--texto-suave);
+            background: var(--tarjeta-suave); margin: 0 0.35rem 0.35rem 0; }
+.insignia-verde { color: var(--aviso-exito); background: color-mix(in srgb, #22C55E 12%, transparent); border-color: color-mix(in srgb, #22C55E 40%, transparent); }
+.insignia-amarilla { color: var(--aviso-cuidado); background: color-mix(in srgb, #EAB308 14%, transparent); border-color: color-mix(in srgb, #EAB308 45%, transparent); }
+.insignia-roja { color: var(--aviso-error); background: color-mix(in srgb, #EF4444 12%, transparent); border-color: color-mix(in srgb, #EF4444 40%, transparent); }
+
 /* ---------- Casilleros ---------- */
 .stApp [data-testid="stTextInputRootElement"], .stApp [data-testid="stTextAreaRootElement"],
 .stApp [data-testid="stSelectbox"] [role="group"], .stApp [data-testid="stMultiSelect"] [role="group"],
 .stApp [data-testid="stNumberInputContainer"], .stApp [data-testid="stDateInputField"],
 .stApp [data-baseweb="input"], .stApp [data-baseweb="base-input"], .stApp [data-baseweb="textarea"],
 .stApp [data-baseweb="select"] > div {
-    background: var(--tarjeta) !important; border-color: var(--borde) !important; border-radius: 8px !important;
+    background: var(--casillero) !important; border-color: var(--borde) !important; border-radius: 6px !important;
 }
 .stApp input, .stApp textarea, .stApp [data-baseweb="select"] div { color: var(--texto) !important; -webkit-text-fill-color: var(--texto); }
 .stApp input::placeholder, .stApp textarea::placeholder { color: var(--texto-suave) !important; -webkit-text-fill-color: var(--texto-suave); opacity: 1; }
@@ -213,14 +233,14 @@ ESTILOS = """<style>
 
 /* ---------- Botones ---------- */
 .stButton button, .stFormSubmitButton button, .stDownloadButton button, .stLinkButton a {
-    min-height: 2.75rem; font-weight: 600; border-radius: 8px !important;
+    min-height: 2.6rem; font-weight: 500; border-radius: 6px !important;
 }
-/* El principal (Cobrar, Entrar, Abrir caja...): verde sólido */
+/* El principal (Cobrar, Entrar, Abrir caja...): verde, con el borde un poco distinto como en Supabase */
 .stApp [data-testid="stBaseButton-primary"], .stApp [data-testid="stBaseButton-primaryFormSubmit"] {
-    background: var(--acento) !important; border: 1px solid var(--acento) !important;
+    background: var(--boton) !important; border: 1px solid var(--boton-borde) !important;
 }
 .stApp [data-testid="stBaseButton-primary"] p, .stApp [data-testid="stBaseButton-primaryFormSubmit"] p,
-.stApp [data-testid="stBaseButton-primary"] span, .stApp [data-testid="stBaseButton-primaryFormSubmit"] span { color: var(--texto-acento) !important; }
+.stApp [data-testid="stBaseButton-primary"] span, .stApp [data-testid="stBaseButton-primaryFormSubmit"] span { color: var(--boton-texto) !important; }
 .stApp [data-testid="stBaseButton-primary"]:hover, .stApp [data-testid="stBaseButton-primaryFormSubmit"]:hover { filter: brightness(0.95); }
 /* Los demás: fondo de tarjeta con borde */
 .stApp [data-testid="stBaseButton-secondary"], .stApp [data-testid="stBaseButton-secondaryFormSubmit"],
@@ -336,10 +356,16 @@ def comercio_actual():
 
 
 def encabezado(icono, titulo, comercio=None):
-    """Título de cada pantalla, con el comercio elegido abajo."""
-    st.title(f"{icono} {titulo}")
-    if comercio:
-        st.caption(f"{RUBROS.get(comercio['rubro'], '🏪')} · **{comercio['nombre']}**")
+    """Cabecera de cada pantalla, como en Supabase: arriba en qué comercio estás, el título y una línea abajo."""
+    with st.container(key="encabezado"):
+        if comercio:
+            st.caption(f"{RUBROS.get(comercio['rubro'], '🏪')} · {comercio['nombre']}")
+        st.title(f"{icono} {titulo}")
+
+
+def insignia(texto, color="gris"):
+    """Una etiquetita de estado (verde, amarilla, roja o gris). Devuelve HTML para st.markdown(..., unsafe_allow_html=True)."""
+    return f'<span class="insignia insignia-{color}">{html.escape(texto)}</span>'
 
 
 def dejar_listo_el_lector(etiqueta, forzar=False):

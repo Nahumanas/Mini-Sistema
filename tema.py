@@ -5,7 +5,7 @@ Cómo funciona (sin recargar la página):
 - Los estilos de comun.ESTILOS usan solo esas variables, nunca un color fijo.
 - Cambiar el tema es cambiar esas pocas variables: el navegador repinta todo al instante.
 - Lo que elige el jefe se guarda en la base (duenos.tema). Al volver a entrar sigue igual,
-  y sus empleados ven el mismo tema.
+  y sus empleados arrancan con ese tema (ellos también pueden cambiarlo mientras están adentro).
 
 Para cambiar los colores del sistema alcanza con tocar PALETAS.
 """
@@ -30,6 +30,10 @@ PALETAS = {
         "texto-suave": "#555E6B",    # ayudas y títulos de las tarjetas (con buen contraste igual)
         "acento": "#3ECF8E",         # botón principal (Cobrar), casilleros elegidos
         "acento-fuerte": "#1F9D63",  # textos y bordes verdes (más oscuro, para que se lea en blanco)
+        "boton": "#3ECF8E",          # botón principal (Cobrar, Entrar...)
+        "boton-borde": "#2FB57A",
+        "boton-texto": "#0B2E1E",
+        "casillero": "#FFFFFF",      # fondo de los casilleros para escribir
         "texto-acento": "#0B2E1E",   # letra arriba del verde
         "positivo": "#15803D",       # vuelto, ganancia
         "aviso-info": "#1E4FA8",     # letra de los avisos de cada tipo
@@ -52,6 +56,10 @@ PALETAS = {
         "texto-suave": "#A3ADBB",
         "acento": "#3ECF8E",
         "acento-fuerte": "#3ECF8E",
+        "boton": "#006239",          # en oscuro, Supabase usa un verde profundo con borde verde claro
+        "boton-borde": "#3ECF8E",
+        "boton-texto": "#FFFFFF",
+        "casillero": "#0D1117",
         "texto-acento": "#07261A",
         "positivo": "#4ADE80",
         "aviso-info": "#93C5FD",
@@ -104,12 +112,29 @@ def _al_cambiar():
     nuevo = "oscuro" if st.session_state["switch_tema"] else "claro"
     st.session_state["tema"] = nuevo
     dueno = st.session_state.get("dueno")
-    if dueno and not MODO_DEMO:
+    # Lo que elige el jefe queda guardado; lo que elige un empleado, solo mientras está adentro
+    if dueno and st.session_state.get("rol") == "jefe" and not MODO_DEMO:
         op.guardar_tema(dueno["id"], nuevo)
 
 
+def logo():
+    """El logo de arriba a la izquierda: un cuadradito verde con una tiendita y el nombre del sistema.
+    Es un dibujo (SVG) hecho acá mismo; va en dos versiones porque el texto cambia de color con el tema."""
+    texto = PALETAS[tema_activo()]["texto"]
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="176" height="32" viewBox="0 0 176 32">
+  <rect x="0" y="0" width="32" height="32" rx="8" fill="#3ECF8E"/>
+  <path d="M8 13 L10 8 H22 L24 13 Z" fill="#0B2E1E"/>
+  <rect x="9" y="14" width="14" height="10" rx="1.5" fill="none" stroke="#0B2E1E" stroke-width="2"/>
+  <rect x="14" y="18" width="4" height="6" fill="#0B2E1E"/>
+  <text x="42" y="22" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="17" font-weight="700"
+        fill="{texto}">Mini-Sistema</text>
+</svg>"""
+
+
 def switch_tema():
-    """El botón "Modo oscuro" de la barra de la izquierda (solo lo ve el jefe)."""
+    """El botón "Modo oscuro" de la barra de la izquierda (lo ven el jefe y los empleados)."""
     st.session_state["switch_tema"] = tema_activo() == "oscuro"
-    st.toggle("🌙 Modo oscuro", key="switch_tema", on_change=_al_cambiar,
-              help="Cambia los colores del sistema. Queda guardado para la próxima vez y para tus empleados.")
+    ayuda = ("Cambia los colores del sistema. Queda guardado para la próxima vez y para tus empleados."
+             if st.session_state.get("rol") == "jefe" else
+             "Cambia los colores del sistema mientras estés adentro. Al entrar, se usan los que eligió el jefe.")
+    st.toggle("🌙 Modo oscuro", key="switch_tema", on_change=_al_cambiar, help=ayuda)

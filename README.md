@@ -18,7 +18,7 @@ Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 - **Jefe y empleado:** el jefe entra con su PIN y ve todo; el empleado ve la Caja y solo lo que el jefe le habilite.
 - **Reportes** por semana, mes o fechas, en pantalla y en Excel con gráficos. El del mes pasado se guarda solo; el semanal se activa en temporada alta.
 - **Panel del día** que se actualiza solo, **stock** con avisos de reposición, **compras**, **gastos**, **ticket en PDF** e **importar/exportar Excel**.
-- **Modo claro u oscuro:** el jefe lo cambia con el botón 🌙 de la barra de la izquierda, al instante. Queda guardado para la próxima vez y sus empleados ven lo mismo.
+- **Modo claro u oscuro:** se cambia con el botón 🌙 de la barra de la izquierda, al instante. Lo que elige el jefe queda guardado y sus empleados arrancan con eso (también pueden cambiarlo mientras están adentro).
 
 | Caja | Cierre de caja |
 |---|---|

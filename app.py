@@ -46,6 +46,7 @@ import operaciones as op  # noqa: E402 (va después de recargar)
 import reportes
 from ingreso import pantalla_ingreso
 from comun import RUBROS, a_python, aplicar_estilos, correr_script, permisos_de
+import tema
 from tema import switch_tema
 from config import EN_STREAMLIT_CLOUD, FORMULARIO_RESENAS, MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE
 
@@ -91,6 +92,8 @@ correr_script("""
 
 # Colores del tema (claro u oscuro, ver tema.py), letra grande, botones cómodos y sin los detalles de Streamlit
 aplicar_estilos()
+# El logo arriba a la izquierda, como en los paneles de Supabase
+st.logo(tema.logo(), size="large")
 
 
 @st.cache_resource(show_spinner=False)
@@ -141,7 +144,6 @@ def boton_resena():
 rol = st.session_state.get("rol")
 if rol not in ("jefe", "empleado"):
     with st.sidebar:
-        st.title("🏪 Mini-Sistema")
         boton_resena()
         if PUEDE_APAGARSE and st.button("⏻ Apagar el sistema", width="stretch"):
             confirmar_apagado()
@@ -157,7 +159,7 @@ dueno = st.session_state["dueno"]
 comercios = op.listar_comercios(dueno["id"])  # se vuelven a leer por si el jefe cambió algo
 
 with st.sidebar:
-    st.title("🏪 Mini-Sistema")
+    # El nombre del sistema va en el logo de arriba (st.logo, ver tema.logo)
     if rol == "jefe":
         st.caption(f"🔑 Jefe · **{dueno['nombre']}**")
         switch_tema()  # modo claro / oscuro (tema.py), arriba para que se encuentre fácil
@@ -178,6 +180,7 @@ with st.sidebar:
     else:
         # El empleado queda fijo en el comercio con el que entró
         st.caption(f"👤 Empleado · **{st.session_state['nombre']}**")
+        switch_tema()
     fila = comercios[comercios["nombre"] == st.session_state.get("comercio_nombre")]
     st.session_state["comercio"] = a_python(fila.iloc[0]) if not fila.empty else None
     if rol == "empleado":

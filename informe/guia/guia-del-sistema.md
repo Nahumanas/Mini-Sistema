@@ -55,7 +55,7 @@ El sistema tiene tres partes, una encima de la otra:
 
 ### Modo claro u oscuro
 
-El jefe cambia los colores con el botón **🌙 Modo oscuro** de la barra de la izquierda. El cambio es al instante y queda guardado en la base (en la tabla `duenos`), así que al volver a entrar sigue igual y sus empleados ven los mismos colores. En la demo en línea no se guarda, porque todos los visitantes usan el mismo dueño.
+Los colores se cambian con el botón **🌙 Modo oscuro** de la barra de la izquierda, al instante. Lo que elige el jefe queda guardado en la base (en la tabla `duenos`): al volver a entrar sigue igual y sus empleados arrancan con esos colores. El empleado también puede cambiarlos, pero solo mientras está adentro. En la demo en línea no se guarda, porque todos los visitantes usan el mismo dueño.
 
 Cómo funciona: los colores de cada modo están en `tema.py`, como variables de CSS (`--fondo`, `--texto`, `--borde`, `--acento`...). Los estilos de `comun.py` usan solo esas variables, nunca un color fijo. Cambiar de modo es cambiar esas pocas variables, y el navegador repinta todo sin recargar la página. Para cambiar un color del sistema alcanza con tocarlo en `PALETAS`, dentro de `tema.py`.
 
