@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 import operaciones as op
+import tema
 from comun import MEDIOS_DE_PAGO, comercio_actual, encabezado, es_jefe, pesos
 
 comercio = comercio_actual()
@@ -42,6 +43,8 @@ def mostrar_panel(comercio_id, dia):
             return None
         return f"{(actual - anterior) / anterior:+.0%} vs. semana pasada"
 
+    # Cada número sale en su tarjeta (estilo en comun.ESTILOS). No hace falta pasarle colores:
+    # cuando el jefe cambia a modo oscuro, las tarjetas cambian solas porque usan las variables de tema.py
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Vendido", pesos(total), cambio(total, semana_pasada["total"]))
     m2.metric("Ventas", cantidad, cambio(cantidad, semana_pasada["cantidad"]))
@@ -65,14 +68,15 @@ def mostrar_panel(comercio_id, dia):
             .reindex(range(ventas["fecha"].dt.hour.min(), ventas["fecha"].dt.hour.max() + 1), fill_value=0)
         )
         por_hora.index = [f"{h:02d} h" for h in por_hora.index]
-        st.bar_chart(por_hora, y_label="$ vendido", x_label="Hora")
+        # Los gráficos sí reciben el color: tema.color() da el verde del tema que esté activo
+        st.bar_chart(por_hora, y_label="$ vendido", x_label="Hora", color=tema.color("acento"))
     with c2:
         st.subheader("Por medio de pago")
         por_medio = (
             ventas.groupby("medio_pago")["subtotal"].sum()
             .rename(index=MEDIOS_DE_PAGO).sort_values(ascending=False)
         )
-        st.bar_chart(por_medio, horizontal=True, x_label="$ vendido", y_label="")
+        st.bar_chart(por_medio, horizontal=True, x_label="", y_label="$ vendido", color=tema.color("acento"))
 
     c3, c4 = st.columns(2)
     with c3:

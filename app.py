@@ -46,6 +46,7 @@ import operaciones as op  # noqa: E402 (va después de recargar)
 import reportes
 from ingreso import pantalla_ingreso
 from comun import RUBROS, a_python, aplicar_estilos, correr_script, permisos_de
+from tema import switch_tema
 from config import EN_STREAMLIT_CLOUD, FORMULARIO_RESENAS, MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE
 
 _fechas_al_arrancar().update(_fechas_actuales())  # anota cómo estaban los archivos que se usaron
@@ -88,7 +89,7 @@ correr_script("""
     }
 """)
 
-# Letra más grande y oscura, botones cómodos y sin los detalles de Streamlit (ver ESTILOS en comun.py)
+# Colores del tema (claro u oscuro, ver tema.py), letra grande, botones cómodos y sin los detalles de Streamlit
 aplicar_estilos()
 
 
@@ -186,6 +187,8 @@ with st.sidebar:
         st.markdown(f"{RUBROS.get(comercio['rubro'], '🏪')[:1]} **{comercio['nombre']}**")
 
     st.divider()
+    if rol == "jefe":
+        switch_tema()  # modo claro / oscuro (tema.py)
     if st.button("🚪 Salir", width="stretch", help="Vuelve a la pantalla para ingresar."):
         # Para que al volver a entrar ya estén elegidos el mismo dueño y el mismo comercio
         st.session_state["ultimo_ingreso"] = ((st.session_state.get("dueno") or {}).get("nombre"),

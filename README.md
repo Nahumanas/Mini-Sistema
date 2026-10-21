@@ -18,12 +18,15 @@ Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 - **Jefe y empleado:** el jefe entra con su PIN y ve todo; el empleado ve la Caja y solo lo que el jefe le habilite.
 - **Reportes** por semana, mes o fechas, en pantalla y en Excel con gráficos. El del mes pasado se guarda solo; el semanal se activa en temporada alta.
 - **Panel del día** que se actualiza solo, **stock** con avisos de reposición, **compras**, **gastos**, **ticket en PDF** e **importar/exportar Excel**.
+- **Modo claro u oscuro:** el jefe lo cambia con el botón 🌙 de la barra de la izquierda, al instante. Queda guardado para la próxima vez y sus empleados ven lo mismo.
 
 | Caja | Cierre de caja |
 |---|---|
 | ![Caja](informe/capturas/caja.png) | ![Arqueo al cerrar la caja](informe/capturas/arqueo.png) |
 | **Reportes** | **Ingreso como jefe o empleado** |
 | ![Reportes](informe/capturas/reportes.png) | ![Ingreso](informe/capturas/ingreso.png) |
+| **Panel del día** | **Modo oscuro** |
+| ![Panel del día](informe/capturas/panel.png) | ![Inicio en modo oscuro](informe/capturas/modo-oscuro.png) |
 
 **Hecho con:** Python, pandas, SQLAlchemy, SQLite y Streamlit. Los reportes en Excel se arman con openpyxl y el ticket con fpdf2. La base está escrita con SQLAlchemy para pasarla a PostgreSQL en la nube (Supabase) cambiando una sola línea.
 
@@ -124,7 +127,8 @@ En **Control → Reportes** elegís el **período** (una semana, un mes o las fe
 | `informe/capturas/` | Capturas de pantalla del sistema. |
 | `informe/videos/` | Video tutorial completo, versión corta para LinkedIn y el GIF de la caja (los MP4 no se suben a GitHub). |
 | `informe/guia/` | La guía para entender todo el sistema (en .md y en Word). |
-| `comun.py` | Cosas que comparten las pantallas (formato de pesos, medios de pago...). |
+| `comun.py` | Cosas que comparten las pantallas (formato de pesos, medios de pago, los estilos...). |
+| `tema.py` | Los colores del modo claro y del oscuro, y el botón para cambiarlos. |
 | `config.py` | Dice dónde está la base. En el paso 5 (nube) solo se cambia esta línea. |
 | `base_datos.py` | Define las tablas y cómo se relacionan. |
 | `generar_datos_prueba.py` | Crea los comercios de prueba y simula 6 meses y medio de ventas, compras y gastos. |
@@ -132,7 +136,7 @@ En **Control → Reportes** elegís el **período** (una semana, un mes o las fe
 | `esquema.sql` | El SQL de las tablas, generado solo. Es para leerlo. |
 | `mini_sistema.db` | La base de datos SQLite. |
 | `iniciar.bat` | Doble clic para abrir el sistema en Windows. |
-| `.streamlit/config.toml` | Colores y opciones de Streamlit. |
+| `.streamlit/config.toml` | Tipografía y opciones de Streamlit (los colores están en `tema.py`). |
 
 ## Cómo están organizadas las tablas
 

@@ -51,6 +51,8 @@ duenos = Table(
     Column("email", String(100)),
     # PIN del jefe, guardado "encriptado" (nunca el número tal cual). Vacío = todavía no lo creó.
     Column("pin_hash", String(200)),
+    # Colores del sistema que eligió el jefe: "claro" u "oscuro" (ver tema.py)
+    Column("tema", String(10), nullable=False, server_default="claro"),
 )
 
 comercios = Table(
@@ -247,6 +249,7 @@ def actualizar_base(motor):
         ("compras", "cargada_por", "VARCHAR(100)"),
         ("ventas", "anulada", "DATETIME"),
         ("productos", "dias_duracion", "INTEGER"),
+        ("duenos", "tema", "VARCHAR(10) NOT NULL DEFAULT 'claro'"),
     ]
     for tabla, columna, tipo in nuevas:
         if columna not in {c["name"] for c in revisor.get_columns(tabla)}:

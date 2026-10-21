@@ -7,6 +7,7 @@ import streamlit as st
 import streamlit.components.v1 as componentes
 
 import operaciones as op
+import tema
 
 MEDIOS_DE_PAGO = {
     "efectivo": "Efectivo",
@@ -40,8 +41,10 @@ MESES_TEMPORADA = (12, 1, 2)  # diciembre, enero y febrero
 MES_FIN_TEMPORADA = 3         # en marzo sugiere apagarlo
 
 
-# Retoques visuales de todo el sistema (lo que no se puede cambiar desde .streamlit/config.toml).
-# Pensado para que se lea bien a cualquier edad: letra oscura, etiquetas más grandes y botones cómodos.
+# Retoques visuales de todo el sistema, al estilo de los paneles de Supabase: fondos lisos, bordes finitos,
+# esquinas suaves y cada número en su tarjeta. Pensado para que se lea bien a cualquier edad.
+# Los colores NO están acá: son variables (var(--texto), var(--acento)...) que pone tema.py según el tema
+# elegido (claro u oscuro). Así cambiar de tema es instantáneo y nunca queda un color "suelto".
 ESTILOS = """<style>
 /* Tipografía: Inter para todo (se lee muy bien en pantalla y sus números tienen todos el mismo ancho,
    así los precios quedan alineados) y Manrope para los títulos, que le da un toque propio.
@@ -60,28 +63,189 @@ ESTILOS = """<style>
 [data-testid="stStatusWidget"], [data-testid="stDecoration"], [data-testid="stMainMenu"],
 [data-testid="stAppDeployButton"], [data-testid="InputInstructions"], footer { display: none !important; }
 
-/* Menú de arriba: letra más grande */
-[data-testid="stTopNavLink"] p, [data-testid="stTopNavSection"] p { font-size: 1.05rem; font-weight: 600; }
+/* ---------- Estructura: fondo, barra de arriba y barra de la izquierda ---------- */
+.stApp, [data-testid="stMain"] { background: var(--fondo) !important; color: var(--texto); }
+.stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6, .stApp p, .stApp li, .stApp label { color: var(--texto); }
+[data-testid="stHeader"] { background: var(--lateral) !important; border-bottom: 1px solid var(--borde); }
+[data-testid="stSidebar"] { background: var(--lateral) !important; border-right: 1px solid var(--borde); }
+[data-testid="stSidebarCollapseButton"] button, [data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapsedControl"] button { color: var(--texto-suave) !important; }
+[data-testid="stMainBlockContainer"] { max-width: 1200px; padding-top: 4.5rem; }
+.stApp hr { border-color: var(--borde) !important; }
 
-/* Nombres de los casilleros ("Día", "Producto", "Cantidad"...): más grandes y oscuros */
-[data-testid="stWidgetLabel"] p { font-size: 1rem !important; font-weight: 600; color: #1B1F2A; }
+/* Títulos sobrios, como en Supabase: no tan gigantes ni tan gruesos */
+.stApp h1 { font-size: 2rem !important; font-weight: 700 !important; letter-spacing: -0.02em; }
+.stApp h2, .stApp h3 { font-weight: 650 !important; letter-spacing: -0.01em; }
+.stApp [data-testid="stHeaderActionElements"] { display: none; }
+/* El nombre del comercio en la barra de la izquierda: más chico, para que entre en una línea */
+.stApp [data-testid="stSidebar"] h1 { font-size: 1.35rem !important; }
 
-/* Textos chicos de ayuda: un poco más grandes y menos grises */
+/* Menú de arriba: letra más grande; la pantalla en la que estás, marcada como pestaña */
+[data-testid="stTopNavLink"] p, [data-testid="stTopNavSection"] p { font-size: 1.05rem; font-weight: 600; color: var(--texto) !important; }
+[data-testid="stTopNavSection"] svg { color: var(--texto-suave); }
+[data-testid="stTopNavLink"][aria-current="page"] { background: var(--tarjeta-suave) !important; border-radius: 8px; }
+[data-testid="stTopNavLink"]:hover, [data-testid="stTopNavSection"]:hover { background: var(--tarjeta-suave) !important; border-radius: 8px; }
+/* La lista que se abre al tocar "Control" o "Día a día" */
+[data-testid="stTopNavPopoverBody"] { background: var(--tarjeta) !important; border: 1px solid var(--borde); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
+[data-testid="stTopNavDropdownLink"] p, [data-testid="stTopNavDropdownLink"] span { color: var(--texto) !important; }
+[data-testid="stTopNavDropdownLink"]:hover, [data-testid="stTopNavDropdownLink"][aria-current="page"] { background: var(--tarjeta-suave) !important; border-radius: 8px; }
+[data-testid="stPageLink"] a p { color: var(--texto) !important; }
+[data-testid="stPageLink"] a:hover { background: var(--tarjeta-suave) !important; }
+
+/* ---------- Textos ---------- */
+/* Nombres de los casilleros ("Día", "Producto", "Cantidad"...): más grandes y bien legibles */
+[data-testid="stWidgetLabel"] p { font-size: 1rem !important; font-weight: 600; color: var(--texto) !important; }
+/* Textos chicos de ayuda: un poco más grandes y sin transparencia */
 [data-testid="stCaptionContainer"] { opacity: 1 !important; }
-[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { font-size: 0.95rem; color: #4A5162 !important; }
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { font-size: 0.95rem; color: var(--texto-suave) !important; }
+.stApp a { color: var(--acento-fuerte); }
+.stApp [data-testid="stMarkdownContainer"] code { background: var(--tarjeta-suave) !important; color: var(--texto) !important; border-radius: 6px; }
 
-/* Números grandes (vendido hoy, total...): el título arriba, legible */
-[data-testid="stMetricLabel"] p { font-size: 1rem; font-weight: 600; color: #3D4352; }
-[data-testid="stMetricValue"] { font-weight: 500; }
+/* ---------- Tarjetas ---------- */
+/* Las cajas con borde (st.container(border=True)) y los desplegables: borde finito y esquinas suaves */
+.stApp [data-testid="stVerticalBlock"] { border-color: var(--borde) !important; border-radius: 12px; }
+[data-testid="stExpander"] details { border: 1px solid var(--borde) !important; border-radius: 12px !important; background: var(--tarjeta); }
+[data-testid="stExpander"] summary, [data-testid="stExpander"] summary p { color: var(--texto) !important; }
+[data-testid="stExpander"] summary:hover { background: var(--tarjeta-suave); }
 
-/* Botones más cómodos de tocar */
+/* Cada número grande en su propia tarjeta, como los paneles de Supabase */
+[data-testid="stMetric"] {
+    background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px;
+    padding: 14px 18px; box-shadow: var(--sombra);
+}
+[data-testid="stMetricLabel"] p { font-size: 0.85rem !important; font-weight: 600; text-transform: uppercase;
+                                  letter-spacing: 0.04em; color: var(--texto-suave) !important; }
+[data-testid="stMetricValue"], [data-testid="stMetricValue"] div { font-weight: 500; color: var(--texto) !important; }
+
+/* Avisos (info, éxito, cuidado, error): fondo suave del color, con borde, que se lee en los dos temas */
+[data-testid="stAlertContainer"] { border: 1px solid var(--borde); border-radius: 12px; }
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentInfo"]) { background: color-mix(in srgb, #3B82F6 12%, transparent) !important; border-color: color-mix(in srgb, #3B82F6 35%, transparent); }
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentSuccess"]) { background: color-mix(in srgb, #22C55E 12%, transparent) !important; border-color: color-mix(in srgb, #22C55E 35%, transparent); }
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentWarning"]) { background: color-mix(in srgb, #EAB308 14%, transparent) !important; border-color: color-mix(in srgb, #EAB308 40%, transparent); }
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentError"]) { background: color-mix(in srgb, #EF4444 12%, transparent) !important; border-color: color-mix(in srgb, #EF4444 35%, transparent); }
+[data-testid="stAlertContentInfo"], [data-testid="stAlertContentInfo"] p { color: var(--aviso-info) !important; }
+[data-testid="stAlertContentSuccess"], [data-testid="stAlertContentSuccess"] p { color: var(--aviso-exito) !important; }
+[data-testid="stAlertContentWarning"], [data-testid="stAlertContentWarning"] p { color: var(--aviso-cuidado) !important; }
+[data-testid="stAlertContentError"], [data-testid="stAlertContentError"] p { color: var(--aviso-error) !important; }
+
+/* ---------- Casilleros ---------- */
+.stApp [data-testid="stTextInputRootElement"], .stApp [data-testid="stTextAreaRootElement"],
+.stApp [data-testid="stSelectbox"] [role="group"], .stApp [data-testid="stMultiSelect"] [role="group"],
+.stApp [data-testid="stNumberInputContainer"], .stApp [data-testid="stDateInputField"],
+.stApp [data-baseweb="input"], .stApp [data-baseweb="base-input"], .stApp [data-baseweb="textarea"],
+.stApp [data-baseweb="select"] > div {
+    background: var(--tarjeta) !important; border-color: var(--borde) !important; border-radius: 8px !important;
+}
+.stApp input, .stApp textarea, .stApp [data-baseweb="select"] div { color: var(--texto) !important; -webkit-text-fill-color: var(--texto); }
+.stApp input::placeholder, .stApp textarea::placeholder { color: var(--texto-suave) !important; -webkit-text-fill-color: var(--texto-suave); opacity: 1; }
+.stApp [data-baseweb="select"] svg, .stApp [data-testid="stNumberInputContainer"] svg { color: var(--texto-suave); }
+.stApp [data-testid="stNumberInputContainer"] button { background: transparent !important; color: var(--texto-suave) !important; }
+.stApp [data-testid="stTextInputRootElement"]:focus-within, .stApp [data-testid="stTextAreaRootElement"]:focus-within,
+.stApp [data-testid="stSelectbox"] [role="group"]:focus-within, .stApp [data-testid="stMultiSelect"] [role="group"]:focus-within,
+.stApp [data-testid="stNumberInputContainer"]:focus-within, .stApp [data-testid="stDateInputField"]:focus-within { border-color: var(--acento) !important; }
+.stApp [data-testid="stSelectbox"] svg, .stApp [data-testid="stMultiSelect"] svg,
+.stApp [data-testid="stDateInput"] svg { color: var(--texto-suave) !important; }
+.stApp [data-testid="stDateInputField"] span { color: var(--texto) !important; }
+/* La lista que se abre al elegir (productos, comercio...) y el calendario */
+[data-baseweb="popover"] > div, [data-baseweb="popover"] ul, [data-baseweb="menu"], [data-baseweb="calendar"],
+[data-baseweb="calendar"] > div { background: var(--tarjeta) !important; color: var(--texto) !important; }
+[data-baseweb="popover"] li, [data-baseweb="popover"] li div, [data-baseweb="calendar"] div,
+[data-baseweb="calendar"] button { color: var(--texto) !important; }
+[data-baseweb="popover"] li:hover, [data-baseweb="popover"] li[aria-selected="true"] { background: var(--tarjeta-suave) !important; }
+[data-baseweb="popover"] > div { border: 1px solid var(--borde); border-radius: 10px; }
+[data-testid="stSelectboxVirtualDropdown"], [role="listbox"] {
+    background: var(--tarjeta) !important; color: var(--texto) !important; border-color: var(--borde) !important;
+}
+[role="listbox"] [role="option"], [role="listbox"] [role="option"] * { color: var(--texto) !important; }
+[role="listbox"] [role="option"]:hover, [role="listbox"] [role="option"][data-focused="true"],
+[role="listbox"] [role="option"][aria-selected="true"] { background: var(--tarjeta-suave) !important; }
+[data-testid="stDateInputCalendar"] {
+    background: var(--tarjeta) !important; color: var(--texto) !important; border: 1px solid var(--borde) !important; border-radius: 10px;
+}
+[data-testid="stDateInputCalendar"] h2, [data-testid="stDateInputCalendar"] th,
+[data-testid="stDateInputCalendar"] header button, [data-testid="stDateInputCalendar"] [role="button"]:not([data-disabled]):not([data-selected]) { color: var(--texto) !important; }
+[data-testid="stDateInputCalendar"] [role="button"]:not([data-selected]):hover { background: var(--tarjeta-suave) !important; }
+[data-testid="stDateInputCalendar"] [data-selected] { background: var(--acento) !important; color: var(--texto-acento) !important; }
+[data-testid="stDateInputCalendar"] select { background: var(--tarjeta) !important; color: var(--texto) !important; }
+[data-testid="stDateInputCalendar"] [data-disabled] { color: var(--texto-suave) !important; opacity: 0.45; }
+/* Casillas, opciones y el interruptor: el texto con el color del tema */
+.stApp [data-testid="stCheckbox"] p, .stApp [data-testid="stRadio"] p, .stApp [data-testid="stToggle"] p { color: var(--texto) !important; }
+/* El circulito de las opciones: vacío con borde, verde cuando está elegido */
+.stApp [data-testid="stRadioOption"] > div > div:first-child { background: var(--tarjeta) !important; border-color: var(--borde-fuerte) !important; }
+.stApp [data-testid="stRadioOption"][data-selected] > div > div:first-child { background: var(--acento) !important; border-color: var(--acento) !important; }
+.stApp [data-testid="stRadioOption"] > div > div:first-child > div { background: var(--tarjeta) !important; }
+/* El interruptor (Modo oscuro, Solo stock bajo...): gris apagado, verde prendido, la bolita siempre blanca */
+.stApp [data-testid="stCheckbox"] label:has(input[role="switch"]) > div:not([data-testid]) { background: var(--borde-fuerte) !important; }
+.stApp [data-testid="stCheckbox"] label[data-selected]:has(input[role="switch"]) > div:not([data-testid]) { background: var(--acento) !important; }
+.stApp [data-testid="stCheckbox"] label:has(input[role="switch"]) > div:not([data-testid]) > div { background: #FFFFFF !important; }
+/* La casilla para marcar (El cliente pide ticket...): vacía con borde, verde cuando está marcada */
+.stApp [data-testid="stCheckbox"] label:not(:has(input[role="switch"])) > div:not([data-testid]) {
+    background: var(--tarjeta) !important; border-color: var(--borde-fuerte) !important;
+}
+.stApp [data-testid="stCheckbox"] label[data-selected]:not(:has(input[role="switch"])) > div:not([data-testid]) {
+    background: var(--acento) !important; border-color: var(--acento) !important; color: var(--texto-acento) !important;
+}
+/* Lo elegido en una lista de varias opciones (por ejemplo los permisos del empleado) */
+.stApp [data-testid="stMultiSelect"] [data-tag] {
+    background: color-mix(in srgb, var(--acento) 16%, var(--tarjeta)) !important; border: 1px solid color-mix(in srgb, var(--acento) 45%, transparent);
+}
+.stApp [data-testid="stMultiSelect"] [data-tag] span, .stApp [data-testid="stMultiSelect"] [data-tag] button { color: var(--texto) !important; }
+/* El "?" de ayuda al lado de algunos nombres */
+.stApp [data-testid="stTooltipIcon"] svg { color: var(--texto-suave) !important; stroke: var(--texto-suave) !important; }
+
+/* ---------- Botones ---------- */
 .stButton button, .stFormSubmitButton button, .stDownloadButton button, .stLinkButton a {
-    min-height: 2.75rem; font-weight: 600;
+    min-height: 2.75rem; font-weight: 600; border-radius: 8px !important;
+}
+/* El principal (Cobrar, Entrar, Abrir caja...): verde sólido */
+.stApp [data-testid="stBaseButton-primary"], .stApp [data-testid="stBaseButton-primaryFormSubmit"] {
+    background: var(--acento) !important; border: 1px solid var(--acento) !important;
+}
+.stApp [data-testid="stBaseButton-primary"] p, .stApp [data-testid="stBaseButton-primaryFormSubmit"] p,
+.stApp [data-testid="stBaseButton-primary"] span, .stApp [data-testid="stBaseButton-primaryFormSubmit"] span { color: var(--texto-acento) !important; }
+.stApp [data-testid="stBaseButton-primary"]:hover, .stApp [data-testid="stBaseButton-primaryFormSubmit"]:hover { filter: brightness(0.95); }
+/* Los demás: fondo de tarjeta con borde */
+.stApp [data-testid="stBaseButton-secondary"], .stApp [data-testid="stBaseButton-secondaryFormSubmit"],
+.stApp .stDownloadButton button, .stApp .stLinkButton a, .stApp [data-testid="stBaseButton-tertiary"] {
+    background: var(--tarjeta) !important; border: 1px solid var(--borde) !important; color: var(--texto) !important;
+}
+.stApp [data-testid="stBaseButton-secondary"] p, .stApp [data-testid="stBaseButton-secondaryFormSubmit"] p,
+.stApp .stDownloadButton button p, .stApp .stLinkButton a p { color: var(--texto) !important; }
+.stApp [data-testid="stBaseButton-secondary"]:hover, .stApp [data-testid="stBaseButton-secondaryFormSubmit"]:hover,
+.stApp .stDownloadButton button:hover, .stApp .stLinkButton a:hover { background: var(--tarjeta-suave) !important; border-color: var(--borde-fuerte) !important; }
+.stApp button:disabled { opacity: 0.55; }
+/* Botones de a dos (Empleado / Jefe al entrar) */
+.stApp [data-testid="stButtonGroup"] button { background: var(--tarjeta) !important; border-color: var(--borde) !important; color: var(--texto) !important; }
+.stApp [data-testid="stButtonGroup"] button p { color: var(--texto) !important; }
+.stApp [data-testid="stButtonGroup"] button[aria-checked="true"], .stApp [data-testid="stButtonGroup"] button[kind*="Active"] {
+    border-color: var(--acento) !important; background: color-mix(in srgb, var(--acento) 14%, var(--tarjeta)) !important;
 }
 
-/* Caja: el total y el botón Cobrar bien grandes, que es lo que se mira y se toca con apuro */
-.st-key-total_a_cobrar [data-testid="stMetricValue"] { font-size: 3.4rem; font-weight: 600; color: #1B1F2A; }
-.st-key-vuelto [data-testid="stMetricValue"], .st-key-vuelto [data-testid="stMetricValue"] p { font-size: 2.6rem; font-weight: 600; color: #15803D; }
+/* ---------- Ventanas, avisos flotantes y archivos ---------- */
+[data-testid="stDialog"] [role="dialog"] { background: var(--tarjeta) !important; color: var(--texto) !important; border: 1px solid var(--borde); }
+[data-testid="stDialog"] [role="dialog"] h2, [data-testid="stDialog"] [role="dialog"] button[aria-label="Close"] { color: var(--texto) !important; }
+[data-testid="stToast"] { background: var(--tarjeta) !important; color: var(--texto) !important; border: 1px solid var(--borde); }
+[data-testid="stToast"] p { color: var(--texto) !important; }
+[data-testid="stFileUploaderDropzone"] { background: var(--tarjeta-suave) !important; border: 1px dashed var(--borde-fuerte); }
+[data-testid="stFileUploaderDropzone"] span, [data-testid="stFileUploaderDropzone"] small { color: var(--texto-suave) !important; }
+
+/* ---------- Tablas y gráficos ---------- */
+/* Las tablas se dibujan como imagen y no toman colores de CSS: en el tema oscuro se "dan vuelta"
+   (claro ↔ oscuro) manteniendo los colores, así no queda un recuadro blanco en la pantalla oscura */
+[data-testid="stDataFrame"], [data-testid="stDataEditor"], [data-testid="stTable"] {
+    border: 1px solid var(--borde-tablas); border-radius: 10px; overflow: hidden; filter: var(--filtro-tablas);
+}
+/* Gráficos: textos de los ejes y líneas con los colores del tema */
+[data-testid="stVegaLiteChart"] svg.marks { background: transparent !important; }
+[data-testid="stVegaLiteChart"] text { fill: var(--texto-suave) !important; }
+[data-testid="stVegaLiteChart"] .mark-rule line, [data-testid="stVegaLiteChart"] .domain,
+[data-testid="stVegaLiteChart"] .tick line { stroke: var(--borde) !important; }
+
+/* ---------- Caja ---------- */
+/* El total y el botón Cobrar bien grandes, que es lo que se mira y se toca con apuro */
+.st-key-total_a_cobrar [data-testid="stMetricValue"] { font-size: 3.4rem; font-weight: 600; }
+.st-key-vuelto [data-testid="stMetricValue"], .st-key-vuelto [data-testid="stMetricValue"] p,
+.st-key-vuelto [data-testid="stMetricValue"] div { font-size: 2.6rem; font-weight: 600; color: var(--positivo) !important; }
 .st-key-boton_cobrar button { min-height: 3.6rem; }
 .st-key-boton_cobrar button p { font-size: 1.4rem; font-weight: 700; }
 
@@ -89,7 +253,7 @@ ESTILOS = """<style>
    (el nombre arriba; cantidad, precio y la X abajo) en vez de cuatro */
 @media (max-width: 640px) {
     [data-testid="stMainBlockContainer"] { padding-top: 3.5rem; }
-    h1 { font-size: 2.1rem !important; }
+    h1 { font-size: 1.8rem !important; }
     [class*="st-key-fila_venta"] [data-testid="stHorizontalBlock"] { flex-wrap: wrap; gap: 0.25rem 0.75rem; }
     [class*="st-key-fila_venta"] [data-testid="stColumn"] { min-width: 0 !important; width: auto !important; flex: 1 1 0; }
     [class*="st-key-fila_venta"] [data-testid="stColumn"]:first-child { flex: 1 1 100%; }
@@ -100,8 +264,9 @@ ESTILOS = """<style>
 
 
 def aplicar_estilos():
-    """Pone los retoques visuales (ESTILOS) en la página. Se llama una vez desde app.py."""
-    st.html(ESTILOS)
+    """Pone en la página los colores del tema elegido (tema.py) y los retoques visuales (ESTILOS).
+    Se llama una vez desde app.py, en cada vuelta: el navegador solo repinta lo que cambió."""
+    st.html(tema.variables_css() + ESTILOS)
 
 
 def texto_vencimientos(avisos):

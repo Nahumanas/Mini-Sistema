@@ -94,6 +94,17 @@ def tiene_pin(dueno_id):
         return bool(con.execute(select(bd.duenos.c.pin_hash).where(bd.duenos.c.id == dueno_id)).scalar())
 
 
+def tema_del_dueno(dueno_id):
+    """'claro' u 'oscuro': los colores que eligió el jefe (ver tema.py)."""
+    with motor.connect() as con:
+        return con.execute(select(bd.duenos.c.tema).where(bd.duenos.c.id == dueno_id)).scalar()
+
+
+def guardar_tema(dueno_id, tema):
+    with motor.begin() as con:
+        con.execute(bd.duenos.update().where(bd.duenos.c.id == dueno_id).values(tema=tema))
+
+
 def guardar_pin(dueno_id, pin):
     sal = secrets.token_hex(16)
     with motor.begin() as con:

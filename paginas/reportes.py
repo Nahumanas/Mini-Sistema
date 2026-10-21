@@ -7,6 +7,7 @@ import streamlit as st
 
 import operaciones as op
 import reportes as rep
+import tema
 from comun import aviso_temporada, comercio_actual, encabezado, pesos, plural
 
 comercio = comercio_actual()
@@ -119,7 +120,7 @@ if gastos.empty:
     g2.caption("No hay gastos cargados para estas fechas.")
 else:
     por_categoria = gastos.groupby("categoria")["parte"].sum().sort_values(ascending=False)
-    g2.bar_chart(por_categoria, horizontal=True, x_label="$ del período", y_label="")
+    g2.bar_chart(por_categoria, horizontal=True, x_label="", y_label="$ del período", color=tema.color("acento"))
 
 # --- 4. ¿Qué se vende más? ---
 st.markdown("#### 4. ¿Qué se vende más?")

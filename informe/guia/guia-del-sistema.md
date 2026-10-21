@@ -53,6 +53,14 @@ El sistema tiene tres partes, una encima de la otra:
 | 🏬 Mis comercios | Crear comercios, prender el ticket, el resumen semanal, elegir qué ve el empleado y cambiar el PIN. | Jefe |
 | 📥 Importar / exportar Excel | Cargar o actualizar muchos productos de una vez con Excel. | Jefe |
 
+### Modo claro u oscuro
+
+El jefe cambia los colores con el botón **🌙 Modo oscuro** de la barra de la izquierda. El cambio es al instante y queda guardado en la base (en la tabla `duenos`), así que al volver a entrar sigue igual y sus empleados ven los mismos colores. En la demo en línea no se guarda, porque todos los visitantes usan el mismo dueño.
+
+Cómo funciona: los colores de cada modo están en `tema.py`, como variables de CSS (`--fondo`, `--texto`, `--borde`, `--acento`...). Los estilos de `comun.py` usan solo esas variables, nunca un color fijo. Cambiar de modo es cambiar esas pocas variables, y el navegador repinta todo sin recargar la página. Para cambiar un color del sistema alcanza con tocarlo en `PALETAS`, dentro de `tema.py`.
+
+Las tablas se dibujan como imagen y no toman colores de CSS: en modo oscuro se "dan vuelta" (blanco ↔ negro) para que no quede un recuadro blanco.
+
 ## 5. Jefe y empleado
 
 | | Jefe | Empleado |
@@ -171,7 +179,8 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 | `operaciones.py` | Todas las lecturas y escrituras en la base. |
 | `base_datos.py` | Define las tablas y las actualiza solas. |
 | `config.py` | Dice dónde está la base y si está en modo demo. |
-| `comun.py` | Lo que comparten las pantallas: formato de pesos, medios de pago, permisos, el lector. |
+| `comun.py` | Lo que comparten las pantallas: formato de pesos, medios de pago, permisos, el lector y los estilos. |
+| `tema.py` | Los colores del modo claro y del oscuro, y el botón para cambiarlos. |
 | `reportes.py` | Arma los Excel de reportes con gráficos. |
 | `ticket.py` | Arma el ticket en PDF. |
 | `generar_datos_prueba.py` | Crea 2 dueños, 4 comercios y 6 meses y medio de ventas de prueba. |

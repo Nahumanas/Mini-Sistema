@@ -5,6 +5,7 @@ CREATE TABLE duenos (
 	nombre VARCHAR(100) NOT NULL, 
 	email VARCHAR(100), 
 	pin_hash VARCHAR(200), 
+	tema VARCHAR(10) DEFAULT 'claro' NOT NULL, 
 	PRIMARY KEY (id)
 );
 

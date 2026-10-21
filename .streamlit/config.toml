@@ -1,12 +1,14 @@
 [theme]
 base = "light"
-primaryColor = "#1F6FEB"
+# Los colores de verdad (claro y oscuro) están en tema.py. Acá van los que usa Streamlit por dentro
+# (casillas marcadas, interruptores): el verde de Supabase y grises "transparentes" que sirven en los dos temas.
+primaryColor = "#3ECF8E"
 backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F2F4F8"
+secondaryBackgroundColor = "rgba(127, 127, 127, 0.12)"
 # Texto casi negro (en vez del gris de Streamlit) para que se lea bien sobre el fondo blanco
 textColor = "#1B1F2A"
 grayTextColor = "#4A5162"
-borderColor = "#D3D8E2"
+borderColor = "rgba(127, 127, 127, 0.28)"
 showWidgetBorder = true
 # Letra más grande (Streamlit trae 16). Tipografía: Inter para todo y Manrope para los títulos
 baseFontSize = 17
