@@ -70,7 +70,7 @@ Las tablas se dibujan como imagen y no toman colores de CSS: en modo oscuro se "
 | Qué ve | Todo, en todos sus comercios | Solo la Caja y lo que el jefe le habilite |
 | Costos y ganancia | Sí | No |
 | Historial y ajustes de cajas | Sí | Solo si el jefe le da el permiso "Ajustar cajas cerradas" |
-| Relevo de turno | Sí | Sí (ve solo lo de su turno) |
+| Relevo de turno | Sí | Solo si el jefe le da el permiso "Hacer el relevo de turno" (ve solo lo de su turno) |
 | Horarios y turnos del local | Los carga en Mis comercios | No |
 | Cargar lo que llega (Compras) | Sí | Sí, sin ver costos (el jefe se lo puede sacar) |
 | Crear productos | Sí (en Stock, o en el momento desde la Caja o Compras) | No: le avisa al jefe |
@@ -84,7 +84,7 @@ Las tablas se dibujan como imagen y no toman colores de CSS: en modo oscuro se "
 
 La caja se abre una vez a la mañana y se cierra una vez a la noche. En el medio, cuando cambia quien atiende, se hace un **relevo**:
 
-1. En la Caja, el que se va toca **🔄 Relevo de turno**.
+1. En la Caja se toca **🔄 Relevo de turno** (el jefe o el empleado autorizado).
 2. El sistema muestra cuánto debería haber en **su** turno: con lo que arrancó (el efectivo inicial, o lo que recibió en el relevo anterior) más lo que cobró en efectivo.
 3. Cuenta la plata, escribe cuánto hay y quién recibe la caja. Ve al instante si dio justo, si falta o si sobra.
 4. Toca **Registrar relevo**. La caja **sigue abierta** y ahora queda a nombre del que entró. Cada venta guarda quién estaba atendiendo.
@@ -97,7 +97,7 @@ En **Cajas anteriores → Turnos de una caja** se ve la línea de tiempo del dí
 - 14:02 hs · Relevo: Lucía le entregó a Martín · Turno Mañana: 5 ventas · contado $ 32.200 (debía haber $ 32.200) · 🟢 dio justo
 - 21:05 hs · Cerró Martín · Turno Tarde: 4 ventas · contado $ 48.800 (debía haber $ 49.300) · 🔴 faltan $ 500
 
-El empleado puede hacer el relevo, pero los turnos de otros solo los ve el jefe (o quien tenga el permiso **Ajustar cajas cerradas**).
+El relevo lo hace el jefe o el empleado al que le dé el permiso **🔄 Hacer el relevo de turno** en Mis comercios (viene apagado). Los turnos de otros solo los ve el jefe (o quien tenga el permiso **Ajustar cajas cerradas**).
 
 ### Horarios y turnos del local
 

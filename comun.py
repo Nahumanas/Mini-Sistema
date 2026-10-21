@@ -35,6 +35,7 @@ PERMISOS_EMPLEADO = {
     "gastos": "🧾 Gastos",
     "vencimientos": "🗓️ Vencimientos (cargar tandas y retirar lo vencido)",
     "ajustar_caja": "✏️ Ajustar cajas cerradas (ve las cajas anteriores)",
+    "relevo_turno": "🔄 Hacer el relevo de turno (contar la caja al cambiar de turno)",
 }
 
 # Temporada alta (verano): en estos meses el sistema sugiere activar el resumen semanal
