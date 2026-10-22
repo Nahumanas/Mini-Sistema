@@ -252,15 +252,35 @@ ESTILOS = """<style>
 .stApp [data-testid="stBaseButton-primary"] p, .stApp [data-testid="stBaseButton-primaryFormSubmit"] p,
 .stApp [data-testid="stBaseButton-primary"] span, .stApp [data-testid="stBaseButton-primaryFormSubmit"] span { color: var(--boton-texto) !important; }
 .stApp [data-testid="stBaseButton-primary"]:hover, .stApp [data-testid="stBaseButton-primaryFormSubmit"]:hover { filter: brightness(0.95); }
-/* Los demás: fondo de tarjeta con borde */
+/* Los demás: fondo de tarjeta con borde. También el botón que abre una ventanita (📅 Agregar al calendario)
+   y los botones de adentro de esa ventanita, que Streamlit dibuja aparte, fuera de .stApp */
 .stApp [data-testid="stBaseButton-secondary"], .stApp [data-testid="stBaseButton-secondaryFormSubmit"],
-.stApp .stDownloadButton button, .stApp .stLinkButton a, .stApp [data-testid="stBaseButton-tertiary"] {
+.stApp .stDownloadButton button, .stApp .stLinkButton a, .stApp [data-testid="stBaseButton-tertiary"],
+.stApp [data-testid="stPopoverButton"], .stApp [data-testid="stPopover"] button, [data-testid="stPopoverBody"] .stDownloadButton button,
+[data-testid="stPopoverBody"] .stLinkButton a, [data-testid="stPopoverBody"] .stButton button {
     background: var(--tarjeta) !important; border: 1px solid var(--borde) !important; color: var(--texto) !important;
 }
 .stApp [data-testid="stBaseButton-secondary"] p, .stApp [data-testid="stBaseButton-secondaryFormSubmit"] p,
-.stApp .stDownloadButton button p, .stApp .stLinkButton a p { color: var(--texto) !important; }
+.stApp .stDownloadButton button p, .stApp .stLinkButton a p, .stApp [data-testid="stPopoverButton"] p,
+.stApp [data-testid="stPopoverButton"] svg, .stApp [data-testid="stPopover"] button p, [data-testid="stPopoverBody"] .stDownloadButton button p,
+[data-testid="stPopoverBody"] .stLinkButton a p, [data-testid="stPopoverBody"] .stButton button p { color: var(--texto) !important; }
 .stApp [data-testid="stBaseButton-secondary"]:hover, .stApp [data-testid="stBaseButton-secondaryFormSubmit"]:hover,
-.stApp .stDownloadButton button:hover, .stApp .stLinkButton a:hover { background: var(--tarjeta-suave) !important; border-color: var(--borde-fuerte) !important; }
+.stApp .stDownloadButton button:hover, .stApp .stLinkButton a:hover, .stApp [data-testid="stPopoverButton"]:hover,
+.stApp [data-testid="stPopover"] button:hover,
+[data-testid="stPopoverBody"] .stDownloadButton button:hover, [data-testid="stPopoverBody"] .stLinkButton a:hover,
+[data-testid="stPopoverBody"] .stButton button:hover { background: var(--tarjeta-suave) !important; border-color: var(--borde-fuerte) !important; }
+/* Texto para copiar (el link de reservas del gimnasio) */
+.stApp [data-testid="stCode"] pre, .stApp [data-testid="stCode"] code {
+    background: var(--tarjeta-suave) !important; color: var(--texto) !important; border: 1px solid var(--borde);
+}
+.stApp [data-testid="stCode"] code span { color: var(--texto) !important; }
+/* La ventanita que se abre (📅 Agregar al calendario) */
+[data-testid="stPopoverBody"] { background: var(--tarjeta) !important; color: var(--texto) !important; border: 1px solid var(--borde) !important; }
+[data-testid="stPopoverBody"] p, [data-testid="stPopoverBody"] li, [data-testid="stPopoverBody"] strong,
+[data-testid="stPopoverBody"] label { color: var(--texto) !important; }
+[data-testid="stPopoverBody"] [data-testid="stCaptionContainer"],
+[data-testid="stPopoverBody"] [data-testid="stCaptionContainer"] *,
+[data-testid="stPopoverBody"] [data-testid="stImageCaption"] { color: var(--texto-suave) !important; }
 .stApp button:disabled { opacity: 0.55; }
 /* Botones de a dos (Empleado / Jefe al entrar) */
 .stApp [data-testid="stButtonGroup"] button { background: var(--tarjeta) !important; border-color: var(--borde) !important; color: var(--texto) !important; }
