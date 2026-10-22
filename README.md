@@ -99,12 +99,9 @@ Al jefe le llega un mensaje en Telegram cuando:
 | 🔄 Relevo de turno | Quién entregó y quién recibe, y si en ese turno faltó o sobró |
 | 📦 Falta de stock | Qué producto llegó al mínimo (un solo aviso, no uno por venta) |
 
-**Cómo se conecta (una sola vez):**
+**El jefe se conecta con 2 toques:** en **Mis comercios → 📲 Avisos al celular** toca **📲 Conectar con Telegram**, abre el link y toca **Iniciar** en Telegram. El sistema se da cuenta solo y el bot le escribe "Listo, quedaste conectado". No hace falta su número: se conecta con su cuenta de Telegram. Después elige qué avisos quiere en cada comercio, puede mandar un mensaje de prueba, apagarlos o desconectarse.
 
-1. En Telegram, el jefe le escribe `/newbot` a **@BotFather** y crea su bot. BotFather le da un **token** (una clave secreta).
-2. En **Mis comercios → 📲 Avisos al celular**, pega el token y toca **Guardar token**. Queda en el archivo `.env` de la carpeta del sistema (no se sube a GitHub).
-3. Toca **📲 Conectar con Telegram**, elige qué comercios le avisan, abre el link y toca **Iniciar** en Telegram. El sistema se da cuenta solo y le manda "Listo, quedaste conectado".
-4. En cada comercio elige qué avisos quiere, puede mandar un mensaje de prueba, apagarlos o desconectarse.
+**Quien instala el sistema crea el bot una sola vez:** le escribe `/newbot` a **@BotFather** en Telegram y guarda el **token** que le da en el `.env` de la carpeta (o lo pega en Mis comercios, que lo guarda ahí; no se sube a GitHub). En la nube va en los *Secrets* del servidor (`TELEGRAM_BOT_TOKEN`). Un solo bot sirve para todos los clientes.
 
 **Cómo funciona por dentro** (`notificaciones_telegram.py`):
 

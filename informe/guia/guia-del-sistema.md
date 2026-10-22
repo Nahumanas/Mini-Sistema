@@ -142,27 +142,33 @@ El jefe no está siempre en el local. Con un **bot de Telegram** (un "contacto" 
 
 Solo le llegan al **jefe**: el empleado no ve esta parte.
 
-**Paso 1 · Crear el bot (una sola vez, 2 minutos):**
+**Lo que hace el jefe para conectarse (2 toques, una sola vez):**
+
+1. Entra como jefe a **Configuración → Mis comercios** y baja hasta **📲 Avisos al celular**.
+2. Toca **📲 Conectar con Telegram** (puede elegir qué comercios le avisan; vienen todos marcados).
+3. Toca **Abrir el bot en Telegram** y, en Telegram, toca **Iniciar**. Si en la PC no tiene Telegram, copia el link y lo abre en el celular.
+4. Vuelve al sistema: en unos segundos aparece "Listo, tu celular quedó conectado" y el bot le escribe.
+
+No hace falta su número de teléfono: se conecta con su cuenta de Telegram (solo necesita tenerlo instalado).
+
+**Lo que hace quien instala el sistema (el dueño del software, una sola vez):** el jefe nunca ve esto.
 
 1. En Telegram, buscá **@BotFather** (tiene una tilde azul) y tocá **Iniciar**.
 2. Escribile `/newbot`.
-3. Te pide un **nombre**, el que vas a ver en los chats (ej.: *Avisos Ferretería*).
-4. Te pide un **usuario** que termine en `bot` y que nadie más tenga (ej.: `avisos_ferreteria_tito_bot`).
+3. Te pide un **nombre**, el que se ve en los chats (ej.: *Avisos Mini-Sistema*).
+4. Te pide un **usuario** que termine en `bot` y que nadie más tenga (ej.: `avisos_minisistema_bot`).
 5. Te responde con el **token**, algo como `123456789:AAH...`. Es la clave del bot: **no se la pases a nadie** ni la pegues en un chat.
+6. Ponelo en el sistema: en la PC, en **Mis comercios → 📲 Avisos al celular → Guardar token** (queda en el archivo `.env` de la carpeta, que no se sube a GitHub); en la nube, en los *Secrets* del servidor como `TELEGRAM_BOT_TOKEN`. Con un solo bot alcanza para todos los clientes.
 
-**Paso 2 · Pegar el token:** en **Mis comercios → 📲 Avisos al celular**, pegalo y tocá **Guardar token**. El sistema lo prueba con Telegram y lo guarda en el archivo `.env` de la carpeta (no se sube a GitHub).
-
-**Paso 3 · Conectar tu celular:** tocá **📲 Conectar con Telegram**, elegí qué comercios te avisan (vienen todos marcados), abrí el link y tocá **Iniciar**. En unos segundos el sistema se da cuenta solo y el bot te escribe "Listo, quedaste conectado".
-
-**Después:** en cada comercio podés elegir qué avisos querés, mandar un **mensaje de prueba**, apagar los avisos un rato o **desconectar**.
+**Después:** en cada comercio el jefe puede elegir qué avisos quiere, mandar un **mensaje de prueba**, apagar los avisos un rato o **desconectar**.
 
 **Cosas importantes:**
 
 - Los avisos salen **por detrás** (en segundo plano): la Caja no espera a Telegram. Si no hay internet, se cobra y se cierra igual; solo se pierde el aviso.
 - Cada aviso se busca por **comercio**: un comercio nunca le avisa al chat de otro dueño.
-- **Cómo funciona el link:** lleva un código de un solo uso (`token_vinculacion`). Al tocar Iniciar, Telegram le manda al bot `/start <código>`, el sistema lo lee, guarda tu chat (`telegram_chat_id`) y borra el código. Si en 10 minutos no tocás Iniciar, hay que pedir el link de nuevo.
+- **Cómo funciona el link:** lleva un código de un solo uso (`token_vinculacion`). Al tocar Iniciar, Telegram le manda al bot `/start <código>`, el sistema lo lee, guarda el chat del jefe (`telegram_chat_id`) y borra el código. Si en 10 minutos no toca Iniciar, hay que pedir el link de nuevo.
 - **En la demo** (internet) no se manda nada salvo que el token esté en los *Secrets* de Streamlit (`TELEGRAM_BOT_TOKEN`).
-- **En la nube** (más adelante) va a haber un solo bot del sistema para todos los clientes; cada jefe solo hace el paso 3.
+- **En la nube** (más adelante) va a haber un solo bot del sistema para todos los clientes; cada jefe solo hace sus 2 toques.
 
 ## 6. El lector de código de barras
 
