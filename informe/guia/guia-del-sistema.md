@@ -131,6 +131,39 @@ Para saber cuánto queda de cada tanda, el sistema cuenta que **siempre se vende
 
 Si no fue así (por ejemplo, se vendió pan de la tanda de hoy y quedó el de ayer), en **Vencimientos → Sacar de una tanda** se elige la tanda, cuántas salieron y por qué: **se vendió** (ya cobrado en la Caja: solo corrige de qué tanda salió), **se tiró** o **se regaló** (salen del stock y quedan como pérdida).
 
+### Avisos al celular por Telegram
+
+El jefe no está siempre en el local. Con un **bot de Telegram** (un "contacto" automático que manda mensajes) le llega al celular:
+
+- 🔓 **Apertura de caja:** quién abrió y con cuánto efectivo.
+- 🔔 **Cierre de caja:** quién cerró, cuántas ventas, efectivo esperado, efectivo contado y si **faltó o sobró**.
+- 🔄 **Relevo de turno:** quién entregó, quién recibe y cómo dio el efectivo de ese turno.
+- 📦 **Falta de stock:** cuando un producto llega al stock mínimo (por una venta o por retirar vencidos). Avisa una sola vez, cuando cruza el mínimo; no uno por cada venta que sigue.
+
+Solo le llegan al **jefe**: el empleado no ve esta parte.
+
+**Paso 1 · Crear el bot (una sola vez, 2 minutos):**
+
+1. En Telegram, buscá **@BotFather** (tiene una tilde azul) y tocá **Iniciar**.
+2. Escribile `/newbot`.
+3. Te pide un **nombre**, el que vas a ver en los chats (ej.: *Avisos Ferretería*).
+4. Te pide un **usuario** que termine en `bot` y que nadie más tenga (ej.: `avisos_ferreteria_tito_bot`).
+5. Te responde con el **token**, algo como `123456789:AAH...`. Es la clave del bot: **no se la pases a nadie** ni la pegues en un chat.
+
+**Paso 2 · Pegar el token:** en **Mis comercios → 📲 Avisos al celular**, pegalo y tocá **Guardar token**. El sistema lo prueba con Telegram y lo guarda en el archivo `.env` de la carpeta (no se sube a GitHub).
+
+**Paso 3 · Conectar tu celular:** tocá **📲 Conectar con Telegram**, elegí qué comercios te avisan (vienen todos marcados), abrí el link y tocá **Iniciar**. En unos segundos el sistema se da cuenta solo y el bot te escribe "Listo, quedaste conectado".
+
+**Después:** en cada comercio podés elegir qué avisos querés, mandar un **mensaje de prueba**, apagar los avisos un rato o **desconectar**.
+
+**Cosas importantes:**
+
+- Los avisos salen **por detrás** (en segundo plano): la Caja no espera a Telegram. Si no hay internet, se cobra y se cierra igual; solo se pierde el aviso.
+- Cada aviso se busca por **comercio**: un comercio nunca le avisa al chat de otro dueño.
+- **Cómo funciona el link:** lleva un código de un solo uso (`token_vinculacion`). Al tocar Iniciar, Telegram le manda al bot `/start <código>`, el sistema lo lee, guarda tu chat (`telegram_chat_id`) y borra el código. Si en 10 minutos no tocás Iniciar, hay que pedir el link de nuevo.
+- **En la demo** (internet) no se manda nada salvo que el token esté en los *Secrets* de Streamlit (`TELEGRAM_BOT_TOKEN`).
+- **En la nube** (más adelante) va a haber un solo bot del sistema para todos los clientes; cada jefe solo hace el paso 3.
+
 ## 6. El lector de código de barras
 
 El lector (la "pistola" del súper) se enchufa por USB y funciona como un teclado: lee el número del producto, lo "escribe" y aprieta Enter. No hay que instalar nada.
@@ -163,7 +196,8 @@ duenos
         ├── cajas   ── ajustes_caja, relevos_caja
         ├── ventas  ── ventas_detalle
         │     └── tickets
-        └── gastos
+        ├── gastos
+        └── configuracion_telegram
 ```
 
 | Tabla | Qué guarda |
@@ -181,6 +215,7 @@ duenos
 | `ventas` y `ventas_detalle` | Cada venta (fecha, medio de pago, total, caja, quién atendía, si se anuló) y sus productos con el precio **y el costo de ese día**. |
 | `tickets` | El número de ticket de las ventas que lo pidieron. |
 | `gastos` | Gastos del comercio por fecha y categoría. |
+| `configuracion_telegram` | Una fila por comercio: el chat de Telegram del jefe, el código del link para conectarse (se borra al usarlo), si los avisos están prendidos y cuáles quiere. |
 
 **¿Por qué ventas y ventas_detalle por separado?** Porque una venta (un cliente que paga) puede tener varios productos. `ventas` guarda el total y el medio de pago; `ventas_detalle` guarda cada producto.
 
@@ -216,6 +251,8 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 | `tema.py` | Los colores del modo claro y del oscuro, y el botón para cambiarlos. |
 | `reportes.py` | Arma los Excel de reportes con gráficos. |
 | `ticket.py` | Arma el ticket en PDF. |
+| `notificaciones_telegram.py` | Los avisos por Telegram: conectar el chat del jefe y mandar los mensajes en segundo plano. |
+| `.env` | Secretos de la PC, como el token del bot (no se sube a GitHub). |
 | `generar_datos_prueba.py` | Crea 2 dueños, 4 comercios y 6 meses y medio de ventas de prueba. |
 | `ver_resumen.py` | Consultas SQL de ejemplo. |
 | `olvide_mi_pin.py` | Borra el PIN del jefe si se lo olvidó. |
@@ -272,3 +309,7 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 | EAN-13 | El código de barras de 13 números de los productos (en Argentina empieza con 779). |
 | Repositorio | La carpeta del proyecto en GitHub, con todo su historial de cambios. |
 | Modo demo | El sistema con datos inventados, para mostrarlo sin riesgo. |
+| Bot de Telegram | Una cuenta automática de Telegram que manda mensajes. La crea el jefe con @BotFather. |
+| Token | La clave secreta de un bot. Con ella el sistema puede mandar mensajes en su nombre: no se comparte. |
+| Chat ID | El número con el que Telegram identifica tu chat. El sistema lo guarda al conectarte. |
+| Segundo plano | Algo que el programa hace por detrás, sin hacer esperar a quien está usando la pantalla. |

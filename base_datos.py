@@ -11,7 +11,8 @@ Cómo se relacionan las tablas:
             │     └── relevos_caja (cambios de turno con la caja abierta, con su conteo)
             ├── ventas  ── ventas_detalle    (lo que el comercio vende a clientes)
             │     └── tickets  (si el cliente pidió ticket)
-            └── gastos         (alquiler, luz, sueldos, etc.)
+            ├── gastos         (alquiler, luz, sueldos, etc.)
+            └── configuracion_telegram (a qué chat de Telegram le llegan los avisos al jefe)
 
 Las tablas están escritas con SQLAlchemy en vez de SQL a mano. La ventaja es que
 la misma definición sirve para SQLite hoy y para una base en la nube mañana.
@@ -33,6 +34,7 @@ from sqlalchemy import (
     Text,
     create_engine,
     false,
+    true,
     inspect,
     text,
 )
@@ -250,6 +252,27 @@ mermas = Table(
     Column("costo_unitario", Float, nullable=False),  # lo que costó cada unidad (lo que se pierde)
     Column("motivo", String(100), nullable=False),
     Column("hecho_por", String(100)),
+)
+
+
+# Avisos al celular del jefe por Telegram (ver notificaciones_telegram.py). Una fila por comercio:
+# así cada comercio manda sus avisos solo al chat que se conectó para ESE comercio.
+# El token del bot NO va acá: es secreto y vive en el .env (PC) o en los Secrets (nube).
+EVENTOS_TELEGRAM_INICIALES = "apertura,cierre,relevo,stock"
+configuracion_telegram = Table(
+    "configuracion_telegram",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False, unique=True),
+    # El chat del jefe (lo manda Telegram cuando el jefe toca "Iniciar" en el bot). Vacío = no conectado.
+    Column("telegram_chat_id", String(30)),
+    # Código de un solo uso que va en el link "Conectar con Telegram". Se borra al conectar.
+    Column("token_vinculacion", String(40)),
+    Column("activo", Boolean, nullable=False, default=True, server_default=true()),
+    # Qué avisos quiere el jefe, separados por coma: apertura, cierre, relevo, stock
+    Column("eventos", String(100), nullable=False, default=EVENTOS_TELEGRAM_INICIALES,
+           server_default=EVENTOS_TELEGRAM_INICIALES),
+    Column("conectado", DateTime),  # cuándo se conectó el chat
 )
 
 

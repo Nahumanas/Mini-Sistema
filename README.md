@@ -15,6 +15,7 @@ Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 - **Caja:** se abre con el efectivo inicial, se cobra producto por producto (descuenta el stock solo) y al cerrar hace el **arqueo**: cuánto efectivo debería haber, cuánto se contó y si sobra o falta. Si cambia quien atiende (mañana / tarde), se hace un **relevo de turno** sin cerrar la caja: el que se va cuenta el efectivo y queda anotado en qué turno faltó o sobró plata. Si pagan en efectivo, calcula el **vuelto**. Una caja cerrada no se puede modificar: si hubo un error, el jefe le hace un **ajuste** (anular una venta o corregir el conteo) que queda anotado con fecha, quién y por qué.
 - **Lector de código de barras:** en la Caja cada pasada suma el producto a la venta; en Compras pide la cantidad que llegó. Los códigos se cargan en el Excel de productos (o con el lector en Stock), y si aparece uno desconocido el jefe lo da de alta en el momento.
 - **Vencimientos:** para lo que dura pocos días (postres, lácteos, pan). Cada producto puede tener "Dura X días" y cada tanda que entra queda con su fecha. El sistema avisa qué vence hoy y qué hay que retirar, y lo que se tira queda anotado como pérdida en los reportes.
+- **Avisos al celular del jefe por Telegram:** cuando se abre o se cierra la caja (con el efectivo esperado, el contado y si faltó o sobró), en cada relevo de turno y cuando un producto llega al stock mínimo. Salen por detrás: la Caja no se demora y, si no hay internet, se cobra igual.
 - **Jefe y empleado:** el jefe entra con su PIN y ve todo; el empleado ve la Caja y solo lo que el jefe le habilite.
 - **Reportes** por semana, mes o fechas, en pantalla y en Excel con gráficos. El del mes pasado se guarda solo; el semanal se activa en temporada alta.
 - **Panel del día** que se actualiza solo, **stock** con avisos de reposición, **compras**, **gastos**, **ticket en PDF** e **importar/exportar Excel**.
@@ -28,7 +29,7 @@ Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 | **Panel del día** | **Modo oscuro** |
 | ![Panel del día](informe/capturas/panel.png) | ![Inicio en modo oscuro](informe/capturas/modo-oscuro.png) |
 
-**Hecho con:** Python, pandas, SQLAlchemy, SQLite y Streamlit. Los reportes en Excel se arman con openpyxl y el ticket con fpdf2. La base está escrita con SQLAlchemy para pasarla a PostgreSQL en la nube (Supabase) cambiando una sola línea.
+**Hecho con:** Python, pandas, SQLAlchemy, SQLite, Streamlit y la API de bots de Telegram. Los reportes en Excel se arman con openpyxl y el ticket con fpdf2. La base está escrita con SQLAlchemy para pasarla a PostgreSQL en la nube (Supabase) cambiando una sola línea.
 
 📘 **¿Querés entender cómo funciona todo?** Leé la [guía del sistema](informe/guia/guia-del-sistema.md).
 
@@ -87,6 +88,32 @@ Por ahora el dueño se elige de una lista. Con la nube (paso 5) se entra con Gma
 
 **Reseñas.** Si en los *Secrets* de la app se pone `FORMULARIO_RESENAS = "https://forms.gle/..."` (el link de un formulario de Google), aparece en la barra de la izquierda el botón **💬 Dejá tu reseña**. Las respuestas llegan a la planilla del formulario y no tocan la base de datos.
 
+## Avisos al celular (Telegram)
+
+Al jefe le llega un mensaje en Telegram cuando:
+
+| Aviso | Qué dice |
+|---|---|
+| 🔓 Apertura de caja | Quién abrió y con cuánto efectivo |
+| 🔔 Cierre de caja | Quién cerró, ventas, efectivo esperado, contado y si faltó o sobró |
+| 🔄 Relevo de turno | Quién entregó y quién recibe, y si en ese turno faltó o sobró |
+| 📦 Falta de stock | Qué producto llegó al mínimo (un solo aviso, no uno por venta) |
+
+**Cómo se conecta (una sola vez):**
+
+1. En Telegram, el jefe le escribe `/newbot` a **@BotFather** y crea su bot. BotFather le da un **token** (una clave secreta).
+2. En **Mis comercios → 📲 Avisos al celular**, pega el token y toca **Guardar token**. Queda en el archivo `.env` de la carpeta del sistema (no se sube a GitHub).
+3. Toca **📲 Conectar con Telegram**, elige qué comercios le avisan, abre el link y toca **Iniciar** en Telegram. El sistema se da cuenta solo y le manda "Listo, quedaste conectado".
+4. En cada comercio elige qué avisos quiere, puede mandar un mensaje de prueba, apagarlos o desconectarse.
+
+**Cómo funciona por dentro** (`notificaciones_telegram.py`):
+
+- La tabla `configuracion_telegram` tiene una fila por comercio (`comercio_id` único) con el chat del jefe (`telegram_chat_id`), el código de un solo uso del link (`token_vinculacion`), si está `activo` y qué `eventos` quiere. Cada aviso se busca por `comercio_id`: un comercio nunca le avisa al chat de otro.
+- El link es `https://t.me/<bot>?start=<código>`. Al tocar **Iniciar**, Telegram le manda al bot `/start <código>`; el sistema lo lee con `getUpdates`, guarda el chat en los comercios con ese código y borra el código. En la nube se puede cambiar por un *webhook* usando la misma función (`procesar_mensaje`).
+- `enviar_alerta_telegram(comercio_id, mensaje, parse_mode)` devuelve `True` si el mensaje llegó. Los avisos del sistema se mandan en un hilo aparte (segundo plano) con `requests` y un límite de 10 segundos; si falla, no rompe nada.
+- Los mensajes van en formato HTML de Telegram (negritas, emojis y renglones cortos para leerlos desde la notificación). Se eligió HTML y no Markdown porque un nombre como `Coca_Cola` rompe el formato Markdown.
+- **Demo:** sin el Secret `TELEGRAM_BOT_TOKEN` en Streamlit Cloud, no se manda ningún aviso.
+
 ## Próximo: la nube (paso 5)
 
 La base pasa de SQLite a **Supabase** (PostgreSQL en internet) y la página se sube a un servidor (**Render** o **Railway**). Como el sistema usa SQLAlchemy, para cambiar de base alcanza con cambiar la dirección en `config.py`. Así varios comercios usan la misma base y el dueño ve todo en vivo, también desde el celular.
@@ -120,6 +147,8 @@ En **Control → Reportes** elegís el **período** (una semana, un mes o las fe
 | `paginas/` | Una pantalla por archivo (caja.py, stock.py, etc.). |
 | `operaciones.py` | Todas las lecturas y escrituras en la base. Las pantallas no escriben SQL: llaman a estas funciones. |
 | `ticket.py` | Arma el ticket en PDF. |
+| `notificaciones_telegram.py` | Los avisos al celular del jefe por Telegram: conectar el chat y mandar los mensajes en segundo plano. |
+| `.env` | Secretos de la PC, como el token del bot de Telegram (se crea solo al pegarlo; no se sube a GitHub). |
 | `ingreso.py` | La pantalla para entrar como jefe o empleado. |
 | `olvide_mi_pin.py` | Borra el PIN del jefe si se lo olvidó. |
 | `reportes.py` | Arma el Excel (semanal, mensual o de otras fechas) con gráficos y guarda solos el de la semana y el mes pasados. |
@@ -152,7 +181,8 @@ duenos
         │     └── relevos_caja   cada cambio de turno con la caja abierta (lo que dio cada turno)
         ├── ventas  ── ventas_detalle    lo que se vende a clientes (cada venta queda en su caja)
         │     └── tickets    solo si el cliente pidió ticket
-        └── gastos           alquiler, luz, sueldos, impuestos
+        ├── gastos           alquiler, luz, sueldos, impuestos
+        └── configuracion_telegram   a qué chat de Telegram le llegan los avisos del jefe
 ```
 
 ¿Por qué ventas y ventas_detalle por separado? Porque una venta (un cliente que paga) puede tener varios productos. `ventas` guarda el total, la hora y el medio de pago; `ventas_detalle` guarda cada producto de esa venta. Con compras pasa lo mismo.

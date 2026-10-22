@@ -13,6 +13,7 @@ import pandas as pd
 from sqlalchemy import func, inspect, select
 
 import base_datos as bd
+import notificaciones_telegram as avisos
 
 motor = bd.obtener_motor()
 VALIDA = bd.ventas.c.anulada.is_(None)  # las ventas anuladas con un ajuste de caja no cuentan en ningún lado
@@ -246,12 +247,14 @@ def abrir_caja(comercio_id, responsable, monto_inicial):
         ).scalar()
         if abierta:
             return abierta
-        return con.execute(
+        caja_id = con.execute(
             bd.cajas.insert().values(
                 comercio_id=comercio_id, responsable=responsable, abierta=datetime.now(),
                 monto_inicial=monto_inicial,
             )
         ).inserted_primary_key[0]
+    avisos.avisar_apertura(comercio_id, responsable, monto_inicial)  # al celular del jefe, en segundo plano
+    return caja_id
 
 
 def resumen_caja(caja_id):
@@ -273,9 +276,13 @@ def resumen_caja(caja_id):
     }
 
 
-def cerrar_caja(caja_id, efectivo_contado, nota=None):
-    """Cierra la caja y guarda el arqueo. Una vez cerrada, ya no se le pueden cargar ventas."""
-    esperado = resumen_caja(caja_id)["efectivo_esperado"]
+def cerrar_caja(caja_id, efectivo_contado, nota=None, cerrada_por=None):
+    """Cierra la caja y guarda el arqueo. Una vez cerrada, ya no se le pueden cargar ventas.
+
+    cerrada_por: quién la cerró (para el aviso al jefe). Si no se dice, el que estaba atendiendo.
+    """
+    resumen = resumen_caja(caja_id)
+    esperado = resumen["efectivo_esperado"]
     with motor.begin() as con:
         cambiadas = con.execute(
             bd.cajas.update()
@@ -285,6 +292,8 @@ def cerrar_caja(caja_id, efectivo_contado, nota=None):
         ).rowcount
     if not cambiadas:
         raise CajaCerrada("Esta caja ya estaba cerrada.")
+    caja = resumen["caja"]
+    avisos.avisar_cierre(caja["comercio_id"], cerrada_por or caja["responsable"], resumen, efectivo_contado, nota)
 
 
 def listar_cajas(comercio_id, limite=30):
@@ -420,7 +429,9 @@ def registrar_relevo_turno(comercio_id, caja_id, empleado_sale, empleado_entra, 
         }
         relevo["id"] = con.execute(bd.relevos_caja.insert().values(**relevo)).inserted_primary_key[0]
         con.execute(bd.cajas.update().where(bd.cajas.c.id == caja_id).values(responsable=empleado_entra))
-    return {**relevo, "cantidad": actual["cantidad"], "total": actual["total"]}
+    relevo = {**relevo, "cantidad": actual["cantidad"], "total": actual["total"]}
+    avisos.avisar_relevo(comercio_id, relevo)
+    return relevo
 
 
 def linea_de_tiempo(comercio_id, caja_id):
@@ -717,6 +728,8 @@ def registrar_venta(comercio_id, items, medio_pago, con_ticket=False, caja_id=No
             .where(bd.productos.c.id.in_([i["producto_id"] for i in items]))
         ).all())
         total = sum(i["cantidad"] * i["precio_unitario"] for i in items)
+        ids = {i["producto_id"] for i in items}
+        sobre_el_minimo = _sobre_el_minimo(con, ids)
         venta_id = con.execute(
             bd.ventas.insert().values(
                 comercio_id=comercio_id, caja_id=caja_id, fecha=ahora, medio_pago=medio_pago, total=total,
@@ -740,7 +753,28 @@ def registrar_venta(comercio_id, items, medio_pago, con_ticket=False, caja_id=No
         if con_ticket:
             numero = _siguiente_numero_ticket(con, comercio_id)
             con.execute(bd.tickets.insert().values(venta_id=venta_id, numero=numero, fecha_emision=ahora))
+        llegaron = _llegaron_al_minimo(con, sobre_el_minimo)
+    avisos.avisar_stock_bajo(comercio_id, llegaron)
     return venta_id, numero
+
+
+def _sobre_el_minimo(con, producto_ids):
+    """De esos productos, los que todavía tienen más stock que el mínimo (antes de descontar)."""
+    p = bd.productos.c
+    return set(con.execute(select(p.id).where(p.id.in_(producto_ids), p.stock > p.stock_minimo)).scalars())
+
+
+def _llegaron_al_minimo(con, producto_ids):
+    """De los que estaban sobre el mínimo, los que ahora llegaron a él: (nombre, stock, mínimo).
+
+    Así el jefe recibe un solo aviso cuando el producto baja, y no uno por cada venta que sigue.
+    """
+    if not producto_ids:
+        return []
+    p = bd.productos.c
+    return [tuple(f) for f in con.execute(
+        select(p.nombre, p.stock, p.stock_minimo).where(p.id.in_(producto_ids), p.stock <= p.stock_minimo)
+    ).all()]
 
 
 def _siguiente_numero_ticket(con, comercio_id):
@@ -869,6 +903,7 @@ def retirar_vencidos(comercio_id, hecho_por=None):
     vencidas = vencidas[vencidas["dias"] < 0]
     ahora = datetime.now()
     with motor.begin() as con:
+        sobre_el_minimo = _sobre_el_minimo(con, {int(i) for i in vencidas["producto_id"]})
         for t in vencidas.itertuples():
             con.execute(
                 bd.productos.update().where(bd.productos.c.id == t.producto_id)
@@ -878,6 +913,8 @@ def retirar_vencidos(comercio_id, hecho_por=None):
                 comercio_id=comercio_id, producto_id=t.producto_id, fecha=ahora, cantidad=t.quedan,
                 costo_unitario=t.costo_unitario, motivo=f"Vencido el {t.vence:%d/%m}", hecho_por=hecho_por,
             ))
+        llegaron = _llegaron_al_minimo(con, sobre_el_minimo)
+    avisos.avisar_stock_bajo(comercio_id, llegaron)
     return int(vencidas["quedan"].sum()), float((vencidas["quedan"] * vencidas["costo_unitario"]).sum())
 
 
@@ -901,7 +938,9 @@ def sacar_de_tanda(comercio_id, lote_id, cantidad, motivo, hecho_por=None):
     with motor.begin() as con:
         con.execute(bd.lotes.update().where(bd.lotes.c.id == lote_id)
                     .values(cantidad=bd.lotes.c.cantidad - cantidad))
+        llegaron = []
         if motivo != "vendido":
+            sobre_el_minimo = _sobre_el_minimo(con, {int(tanda["producto_id"])})
             con.execute(
                 bd.productos.update().where(bd.productos.c.id == int(tanda["producto_id"]))
                 .values(stock=bd.productos.c.stock - cantidad)
@@ -911,6 +950,8 @@ def sacar_de_tanda(comercio_id, lote_id, cantidad, motivo, hecho_por=None):
                 cantidad=cantidad, costo_unitario=float(tanda["costo_unitario"]),
                 motivo=f"{MOTIVOS_SACAR[motivo]} (tanda del {tanda['fecha']:%d/%m})", hecho_por=hecho_por,
             ))
+            llegaron = _llegaron_al_minimo(con, sobre_el_minimo)
+    avisos.avisar_stock_bajo(comercio_id, llegaron)
 
 
 def mermas_de(comercio_ids, desde=None, hasta=None):

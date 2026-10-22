@@ -39,6 +39,19 @@ CREATE TABLE cajas (
 	FOREIGN KEY(comercio_id) REFERENCES comercios (id)
 );
 
+CREATE TABLE configuracion_telegram (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	telegram_chat_id VARCHAR(30), 
+	token_vinculacion VARCHAR(40), 
+	activo BOOLEAN DEFAULT 1 NOT NULL, 
+	eventos VARCHAR(100) DEFAULT 'apertura,cierre,relevo,stock' NOT NULL, 
+	conectado DATETIME, 
+	PRIMARY KEY (id), 
+	UNIQUE (comercio_id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id)
+);
+
 CREATE TABLE gastos (
 	id INTEGER NOT NULL, 
 	comercio_id INTEGER NOT NULL, 

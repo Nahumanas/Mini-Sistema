@@ -356,7 +356,7 @@ def cerrar_caja():
             st.error("Escribí cuánto efectivo contaste.")
             return
         try:
-            op.cerrar_caja(caja["id"], contado, nota.strip())
+            op.cerrar_caja(caja["id"], contado, nota.strip(), st.session_state.get("nombre") or caja["responsable"])
         except op.CajaCerrada:
             pass  # ya la había cerrado otra pantalla: se muestra igual el arqueo
         st.session_state.pop(clave_carrito, None)
