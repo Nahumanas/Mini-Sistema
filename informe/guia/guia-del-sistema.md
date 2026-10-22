@@ -241,7 +241,7 @@ Si el DNI no está, se lo da de alta en el momento. Si alguien pasa dos veces en
 
 ### Reservas desde el celular (la página del socio)
 
-El socio reserva solo, sin pasar por recepción. El jefe lo prende en **Planes y actividades → 📱 Reservas desde el celular** y ahí tiene:
+El socio reserva solo, sin pasar por recepción. **Viene apagada**: mientras tanto, el jefe y recepción anotan a los socios a mano (en Clases, en la ficha de Socios o en el Ingreso por DNI), con el mismo cupo y la misma lista de espera. Si el gimnasio la quiere, el jefe la prende en **Planes y actividades → 📱 Reservas desde el celular** y ahí tiene:
 
 - **El link del gimnasio** (por ejemplo `…/?reservar=k3Xp9qTw`) para mandarlo por WhatsApp o ponerlo en Instagram.
 - **El QR** para imprimir y pegar en el mostrador: el socio lo escanea con la cámara y le abre la página.
@@ -362,7 +362,7 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 
 - El código está en **GitHub**: https://github.com/Nahumanas/Mini-Sistema. Es el portfolio: cualquiera puede ver el código, el README y las capturas.
 - **No se suben** la base de datos, los reportes ni el plan interno (lo controla el archivo `.gitignore`).
-- **Modo demo:** en Streamlit Community Cloud se publica con `MODO_DEMO = "1"`. Si no hay base, la crea sola con datos de prueba, el PIN de jefe es **1234** y no aparece el botón de apagar. Además arma la **Panadería La Espiga** (vencimientos) y el **Gimnasio Fuerza Norte** (socios, cuotas y clases; el DNI `30000000` es de un socio de prueba). La página de reservas del socio de la demo es `https://mini-sistema-demo.streamlit.app/?reservar=fuerzanorte`.
+- **Modo demo:** en Streamlit Community Cloud se publica con `MODO_DEMO = "1"`. Si no hay base, la crea sola con datos de prueba, el PIN de jefe es **1234** y no aparece el botón de apagar. Además arma la **Panadería La Espiga** (vencimientos) y el **Gimnasio Fuerza Norte** (socios, cuotas y clases; el DNI `30000000` es de un socio de prueba). La página de reservas del socio viene apagada; si se prende, el link de la demo es `https://mini-sistema-demo.streamlit.app/?reservar=fuerzanorte`.
 - La demo está en **https://mini-sistema-demo.streamlit.app**. Cada vez que se sube un cambio a GitHub, se actualiza sola.
 - En Streamlit Cloud el sistema se muestra adentro de otra página (un marco). Por eso el JavaScript del sistema usa la página donde corre (`correr_script` en `comun.py`) y no la de "afuera": si no, el lector no quedaría listo para escanear.
 - **Reseñas:** con `FORMULARIO_RESENAS = "https://forms.gle/..."` en los Secrets de la demo aparece el botón **💬 Dejá tu reseña**, que abre un formulario de Google. Las respuestas quedan en una planilla de Google del dueño, no en la base (la demo en la nube borra la base cuando se reinicia).

@@ -18,7 +18,7 @@ import operaciones as op
 import operaciones_gimnasio as gim
 
 NOMBRE = "Gimnasio Fuerza Norte"
-CODIGO_WEB = "fuerzanorte"  # la página de reservas de la demo: …/?reservar=fuerzanorte
+CODIGO_WEB = "fuerzanorte"  # la página de reservas de la demo, si el jefe la prende: …/?reservar=fuerzanorte
 
 ACTIVIDADES = ["Crossfit", "Funcional", "Spinning", "Pesas libres"]
 
@@ -177,12 +177,13 @@ def _reservas_de_ejemplo(comercio_id, socios_ids, azar, ahora):
 
 def crear():
     """Crea el gimnasio de prueba para el primer dueño (solo en la demo en línea), si todavía no existe.
-    Le deja prendidas las reservas desde el celular, con un link fácil: …/?reservar=fuerzanorte."""
+    Las reservas desde el celular vienen apagadas (como en cualquier gimnasio), con un link fácil
+    para cuando el jefe las prenda: …/?reservar=fuerzanorte."""
     with op.motor.connect() as con:
         existente = con.execute(select(bd.comercios.c.id).where(bd.comercios.c.nombre == NOMBRE)).scalar()
         dueno_id = con.execute(select(bd.duenos.c.id).order_by(bd.duenos.c.id)).scalar()
     if existente:
-        _prender_reservas_web(existente)
+        _link_de_la_demo(existente)
         return
     comercio_id = op.crear_comercio(dueno_id, NOMBRE, "gimnasio", "Av. Cabildo 3200", False)
     op.actualizar_horarios_comercio(comercio_id, "07:00", "22:00", [
@@ -190,7 +191,7 @@ def crear():
         {"nombre": "Tarde", "desde": "14:30", "hasta": "22:00"},
     ])
     poblar(comercio_id, con_socios=True)
-    _prender_reservas_web(comercio_id)
+    _link_de_la_demo(comercio_id)
     # Unos productos para vender en la Caja (bebidas y suplementos)
     for j, (nombre, costo, precio, stock) in enumerate([
         ("Agua mineral 500 ml", 500, 1200, 40), ("Bebida isotónica 500 ml", 900, 2000, 24),
@@ -211,9 +212,9 @@ def crear():
                 op.registrar_gasto(comercio_id, mes.replace(day=dia), categoria, descripcion, monto)
 
 
-def _prender_reservas_web(comercio_id):
-    """En la demo, la página de reservas del socio va prendida y con un link fácil de escribir."""
-    if not gim.configuracion_web(comercio_id)["activa"]:
-        gim.prender_reservas_web(comercio_id)
+def _link_de_la_demo(comercio_id):
+    """En la demo, la página de reservas del socio arranca apagada (decisión de Nahuel: se prende si hace falta),
+    pero con un link fácil de escribir para cuando el jefe la prenda en Planes y actividades."""
+    gim.prender_reservas_web(comercio_id, False)
     if gim.configuracion_web(comercio_id)["codigo"] != CODIGO_WEB:
         gim.cambiar_codigo_web(comercio_id, CODIGO_WEB)

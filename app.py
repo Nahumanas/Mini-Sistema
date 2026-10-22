@@ -68,8 +68,8 @@ def preparar_base():
         for dueno_id in op.listar_duenos()["id"]:
             if not op.tiene_pin(int(dueno_id)):
                 op.guardar_pin(int(dueno_id), PIN_DEMO)
-    # Solo en la demo en línea: una panadería (vencimientos) y un gimnasio (socios, clases y reservas desde el
-    # celular). Si se cambia esta función, se vuelve a correr sola una vez (y suma lo que falte).
+    # Solo en la demo en línea: una panadería (vencimientos) y un gimnasio (socios, cuotas y clases; las reservas
+    # desde el celular vienen apagadas). Si se cambia esta función, se vuelve a correr sola una vez.
     if EN_STREAMLIT_CLOUD:
         import demo_panaderia
         import demo_gimnasio

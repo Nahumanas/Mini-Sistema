@@ -200,7 +200,11 @@ with pestana_web:
         st.session_state["aviso_planes"] = ("Listo: ya pueden reservar desde el celular. Compartí el link o el QR."
                                             if activa else "Apagaste las reservas desde el celular: el link ya no abre.")
         st.rerun()
-    if web["activa"]:
+    if not web["activa"]:
+        st.caption("Viene apagada: prendela solo si la necesitás. Mientras tanto, el jefe y recepción anotan a los "
+                   "socios en las clases desde **Clases**, la ficha en **Socios** o el **Ingreso por DNI**, con el "
+                   "mismo cupo y la misma lista de espera.")
+    else:
         link = gui.link_reservas(web["codigo"])
         st.markdown("**El link para tus socios** (mandalo por WhatsApp o ponelo en Instagram):")
         st.code(link, language=None)

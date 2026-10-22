@@ -4,7 +4,7 @@ Un mini ERP para comercios urbanos (kiosco, ferretería, tienda de ropa, panader
 
 Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 
-▶️ **Probá la demo online:** https://mini-sistema-demo.streamlit.app (entrá como jefe con el PIN `1234`; los datos son inventados). Para ver el gimnasio, elegí el comercio **Gimnasio Fuerza Norte** y probá el DNI `30000000` en el Ingreso. La página donde el socio reserva desde el celular es https://mini-sistema-demo.streamlit.app/?reservar=fuerzanorte (entrá con el mismo DNI).
+▶️ **Probá la demo online:** https://mini-sistema-demo.streamlit.app (entrá como jefe con el PIN `1234`; los datos son inventados). Para ver el gimnasio, elegí el comercio **Gimnasio Fuerza Norte** y probá el DNI `30000000` en el Ingreso. La página para que el socio reserve desde el celular viene apagada: para probarla, prendela en **Planes y actividades → 📱 Reservas desde el celular** y abrí https://mini-sistema-demo.streamlit.app/?reservar=fuerzanorte (entrá con el mismo DNI).
 
 ![Venta con el lector de código de barras](informe/videos/pistola-caja.gif)
 
@@ -133,7 +133,7 @@ Se prende solo en los comercios del rubro **Gimnasio** (un kiosco o una ferreter
 
 **📅 Agregar al calendario.** Cada reserva tiene un botón con el link de **Google Calendar** (con la hora de Argentina), un archivo **.ics** con recordatorio 1 hora antes (para iPhone u otro calendario), un **QR** para que el socio lo escanee con el celular y el mensaje listo para **WhatsApp**. Así el gimnasio no tiene que mandarle avisos al socio: se lo recuerda su propio celular.
 
-**📱 Reservas desde el celular.** El jefe las prende en **Planes y actividades → 📱 Reservas desde el celular** y comparte el link del gimnasio (`…/?reservar=código`) por WhatsApp o Instagram, o imprime el **QR** para el mostrador. El socio abre el link, escribe su **DNI** y ve:
+**📱 Reservas desde el celular.** Vienen **apagadas**: mientras tanto, el jefe y recepción anotan a los socios a mano (en Clases, en la ficha de Socios o en el Ingreso por DNI), con el mismo cupo. Si el gimnasio las quiere, el jefe las prende en **Planes y actividades → 📱 Reservas desde el celular** y comparte el link del gimnasio (`…/?reservar=código`) por WhatsApp o Instagram, o imprime el **QR** para el mostrador. El socio abre el link, escribe su **DNI** y ve:
 
 - su plan, cuántas clases le quedan y hasta cuándo vale (si debe, le dice que pague en recepción y no lo deja reservar),
 - sus reservas, con el botón para agregarlas al calendario y el de cancelar (le avisa antes si ya es tarde y la clase no se devuelve),
@@ -141,7 +141,7 @@ Se prende solo en los comercios del rubro **Gimnasio** (un kiosco o una ferreter
 
 Al reservar le aparecen los botones **📅 Agregar a Google Calendar** y el archivo **.ics** (iPhone u otro calendario). Usa las mismas funciones que la recepción (`reservar_clase` con `origen="web"`), así que respeta el mismo cupo y la misma lista de espera; en Clases y en la ficha del socio esas reservas se ven con **📱**. La página no muestra el menú del sistema ni pide PIN, y el socio solo ve lo suyo. Para entrar alcanza con el DNI, para que sea simple. Para que nadie pruebe DNIs al azar, después de 3 DNIs equivocados la página hace esperar 30 segundos y, si en un gimnasio hay 20 DNIs que no existen en 10 minutos, frena 10 minutos. Si el link se compartió de más, el jefe toca **Cambiar el link** y el viejo deja de andar. En la PC el link abre solo en esa computadora; para que los socios lo usen desde su casa, el sistema tiene que estar en internet (como la demo).
 
-**Demo.** En la demo online se crea solo **Gimnasio Fuerza Norte**, con 4 actividades, 6 planes, la grilla de la semana, unos 38 socios (al día, que vencen, que deben y sin clases), reservas de esta semana y la próxima (una clase llena con lista de espera; algunas hechas desde el celular), buffet y gastos fijos. La página de reservas viene prendida con el link `?reservar=fuerzanorte`, y el socio de prueba (DNI `30000000`, plan de 8 clases) arranca sin reservas para que las hagas vos. Las fechas se calculan desde el día en que se arma.
+**Demo.** En la demo online se crea solo **Gimnasio Fuerza Norte**, con 4 actividades, 6 planes, la grilla de la semana, unos 38 socios (al día, que vencen, que deben y sin clases), reservas de esta semana y la próxima (una clase llena con lista de espera; algunas hechas desde el celular), buffet y gastos fijos. La página de reservas viene apagada, como en cualquier gimnasio; si la prendés, el link es `?reservar=fuerzanorte`. El socio de prueba (DNI `30000000`, plan de 8 clases) arranca sin reservas para que las hagas vos. Las fechas se calculan desde el día en que se arma.
 
 ## Próximo: la nube (paso 5)
 
