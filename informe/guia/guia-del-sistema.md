@@ -57,7 +57,8 @@ El sistema tiene tres partes, una encima de la otra:
 | 👥 Socios | Solo gimnasios. Buscador, filtros y la ficha de cada socio (cuota, reservas, historial, datos). | Jefe (y empleado si tiene permiso) |
 | 💳 Cuotas y vencimientos | Solo gimnasios. Cobrar, quién vence y quién debe (con recordatorio por WhatsApp), últimas cuotas. | Jefe (y empleado si tiene permiso) |
 | 📅 Clases | Solo gimnasios. Grilla de la semana con cupo, reservas, lista de espera, asistencia y "Agregar al calendario". El jefe arma la grilla. | Jefe (y empleado si tiene permiso) |
-| 🏷️ Planes y actividades | Solo gimnasios. Planes, actividades y reglas. | Jefe |
+| 🏷️ Planes y actividades | Solo gimnasios. Planes, actividades, reglas y las reservas desde el celular (link y QR). | Jefe |
+| 📱 Reservar clase | Solo gimnasios. La página del socio: entra con su DNI desde el celular, ve los lugares que quedan, reserva, cancela y lo agrega al calendario. Se abre con el link o el QR del gimnasio. | El socio |
 
 ### Modo claro u oscuro
 
@@ -198,7 +199,7 @@ El lector (la "pistola" del súper) se enchufa por USB y funciona como un teclad
 
 ## 7. El gimnasio
 
-Si el comercio es del rubro **Gimnasio**, el sistema suma cinco pantallas. Un kiosco o una ferretería no ven nada nuevo. Todo está en la misma base, en tablas nuevas, y todo se busca por `comercio_id`: un gimnasio nunca ve los socios, planes ni clases de otro, aunque sean del mismo dueño. El DNI no se puede repetir dentro de un gimnasio, pero sí en dos gimnasios distintos.
+Si el comercio es del rubro **Gimnasio**, el sistema suma cinco pantallas (y una página para que el socio reserve desde el celular). Un kiosco o una ferretería no ven nada nuevo. Todo está en la misma base, en tablas nuevas, y todo se busca por `comercio_id`: un gimnasio nunca ve los socios, planes ni clases de otro, aunque sean del mismo dueño. El DNI no se puede repetir dentro de un gimnasio, pero sí en dos gimnasios distintos.
 
 ### Planes y actividades (solo el jefe)
 
@@ -238,14 +239,31 @@ Si el DNI no está, se lo da de alta en el momento. Si alguien pasa dos veces en
 - Las clases que ya pasaron se cierran solas: quien tenía reserva y no vino queda como "faltó".
 - **📅 Agregar al calendario:** link de **Google Calendar** (con la hora de Argentina), archivo **.ics** con recordatorio 1 hora antes, **QR** para escanear con el celular y el mensaje listo para **WhatsApp**.
 
-### Preparado para el turno web
+### Reservas desde el celular (la página del socio)
 
-Cuando el sistema esté en la nube, el socio va a reservar desde su celular, con su usuario, y va a ver solo lo suyo. Lo que ya está hecho para eso:
+El socio reserva solo, sin pasar por recepción. El jefe lo prende en **Planes y actividades → 📱 Reservas desde el celular** y ahí tiene:
 
-- `clases_disponibles(comercio_id, socio_id, desde, dias)`: las clases que puede reservar con su plan, con los lugares libres.
-- `reservas_del_socio(...)`, `reservar_clase(..., origen="web")` y `cancelar_reserva(...)`: las mismas reglas que en recepción.
-- La tabla `reservas` guarda el `origen` (recepción o web) y `socios` tiene el `email` para crear su usuario.
-- En Supabase, las reglas de seguridad (RLS) van a filtrar por `comercio_id` y por socio.
+- **El link del gimnasio** (por ejemplo `…/?reservar=k3Xp9qTw`) para mandarlo por WhatsApp o ponerlo en Instagram.
+- **El QR** para imprimir y pegar en el mostrador: el socio lo escanea con la cámara y le abre la página.
+- **Cambiar el link**, por si se compartió de más: el viejo deja de andar.
+
+Lo que ve el socio en el celular:
+
+1. Escribe su **DNI** (no hay usuario ni contraseña, para que sea simple).
+2. Arriba, su plan: cuántas clases le quedan y hasta cuándo vale. Si debe, le dice que pague en recepción y no lo deja reservar.
+3. **Tus reservas**: las que tiene, con **📅 Agregar al calendario** y **Cancelar**. Antes de cancelar le avisa si todavía se le devuelve la clase o si ya es tarde.
+4. **Reservar una clase**: elige el día (los próximos 7) y ve cada clase con los **lugares que quedan** ("Quedan 9 lugares de 15"). Si está llena, se anota en la lista de espera.
+5. Al reservar: **📅 Agregar a Google Calendar** y el archivo **.ics** para el iPhone.
+
+Por dentro usa las mismas funciones que la recepción (`reservar_clase` con `origen="web"` y `cancelar_reserva`), así que el cupo y la lista de espera son los mismos: no hay sobrecupo aunque reserven a la vez desde el mostrador y desde el celular. Esas reservas se ven con **📱** en Clases y en la ficha del socio.
+
+Cuidados, porque alcanza con el DNI:
+
+- La página no muestra el menú del sistema ni pide PIN, y el socio solo ve lo suyo (su nombre, su plan y sus reservas; nunca los datos de otros).
+- Si alguien se equivoca de DNI 3 veces seguidas, espera 30 segundos. Si en un gimnasio hay 20 DNIs que no existen en 10 minutos (alguien probando números), la página frena 10 minutos.
+- Si algún día hace falta más seguridad, se puede pedir además los últimos 4 números del celular (ya están cargados en el socio).
+
+En la PC el link abre solo en esa computadora. Para que los socios lo usen desde su casa, el sistema tiene que estar en internet: así funciona en la demo y así va a funcionar en la nube. La dirección se arma sola; en un servidor propio se puede fijar con `URL_PUBLICA` en los Secrets.
 
 ## 8. La base de datos por dentro
 
@@ -282,7 +300,7 @@ duenos
 | `tickets` | El número de ticket de las ventas que lo pidieron. |
 | `gastos` | Gastos del comercio por fecha y categoría. |
 | `configuracion_telegram` | Una fila por comercio: el chat de Telegram del jefe, el código del link para conectarse (se borra al usarlo), si los avisos están prendidos y cuáles quiere. |
-| `configuracion_gimnasio` | Las reglas de cada gimnasio: horas para cancelar, qué pasa con las clases que sobran, cómo vence la cuota y con cuántos días avisar. |
+| `configuracion_gimnasio` | Las reglas de cada gimnasio: horas para cancelar, qué pasa con las clases que sobran, cómo vence la cuota y con cuántos días avisar. También si las reservas desde el celular están prendidas y el código del link. |
 | `disciplinas` | Las actividades del gimnasio (crossfit, funcional...). |
 | `planes` y `planes_disciplinas` | Cada plan (precio, meses o días, clases por mes; vacío = libre) y qué actividades incluye (sin filas = todas). |
 | `socios` | Nombre, DNI (único en cada gimnasio), teléfono, email, plan, hasta cuándo pagó, cuántas clases le quedan, si está al día o debe, y si está activo. |
@@ -327,7 +345,8 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 | `ticket.py` | Arma el ticket en PDF. |
 | `notificaciones_telegram.py` | Los avisos por Telegram: conectar el chat del jefe y mandar los mensajes en segundo plano. |
 | `operaciones_gimnasio.py` | Las lecturas y escrituras del gimnasio (socios, planes, cuotas, clases, reservas e ingreso). Cada función recibe primero el `comercio_id`. |
-| `gimnasio_ui.py` | Partes de pantalla que comparten las del gimnasio: el cartel de colores, elegir socio, el cobro y el botón del calendario. |
+| `gimnasio_ui.py` | Partes de pantalla que comparten las del gimnasio: el cartel de colores, elegir socio, el cobro, el botón del calendario y el link de reservas. |
+| `paginas/reservar.py` | La página de reservas del socio (se abre con `…/?reservar=código`, sin menú ni PIN). |
 | `calendario.py` | Google Calendar, el archivo .ics, WhatsApp y el QR. |
 | `demo_gimnasio.py` y `demo_panaderia.py` | El gimnasio y la panadería de la demo online (el gimnasio también es el de "Cargar el ejemplo"). |
 | `.env` | Secretos de la PC, como el token del bot (no se sube a GitHub). |
@@ -343,7 +362,7 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 
 - El código está en **GitHub**: https://github.com/Nahumanas/Mini-Sistema. Es el portfolio: cualquiera puede ver el código, el README y las capturas.
 - **No se suben** la base de datos, los reportes ni el plan interno (lo controla el archivo `.gitignore`).
-- **Modo demo:** en Streamlit Community Cloud se publica con `MODO_DEMO = "1"`. Si no hay base, la crea sola con datos de prueba, el PIN de jefe es **1234** y no aparece el botón de apagar. Además arma la **Panadería La Espiga** (vencimientos) y el **Gimnasio Fuerza Norte** (socios, cuotas y clases; el DNI `30000000` es de un socio de prueba).
+- **Modo demo:** en Streamlit Community Cloud se publica con `MODO_DEMO = "1"`. Si no hay base, la crea sola con datos de prueba, el PIN de jefe es **1234** y no aparece el botón de apagar. Además arma la **Panadería La Espiga** (vencimientos) y el **Gimnasio Fuerza Norte** (socios, cuotas y clases; el DNI `30000000` es de un socio de prueba). La página de reservas del socio de la demo es `https://mini-sistema-demo.streamlit.app/?reservar=fuerzanorte`.
 - La demo está en **https://mini-sistema-demo.streamlit.app**. Cada vez que se sube un cambio a GitHub, se actualiza sola.
 - En Streamlit Cloud el sistema se muestra adentro de otra página (un marco). Por eso el JavaScript del sistema usa la página donde corre (`correr_script` en `comun.py`) y no la de "afuera": si no, el lector no quedaría listo para escanear.
 - **Reseñas:** con `FORMULARIO_RESENAS = "https://forms.gle/..."` en los Secrets de la demo aparece el botón **💬 Dejá tu reseña**, que abre un formulario de Google. Las respuestas quedan en una planilla de Google del dueño, no en la base (la demo en la nube borra la base cuando se reinicia).
@@ -361,7 +380,7 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 
 ## 13. Lo que viene
 
-1. **La nube:** base en **Supabase** (PostgreSQL) y la página en **Render** o **Railway**. Varios locales en una sola base y el dueño viendo todo en vivo desde el celular. Ingreso con Gmail. En los gimnasios, el **turno web**: el socio reserva desde su celular (ya está preparado, ver la sección 7).
+1. **La nube:** base en **Supabase** (PostgreSQL) y la página en **Render** o **Railway**. Varios locales en una sola base y el dueño viendo todo en vivo desde el celular. Ingreso con Gmail. En los gimnasios, la página de reservas del socio ya funciona: en la nube la van a poder usar desde su casa (ver la sección 7).
 2. **Cobro con posnet o QR de Mercado Pago** desde la Caja.
 3. **Caja sin internet:** que guarde las ventas y las suba cuando vuelve la conexión.
 4. **Versión 2:** factura electrónica ARCA y "servicios sin stock" (para peluquerías, por ejemplo).

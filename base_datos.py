@@ -15,7 +15,7 @@ Cómo se relacionan las tablas:
             ├── configuracion_telegram (a qué chat de Telegram le llegan los avisos al jefe)
             │
             │   Solo los gimnasios (rubro "gimnasio") usan estas. Los otros comercios las tienen vacías:
-            ├── configuracion_gimnasio (las reglas: horas para cancelar, qué pasa con las clases que sobran...)
+            ├── configuracion_gimnasio (las reglas: horas para cancelar, clases que sobran, reservas desde el celular...)
             ├── disciplinas    (las actividades: crossfit, funcional, pesas libres... las agrega el jefe)
             ├── planes         (por mes o varios meses; libre o con X clases por mes; con su precio)
             │     └── planes_disciplinas (qué actividades incluye cada plan; ninguna = todas)
@@ -309,6 +309,10 @@ configuracion_gimnasio = Table(
     Column("vencimiento", String(20), nullable=False, default="dias_plan", server_default="dias_plan"),
     # Con cuántos días de anticipación se avisa que a un socio se le vence la cuota
     Column("dias_aviso", Integer, nullable=False, default=7, server_default="7"),
+    # Reservas desde el celular: si están prendidas y el código del link (…/?reservar=código) que abre la
+    # página del socio. Cambiar el código deja sin efecto el link y el QR viejos.
+    Column("reservas_web", Boolean, nullable=False, default=False, server_default=false()),
+    Column("codigo_web", String(20), unique=True),
 )
 
 disciplinas = Table(
@@ -470,6 +474,8 @@ def actualizar_base(motor):
         ("comercios", "hora_cierre", "VARCHAR(5)"),
         ("comercios", "turnos_config", "TEXT"),
         ("ventas", "responsable_turno", "VARCHAR(100)"),
+        ("configuracion_gimnasio", "reservas_web", "BOOLEAN NOT NULL DEFAULT false"),
+        ("configuracion_gimnasio", "codigo_web", "VARCHAR(20)"),
     ]
     for tabla, columna, tipo in nuevas:
         if columna not in {c["name"] for c in revisor.get_columns(tabla)}:

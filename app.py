@@ -3,7 +3,8 @@
 Para abrirla:  streamlit run app.py   (o doble clic en iniciar.bat)
 
 Este archivo arma el ingreso (jefe con PIN o empleado), el menú de la izquierda
-(qué comercio ver) y la lista de pantallas que puede usar cada uno.
+(qué comercio ver) y la lista de pantallas que puede usar cada uno. En los gimnasios, además,
+la página de reservas del socio (…/?reservar=código), que no pide ingresar.
 """
 
 import importlib
@@ -67,7 +68,9 @@ def preparar_base():
         for dueno_id in op.listar_duenos()["id"]:
             if not op.tiene_pin(int(dueno_id)):
                 op.guardar_pin(int(dueno_id), PIN_DEMO)
-    if EN_STREAMLIT_CLOUD:  # solo en la demo en línea: una panadería (vencimientos) y un gimnasio (socios y clases)
+    # Solo en la demo en línea: una panadería (vencimientos) y un gimnasio (socios, clases y reservas desde el
+    # celular). Si se cambia esta función, se vuelve a correr sola una vez (y suma lo que falte).
+    if EN_STREAMLIT_CLOUD:
         import demo_panaderia
         import demo_gimnasio
         demo_panaderia.crear()
@@ -95,6 +98,18 @@ correr_script("""
 
 # Colores del tema (claro u oscuro, ver tema.py), letra grande, botones cómodos y sin los detalles de Streamlit
 aplicar_estilos()
+
+# 0) La página de reservas del socio: se abre con el link o el QR del gimnasio (…/?reservar=código).
+# No pide PIN ni muestra el menú: el socio entra con su DNI y ve solo lo suyo (paginas/reservar.py).
+if st.query_params.get("reservar"):
+    st.html("""<style>
+        section[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] { display: none !important; }
+        .block-container, [data-testid="stMainBlockContainer"] { max-width: 720px; }
+    </style>""")
+    st.navigation([st.Page("paginas/reservar.py", title="Reservar clase", icon="📅", default=True)],
+                  position="hidden").run()
+    st.stop()
+
 # El logo arriba a la izquierda, como en los paneles de Supabase
 st.logo(tema.logo(), size="large")
 

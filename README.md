@@ -4,7 +4,7 @@ Un mini ERP para comercios urbanos (kiosco, ferretería, tienda de ropa, panader
 
 Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 
-▶️ **Probá la demo online:** https://mini-sistema-demo.streamlit.app (entrá como jefe con el PIN `1234`; los datos son inventados). Para ver el gimnasio, elegí el comercio **Gimnasio Fuerza Norte** y probá el DNI `30000000` en el Ingreso.
+▶️ **Probá la demo online:** https://mini-sistema-demo.streamlit.app (entrá como jefe con el PIN `1234`; los datos son inventados). Para ver el gimnasio, elegí el comercio **Gimnasio Fuerza Norte** y probá el DNI `30000000` en el Ingreso. La página donde el socio reserva desde el celular es https://mini-sistema-demo.streamlit.app/?reservar=fuerzanorte (entrá con el mismo DNI).
 
 ![Venta con el lector de código de barras](informe/videos/pistola-caja.gif)
 
@@ -19,7 +19,7 @@ Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 - **Jefe y empleado:** el jefe entra con su PIN y ve todo; el empleado ve la Caja y solo lo que el jefe le habilite.
 - **Reportes** por semana, mes o fechas, en pantalla y en Excel con gráficos. El del mes pasado se guarda solo; el semanal se activa en temporada alta.
 - **Panel del día** que se actualiza solo, **stock** con avisos de reposición, **compras**, **gastos**, **ticket en PDF** e **importar/exportar Excel**.
-- **Gimnasio:** si el comercio es del rubro Gimnasio aparecen **Ingreso por DNI** (el socio sale en verde, amarillo o rojo y, si debe, se le cobra ahí mismo), **Socios**, **Cuotas y vencimientos** (con el recordatorio por WhatsApp), **Clases** (la grilla de la semana con cupo, reservas, **lista de espera** automática y el botón **📅 Agregar al calendario**) y **Planes y actividades** (por mes o varios meses, libres o con clases por mes, para todas las actividades o solo algunas: crossfit, funcional, pesas libres...). La cuota entra a la **caja abierta** como una venta, así el arqueo, el relevo de turno y el cierre la incluyen. Ver [El gimnasio](#el-gimnasio).
+- **Gimnasio:** si el comercio es del rubro Gimnasio aparecen **Ingreso por DNI** (el socio sale en verde, amarillo o rojo y, si debe, se le cobra ahí mismo), **Socios**, **Cuotas y vencimientos** (con el recordatorio por WhatsApp), **Clases** (la grilla de la semana con cupo, reservas, **lista de espera** automática y el botón **📅 Agregar al calendario**), **Planes y actividades** (por mes o varios meses, libres o con clases por mes, para todas las actividades o solo algunas: crossfit, funcional, pesas libres...) y la **página de reservas del socio**: con un link o un QR, el socio entra con su DNI desde el celular, ve los lugares que quedan, reserva o cancela y lo agrega a su Google Calendar. La cuota entra a la **caja abierta** como una venta, así el arqueo, el relevo de turno y el cierre la incluyen. Ver [El gimnasio](#el-gimnasio).
 - **Modo claro u oscuro:** se cambia con el botón 🌙 de la barra de la izquierda, al instante. Lo que elige el jefe queda guardado y sus empleados arrancan con eso (también pueden cambiarlo mientras están adentro).
 
 | Caja | Cierre de caja |
@@ -74,7 +74,7 @@ Al abrir el sistema elegís el **dueño** y el **comercio**, y entrás como **je
 | 👥 Socios | Solo en gimnasios. Buscador por nombre o DNI, filtros (al día, vencen pronto, deben, sin clases, de baja) y la ficha de cada socio: cobrarle la cuota, sus reservas (anotarlo, cancelar, agregar al calendario), sus cuotas y entradas, y sus datos. Dar de baja lo hace solo el jefe. |
 | 💳 Cuotas y vencimientos | Solo en gimnasios. Cobrar una cuota, quién vence en los próximos días y quién ya debe, con un botón que abre **WhatsApp con el recordatorio escrito**, y las últimas cuotas con quién cobró y en qué turno. |
 | 📅 Clases | Solo en gimnasios. La grilla de la semana con el cupo de cada clase (🟢 hay lugar, 🟡 quedan pocos, 🔴 llena). Al tocar una clase: anotar socios (si está llena, van a la **lista de espera**), marcar quién vino o faltó, cancelar (con la regla de horas a la vista) y **📅 Agregar al calendario** (Google Calendar, archivo .ics con recordatorio, QR o WhatsApp). El jefe arma la grilla en "Armar la grilla". |
-| 🏷️ Planes y actividades | Solo el jefe de un gimnasio. Las actividades (crossfit, funcional, pesas libres... y las que agregue), los planes (precio; 1, 2, 3, 6 o 12 meses o una cantidad de días; libres o con clases por mes; para todas las actividades o algunas) y las reglas (horas para cancelar, qué pasa con las clases que sobran, si la cuota vence a fin de mes). Si el gimnasio está vacío, **Cargar el ejemplo** lo deja armado. |
+| 🏷️ Planes y actividades | Solo el jefe de un gimnasio. Las actividades (crossfit, funcional, pesas libres... y las que agregue), los planes (precio; 1, 2, 3, 6 o 12 meses o una cantidad de días; libres o con clases por mes; para todas las actividades o algunas) las reglas (horas para cancelar, qué pasa con las clases que sobran, si la cuota vence a fin de mes) y **📱 Reservas desde el celular** (prenderlas, el link para los socios, el QR para imprimir y cambiar el link). Si el gimnasio está vacío, **Cargar el ejemplo** lo deja armado. |
 | 📥 Importar / exportar Excel | Bajar la plantilla o tus productos a Excel, editarlos y volver a subirlos. Si el código ya existe actualiza el producto; si no, lo crea. La columna `codigo_barras` (opcional) es la forma más rápida de cargar todos los códigos de barras de una vez, y `dias_duracion` (opcional) dice cuántos días dura cada producto. |
 
 ## Jefe y empleado
@@ -133,13 +133,19 @@ Se prende solo en los comercios del rubro **Gimnasio** (un kiosco o una ferreter
 
 **📅 Agregar al calendario.** Cada reserva tiene un botón con el link de **Google Calendar** (con la hora de Argentina), un archivo **.ics** con recordatorio 1 hora antes (para iPhone u otro calendario), un **QR** para que el socio lo escanee con el celular y el mensaje listo para **WhatsApp**. Así el gimnasio no tiene que mandarle avisos al socio: se lo recuerda su propio celular.
 
-**Preparado para el turno web.** Cuando el sistema esté en la nube, el socio va a poder reservar desde su celular. Las funciones ya están: `clases_disponibles` (las clases que puede reservar con su plan), `reservas_del_socio`, `reservar_clase(..., origen="web")` y `cancelar_reserva`; la tabla `reservas` guarda el `origen` y `socios` tiene el `email` para su usuario. En Supabase, cada socio va a ver solo sus filas (reglas de seguridad por `comercio_id` y socio).
+**📱 Reservas desde el celular.** El jefe las prende en **Planes y actividades → 📱 Reservas desde el celular** y comparte el link del gimnasio (`…/?reservar=código`) por WhatsApp o Instagram, o imprime el **QR** para el mostrador. El socio abre el link, escribe su **DNI** y ve:
 
-**Demo.** En la demo online se crea solo **Gimnasio Fuerza Norte**, con 4 actividades, 6 planes, la grilla de la semana, unos 38 socios (al día, que vencen, que deben y sin clases), reservas de esta semana y la próxima (una clase llena con lista de espera), buffet y gastos fijos. Las fechas se calculan desde el día en que se arma.
+- su plan, cuántas clases le quedan y hasta cuándo vale (si debe, le dice que pague en recepción y no lo deja reservar),
+- sus reservas, con el botón para agregarlas al calendario y el de cancelar (le avisa antes si ya es tarde y la clase no se devuelve),
+- las clases de los próximos 7 días que entran en su plan, con los **lugares que quedan** de cada una. Si está llena, se anota en la **lista de espera**.
+
+Al reservar le aparecen los botones **📅 Agregar a Google Calendar** y el archivo **.ics** (iPhone u otro calendario). Usa las mismas funciones que la recepción (`reservar_clase` con `origen="web"`), así que respeta el mismo cupo y la misma lista de espera; en Clases y en la ficha del socio esas reservas se ven con **📱**. La página no muestra el menú del sistema ni pide PIN, y el socio solo ve lo suyo. Para entrar alcanza con el DNI, para que sea simple. Para que nadie pruebe DNIs al azar, después de 3 DNIs equivocados la página hace esperar 30 segundos y, si en un gimnasio hay 20 DNIs que no existen en 10 minutos, frena 10 minutos. Si el link se compartió de más, el jefe toca **Cambiar el link** y el viejo deja de andar. En la PC el link abre solo en esa computadora; para que los socios lo usen desde su casa, el sistema tiene que estar en internet (como la demo).
+
+**Demo.** En la demo online se crea solo **Gimnasio Fuerza Norte**, con 4 actividades, 6 planes, la grilla de la semana, unos 38 socios (al día, que vencen, que deben y sin clases), reservas de esta semana y la próxima (una clase llena con lista de espera; algunas hechas desde el celular), buffet y gastos fijos. La página de reservas viene prendida con el link `?reservar=fuerzanorte`, y el socio de prueba (DNI `30000000`, plan de 8 clases) arranca sin reservas para que las hagas vos. Las fechas se calculan desde el día en que se arma.
 
 ## Próximo: la nube (paso 5)
 
-La base pasa de SQLite a **Supabase** (PostgreSQL en internet) y la página se sube a un servidor (**Render** o **Railway**). Como el sistema usa SQLAlchemy, para cambiar de base alcanza con cambiar la dirección en `config.py`. Así varios comercios usan la misma base y el dueño ve todo en vivo, también desde el celular. En los gimnasios, ahí se suma el **turno web** para que los socios reserven desde su celular.
+La base pasa de SQLite a **Supabase** (PostgreSQL en internet) y la página se sube a un servidor (**Render** o **Railway**). Como el sistema usa SQLAlchemy, para cambiar de base alcanza con cambiar la dirección en `config.py`. Así varios comercios usan la misma base y el dueño ve todo en vivo, también desde el celular. En los gimnasios, la página de reservas del socio ya funciona: en la nube la usan desde su casa.
 
 ## Reportes (paso 3)
 
@@ -172,7 +178,8 @@ En **Control → Reportes** elegís el **período** (una semana, un mes o las fe
 | `ticket.py` | Arma el ticket en PDF. |
 | `notificaciones_telegram.py` | Los avisos al celular del jefe por Telegram: conectar el chat y mandar los mensajes en segundo plano. |
 | `operaciones_gimnasio.py` | Todo lo del gimnasio que lee y escribe en la base: socios, planes, cuotas, clases, reservas con lista de espera e ingreso por DNI. Cada función recibe primero el `comercio_id`. |
-| `gimnasio_ui.py` | Partes de pantalla que comparten las pantallas del gimnasio: el cartel verde/amarillo/rojo, elegir un socio, el formulario de cobro y el botón del calendario. |
+| `gimnasio_ui.py` | Partes de pantalla que comparten las pantallas del gimnasio: el cartel verde/amarillo/rojo, elegir un socio, el formulario de cobro, el botón del calendario y el link de reservas. |
+| `paginas/reservar.py` | La página de reservas del socio (se abre con `…/?reservar=código`, sin menú ni PIN). |
 | `calendario.py` | El link de Google Calendar, el archivo .ics con recordatorio, el link de WhatsApp y el QR. |
 | `demo_gimnasio.py` | El gimnasio de ejemplo (el de la demo y el del botón "Cargar el ejemplo"). |
 | `demo_panaderia.py` | La panadería de la demo online, con vencimientos. |
@@ -212,7 +219,7 @@ duenos
         ├── gastos           alquiler, luz, sueldos, impuestos
         ├── configuracion_telegram   a qué chat de Telegram le llegan los avisos del jefe
         └── (solo gimnasios)
-              ├── configuracion_gimnasio   las reglas: horas para cancelar, clases que sobran, vencimiento
+              ├── configuracion_gimnasio   las reglas (horas para cancelar, clases que sobran, vencimiento) y el link de reservas
               ├── disciplinas      las actividades: crossfit, funcional, pesas libres...
               ├── planes ── planes_disciplinas   precio, meses o días, clases por mes y qué actividades incluye
               ├── socios           DNI único por gimnasio, plan, hasta cuándo pagó y cuántas clases le quedan

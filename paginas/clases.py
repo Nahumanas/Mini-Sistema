@@ -134,7 +134,8 @@ def detalle_clase(clase_id, fecha):
     for r in activos.to_dict("records"):
         f1, f2, f3, f4, f5 = st.columns([3, 1, 1, 2, 1], vertical_alignment="center")
         marca = {"vino": "✅ Vino", "falto": "❌ Faltó", "reservado": ""}[r["estado"]]
-        f1.markdown(f"**{r['socio']}** · DNI {r['dni']} {('· ' + marca) if marca else ''}")
+        web = " · 📱 Reservó desde el celular" if r["origen"] == "web" else ""
+        f1.markdown(f"**{r['socio']}** · DNI {r['dni']} {('· ' + marca) if marca else ''}{web}")
         if f2.button("Vino", key=f"vino_{r['id']}", disabled=r["estado"] == "vino", width="stretch"):
             gim.marcar_asistencia(cid, r["id"], True)
             st.rerun()
@@ -154,7 +155,7 @@ def detalle_clase(clase_id, fecha):
         st.markdown("**⏳ Lista de espera** (entran solos, en este orden, si alguien cancela)")
     for r in espera.to_dict("records"):
         e1, e2 = st.columns([6, 1], vertical_alignment="center")
-        e1.markdown(f"{int(r['posicion'])}° · **{r['socio']}** · DNI {r['dni']}")
+        e1.markdown(f"{int(r['posicion'])}° · **{r['socio']}** · DNI {r['dni']}" + (" · 📱" if r["origen"] == "web" else ""))
         if not termino and e2.button("Sacar", key=f"sacar_{r['id']}", width="stretch"):
             gim.cancelar_reserva(cid, r["id"], gui.quien())
             st.session_state["aviso_clases"] = f"{r['socio']} salió de la lista de espera."

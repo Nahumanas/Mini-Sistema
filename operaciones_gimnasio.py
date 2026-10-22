@@ -13,10 +13,14 @@ Lo más importante, en simple:
   a la vez, la segunda espera a que termine la primera y recién ahí cuenta. Nunca hay sobrecupo:
   al segundo le toca la lista de espera.
 - Si alguien cancela, el primero de la lista de espera entra solo.
+- El socio también puede reservar solo, desde el celular: entra con su DNI a la página del gimnasio
+  (un link o un QR que el jefe prende en Planes y actividades). Usa las mismas funciones, con origen "web".
 """
 
 import calendar
 import re
+import secrets
+import threading
 import unicodedata
 from datetime import date, datetime, timedelta
 
@@ -161,12 +165,17 @@ def guardar_reglas_gimnasio(comercio_id, horas_cancelacion, clases_sobrantes, ve
         raise ErrorGimnasio("Los días de aviso van de 1 a 31.")
     valores = {"horas_cancelacion": int(horas_cancelacion), "clases_sobrantes": clases_sobrantes,
                "vencimiento": vencimiento, "dias_aviso": int(dias_aviso)}
-    tabla = bd.configuracion_gimnasio
     with motor.begin() as con:
-        if con.execute(select(tabla.c.id).where(tabla.c.comercio_id == comercio_id)).first():
-            con.execute(tabla.update().where(tabla.c.comercio_id == comercio_id).values(**valores))
-        else:
-            con.execute(tabla.insert().values(comercio_id=comercio_id, **valores))
+        _guardar_configuracion(con, comercio_id, **valores)
+
+
+def _guardar_configuracion(con, comercio_id, **valores):
+    """Cambia la fila de configuración del gimnasio (si todavía no tiene, la crea)."""
+    tabla = bd.configuracion_gimnasio
+    if con.execute(select(tabla.c.id).where(tabla.c.comercio_id == comercio_id)).first():
+        con.execute(tabla.update().where(tabla.c.comercio_id == comercio_id).values(**valores))
+    else:
+        con.execute(tabla.insert().values(comercio_id=comercio_id, **valores))
 
 
 # ---------------------------------------------------------------------------
@@ -1123,12 +1132,12 @@ def reservas_de_clase(comercio_id, clase_id, fecha):
 def reservas_del_socio(comercio_id, socio_id, desde=None, hasta=None):
     """Las reservas del socio (de la más próxima a la más lejana). desde vacío = desde hoy.
 
-    Es lo que va a ver el socio en su celular cuando el sistema esté en la nube ("mis reservas").
+    Es también lo que ve el socio en su celular ("Tus reservas", en la página de reservas).
     """
     desde = desde or date.today()
     r = bd.reservas.c
     consulta = (
-        select(r.id, r.clase_id, r.fecha_reserva, r.estado, r.creada, r.clase_descontada, r.clase_devuelta,
+        select(r.id, r.clase_id, r.fecha_reserva, r.estado, r.creada, r.origen, r.clase_descontada, r.clase_devuelta,
                bd.clases.c.hora_inicio, bd.clases.c.duracion_minutos, bd.clases.c.profesor,
                bd.disciplinas.c.nombre.label("disciplina"))
         .select_from(bd.reservas.join(bd.clases, bd.clases.c.id == r.clase_id)
@@ -1146,8 +1155,8 @@ def reservas_del_socio(comercio_id, socio_id, desde=None, hasta=None):
 def clases_disponibles(comercio_id, socio_id, desde, dias=7, ahora=None):
     """Las clases de los próximos días a las que el socio puede ir (según su plan), con los lugares libres.
 
-    Sirve para la recepción (anotarlo en una clase de hoy) y, con la nube, para que el socio
-    reserve desde el celular viendo solo lo suyo.
+    Sirve para la recepción (anotarlo en una clase de hoy) y para que el socio reserve desde el
+    celular viendo solo lo suyo.
     """
     ahora = ahora or datetime.now()
     datos = socio(comercio_id, socio_id)
@@ -1163,6 +1172,147 @@ def clases_disponibles(comercio_id, socio_id, desde, dias=7, ahora=None):
     ya = set(zip(anotadas["clase_id"], anotadas["fecha_reserva"]))
     grilla = grilla.assign(ya_anotado=[(c, f) in ya for c, f in zip(grilla["clase_id"], grilla["fecha"])])
     return grilla.sort_values(["fecha", "hora_inicio"]).reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# Reservas desde el celular: la página del socio
+#
+# El jefe la prende en Planes y actividades y comparte el link (o el QR) del gimnasio. El socio entra
+# con su DNI, ve las clases de los próximos días que entran en su plan, reserva, cancela y lo agrega
+# a su calendario. Solo ve lo suyo. Usa las mismas funciones que la recepción (mismo cupo, misma lista
+# de espera), con origen "web" para que en Clases se vea que la hizo el socio.
+# ---------------------------------------------------------------------------
+DIAS_RESERVA_WEB = 7  # cuántos días para adelante puede reservar el socio
+HECHA_POR_WEB = "El socio (web)"
+# Para que nadie pruebe DNIs al azar: si en un gimnasio hay muchos DNIs que no existen seguidos,
+# la página frena un rato. Se cuenta en la memoria del servidor (no hace falta guardarlo en la base).
+FALLOS_WEB_MAXIMO = 20
+MINUTOS_FALLOS_WEB = 10
+_fallos_web = {}  # comercio_id -> horas de los intentos con un DNI que no existe
+_candado_fallos = threading.Lock()
+
+
+class DemasiadosIntentos(ErrorGimnasio):
+    pass
+
+
+def configuracion_web(comercio_id):
+    """{"activa": si el socio puede reservar desde el celular, "codigo": el código del link (o None)}."""
+    with motor.connect() as con:
+        fila = con.execute(select(bd.configuracion_gimnasio.c.reservas_web, bd.configuracion_gimnasio.c.codigo_web)
+                           .where(bd.configuracion_gimnasio.c.comercio_id == comercio_id)).first()
+    return {"activa": bool(fila and fila[0]), "codigo": fila[1] if fila else None}
+
+
+def _codigo_nuevo():
+    """Un código difícil de adivinar para el link del gimnasio, por ejemplo 'k3Xp9qTw'."""
+    return secrets.token_urlsafe(6)
+
+
+def prender_reservas_web(comercio_id, activa=True):
+    """Prende (o apaga) las reservas desde el celular. Si el gimnasio todavía no tiene código, se lo crea.
+    Devuelve el código del link."""
+    with motor.begin() as con:
+        codigo = con.execute(select(bd.configuracion_gimnasio.c.codigo_web).where(
+            bd.configuracion_gimnasio.c.comercio_id == comercio_id)).scalar() or _codigo_nuevo()
+        _guardar_configuracion(con, comercio_id, reservas_web=bool(activa), codigo_web=codigo)
+    return codigo
+
+
+def cambiar_codigo_web(comercio_id, codigo=None):
+    """Le da al gimnasio un link nuevo: el link y el QR viejos dejan de andar (por si se compartió de más).
+    codigo: para elegirlo a mano (lo usa la demo); si no, se inventa uno."""
+    codigo = codigo or _codigo_nuevo()
+    with motor.begin() as con:
+        _guardar_configuracion(con, comercio_id, codigo_web=codigo)
+    return codigo
+
+
+def gimnasio_por_codigo(codigo):
+    """El gimnasio del link (id, nombre y dirección), solo si es un gimnasio con las reservas prendidas.
+    None si el código no existe o el jefe las apagó."""
+    codigo = str(codigo or "").strip()
+    if not codigo:
+        return None
+    c, g = bd.comercios.c, bd.configuracion_gimnasio.c
+    with motor.connect() as con:
+        fila = con.execute(
+            select(c.id, c.nombre, c.direccion, c.rubro)
+            .join(bd.configuracion_gimnasio, g.comercio_id == c.id)
+            .where(g.codigo_web == codigo, g.reservas_web.is_(True), c.rubro == "gimnasio")
+        ).mappings().first()
+    return dict(fila) if fila else None
+
+
+def _anotar_fallo_web(comercio_id, ahora):
+    with _candado_fallos:
+        recientes = [f for f in _fallos_web.get(comercio_id, []) if f > ahora - timedelta(minutes=MINUTOS_FALLOS_WEB)]
+        _fallos_web[comercio_id] = recientes + [ahora]
+
+
+def _frenado_web(comercio_id, ahora):
+    with _candado_fallos:
+        recientes = [f for f in _fallos_web.get(comercio_id, []) if f > ahora - timedelta(minutes=MINUTOS_FALLOS_WEB)]
+        _fallos_web[comercio_id] = recientes
+    return len(recientes) >= FALLOS_WEB_MAXIMO
+
+
+def entrar_socio_web(comercio_id, dni, ahora=None):
+    """El socio entra a la página de reservas con su DNI. Devuelve el socio (como socio()).
+
+    Error si el DNI no es de un socio de ESE gimnasio, si está dado de baja o si hubo demasiados
+    intentos con DNIs que no existen (alguien probando números): ahí frena unos minutos.
+    """
+    ahora = ahora or datetime.now()
+    if _frenado_web(comercio_id, ahora):
+        raise DemasiadosIntentos("Hubo muchos intentos con DNIs que no son de socios. "
+                                 f"Probá de nuevo en {MINUTOS_FALLOS_WEB} minutos o consultá en recepción.")
+    dni = limpiar_dni(dni)
+    if not dni:
+        raise SocioInvalido("Escribí tu DNI, sin puntos.")
+    datos = buscar_socio_por_dni(comercio_id, dni)
+    if datos is None:
+        _anotar_fallo_web(comercio_id, ahora)
+        raise SocioInvalido(f"No encontramos ningún socio con el DNI {dni}. Revisá el número o consultá en recepción.")
+    if not datos["activo"]:
+        raise SocioInvalido("Tu cuenta está dada de baja. Si querés volver, consultá en recepción.")
+    return datos
+
+
+def reservar_desde_web(comercio_id, socio_id, clase_id, fecha, ahora=None):
+    """El socio reserva desde el celular. Igual que en recepción (mismo cupo y lista de espera), pero
+    solo clases que todavía no empezaron y dentro de los próximos DIAS_RESERVA_WEB días."""
+    ahora = ahora or datetime.now()
+    if not ahora.date() <= fecha < ahora.date() + timedelta(days=DIAS_RESERVA_WEB):
+        raise ReservaInvalida(f"Desde acá se reservan las clases de los próximos {DIAS_RESERVA_WEB} días.")
+    clase = clase_del_dia(comercio_id, clase_id, fecha, ahora)
+    if clase["inicio"] <= ahora:
+        raise ReservaInvalida("Esa clase ya empezó. Elegí otra.")
+    # Los mismos controles que hace reservar_clase, pero con el mensaje para el socio (no para recepción)
+    datos = socio(comercio_id, socio_id)
+    plan_socio, vence = datos["plan_datos"], datos["fecha_vencimiento"]
+    if vence is None or vence < fecha:
+        raise ReservaInvalida("Tu cuota vence antes de esa clase. Renovala en recepción para poder reservarla."
+                              if vence else "Todavía no tenés un plan pago. Acercate a recepción.")
+    if plan_socio and plan_socio["actividades"] and clase["disciplina_id"] not in plan_socio["actividades"]:
+        raise ReservaInvalida(f"Tu plan ({plan_socio['nombre']}) no incluye {clase['disciplina']}.")
+    if plan_socio and plan_socio["cantidad_clases"] is not None and (datos["clases_restantes"] or 0) <= 0:
+        raise ReservaInvalida("Ya usaste todas las clases de tu plan. Renovalo en recepción para seguir reservando.")
+    anotadas = reservas_del_socio(comercio_id, socio_id, fecha, fecha)
+    if ((anotadas["clase_id"] == clase_id) & anotadas["estado"].isin(OCUPAN_LUGAR + ("espera",))).any():
+        raise ReservaInvalida("Ya estás anotado en esa clase.")
+    return reservar_clase(comercio_id, clase_id, socio_id, fecha, origen="web", hecha_por=HECHA_POR_WEB, ahora=ahora)
+
+
+def cancelar_desde_web(comercio_id, socio_id, reserva_id, ahora=None):
+    """El socio cancela SU reserva desde el celular (nunca la de otro). Misma regla que en recepción:
+    con tiempo se le devuelve la clase; tarde, la pierde."""
+    with motor.connect() as con:
+        duenio = con.execute(select(bd.reservas.c.socio_id).where(
+            bd.reservas.c.id == reserva_id, bd.reservas.c.comercio_id == comercio_id)).scalar()
+    if duenio != socio_id:
+        raise ReservaInvalida("No se encontró la reserva.")
+    return cancelar_reserva(comercio_id, reserva_id, hecha_por=HECHA_POR_WEB, ahora=ahora)
 
 
 # ---------------------------------------------------------------------------

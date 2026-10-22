@@ -18,6 +18,7 @@ import operaciones as op
 import operaciones_gimnasio as gim
 
 NOMBRE = "Gimnasio Fuerza Norte"
+CODIGO_WEB = "fuerzanorte"  # la página de reservas de la demo: …/?reservar=fuerzanorte
 
 ACTIVIDADES = ["Crossfit", "Funcional", "Spinning", "Pesas libres"]
 
@@ -91,10 +92,14 @@ def _socios_de_ejemplo(comercio_id, planes, azar):
                                        "Pase libre mensual", "Pesas libres mensual"])
             if extra == "sin_clases":
                 plan_nombre = "6 clases por mes"
+            if i == 0:  # DNI 30000000: el socio para probar el Ingreso y la página de reservas (al día y con clases)
+                dias, plan_nombre = 20, "8 clases por mes"
             vence = hoy + timedelta(days=dias)
             alta = datetime.combine(vence - timedelta(days=30 * azar.randint(2, 5)), time(10, 0))
             clases = clases_plan[plan_nombre]
             restantes = 0 if extra == "sin_clases" or clases is None else azar.randint(1, clases)
+            if i == 0:
+                restantes = 5
             socio_id = con.execute(bd.socios.insert().values(
                 comercio_id=comercio_id, nombre=nombre, dni=str(30_000_000 + i * 104_729),
                 telefono=f"11 {azar.randint(2000, 6999)}-{azar.randint(1000, 9999)}", fecha_alta=alta,
@@ -137,7 +142,8 @@ def _reservas_de_ejemplo(comercio_id, socios_ids, azar, ahora):
         al_dia = set(con.execute(select(bd.socios.c.id).where(
             bd.socios.c.comercio_id == comercio_id, bd.socios.c.fecha_vencimiento >= lunes + timedelta(days=13))
         ).scalars())
-        candidatos = [s for s in por_clases + libres if s in al_dia]
+        # El socio de prueba (DNI 30000000, el primero) arranca sin reservas: las hace quien prueba la demo
+        candidatos = [s for s in por_clases + libres if s in al_dia and s != socios_ids[0][0]]
         for c in clases.to_dict("records"):
             for semana in (0, 7):
                 fecha = lunes + timedelta(days=gim.DIAS_SEMANA.index(c["dia_semana"]) + semana)
@@ -155,10 +161,12 @@ def _reservas_de_ejemplo(comercio_id, socios_ids, azar, ahora):
                         estado = "vino" if azar.random() < 0.85 else "falto"
                     else:
                         estado = "reservado" if n < c["cupo_maximo"] else "espera"
+                    web = azar.random() < 0.35  # algunas, como si el socio hubiera reservado desde el celular
                     reserva_id = con.execute(bd.reservas.insert().values(
                         comercio_id=comercio_id, clase_id=c["id"], socio_id=socio_id, fecha_reserva=fecha,
-                        estado=estado, creada=inicio - timedelta(days=1, minutes=n * 7), origen="recepcion",
-                        hecha_por="Demo", clase_descontada=estado != "espera" and socio_id in por_clases,
+                        estado=estado, creada=inicio - timedelta(days=1, minutes=n * 7),
+                        origen="web" if web else "recepcion", hecha_por=gim.HECHA_POR_WEB if web else "Recepción",
+                        clase_descontada=estado != "espera" and socio_id in por_clases,
                     )).inserted_primary_key[0]
                     if estado == "vino":
                         con.execute(bd.asistencias.insert().values(
@@ -168,17 +176,21 @@ def _reservas_de_ejemplo(comercio_id, socios_ids, azar, ahora):
 
 
 def crear():
-    """Crea el gimnasio de prueba para el primer dueño (solo en la demo en línea), si todavía no existe."""
+    """Crea el gimnasio de prueba para el primer dueño (solo en la demo en línea), si todavía no existe.
+    Le deja prendidas las reservas desde el celular, con un link fácil: …/?reservar=fuerzanorte."""
     with op.motor.connect() as con:
-        if con.execute(select(bd.comercios.c.id).where(bd.comercios.c.nombre == NOMBRE)).first():
-            return
+        existente = con.execute(select(bd.comercios.c.id).where(bd.comercios.c.nombre == NOMBRE)).scalar()
         dueno_id = con.execute(select(bd.duenos.c.id).order_by(bd.duenos.c.id)).scalar()
+    if existente:
+        _prender_reservas_web(existente)
+        return
     comercio_id = op.crear_comercio(dueno_id, NOMBRE, "gimnasio", "Av. Cabildo 3200", False)
     op.actualizar_horarios_comercio(comercio_id, "07:00", "22:00", [
         {"nombre": "Mañana", "desde": "07:00", "hasta": "14:30"},
         {"nombre": "Tarde", "desde": "14:30", "hasta": "22:00"},
     ])
     poblar(comercio_id, con_socios=True)
+    _prender_reservas_web(comercio_id)
     # Unos productos para vender en la Caja (bebidas y suplementos)
     for j, (nombre, costo, precio, stock) in enumerate([
         ("Agua mineral 500 ml", 500, 1200, 40), ("Bebida isotónica 500 ml", 900, 2000, 24),
@@ -197,3 +209,11 @@ def crear():
         ]:
             if mes.replace(day=dia) <= hoy:
                 op.registrar_gasto(comercio_id, mes.replace(day=dia), categoria, descripcion, monto)
+
+
+def _prender_reservas_web(comercio_id):
+    """En la demo, la página de reservas del socio va prendida y con un link fácil de escribir."""
+    if not gim.configuracion_web(comercio_id)["activa"]:
+        gim.prender_reservas_web(comercio_id)
+    if gim.configuracion_web(comercio_id)["codigo"] != CODIGO_WEB:
+        gim.cambiar_codigo_web(comercio_id, CODIGO_WEB)

@@ -1,10 +1,12 @@
 """Planes y actividades del gimnasio (solo el jefe): los planes con su precio (por mes o varios meses,
 libres o con una cantidad de clases por mes, para todas las actividades o solo algunas), las actividades
-(crossfit, funcional, pesas libres...) y las reglas (cancelaciones, clases que sobran, vencimiento)."""
+(crossfit, funcional, pesas libres...), las reglas (cancelaciones, clases que sobran, vencimiento) y
+las reservas desde el celular (prenderlas y sacar el link y el QR para los socios)."""
 
 import pandas as pd
 import streamlit as st
 
+import calendario
 import demo_gimnasio
 import gimnasio_ui as gui
 import operaciones_gimnasio as gim
@@ -34,7 +36,8 @@ if actividades.empty and planes.empty:
             st.session_state["aviso_planes"] = "Listo, cargaste el ejemplo. Revisalo y cambiale lo que quieras."
             st.rerun()
 
-pestana_planes, pestana_actividades, pestana_reglas = st.tabs(["🏷️ Planes", "🤸 Actividades", "⚙️ Reglas"])
+pestana_planes, pestana_actividades, pestana_reglas, pestana_web = st.tabs(
+    ["🏷️ Planes", "🤸 Actividades", "⚙️ Reglas", "📱 Reservas desde el celular"])
 
 DURACION_POR_DIAS = 0  # en la lista de duraciones, 0 = "por días"
 OPCIONES_DURACION = list(gim.DURACIONES) + [DURACION_POR_DIAS]
@@ -170,3 +173,52 @@ with pestana_reglas:
                 st.rerun()
     st.caption("Si alguien renueva antes de que venza, lo nuevo empieza cuando termina lo que ya pagó. "
                "Los planes por días (por ejemplo, un pase de 15 días) siempre cuentan días.")
+
+
+@st.dialog("🔄 Cambiar el link")
+def confirmar_link_nuevo():
+    st.write("El link y el QR que tenés ahora **dejan de andar** y se arma uno nuevo. Sirve si el link "
+             "se compartió con gente que no es del gimnasio. Después tenés que pasarles el nuevo a tus socios.")
+    c1, c2 = st.columns(2)
+    if c1.button("Sí, cambiarlo", type="primary", width="stretch"):
+        gim.cambiar_codigo_web(cid)
+        st.session_state["aviso_planes"] = "Listo, el link cambió. Imprimí el QR nuevo y pasales el link a tus socios."
+        st.rerun()
+    if c2.button("Cancelar", width="stretch"):
+        st.rerun()
+
+
+with pestana_web:
+    web = gim.configuracion_web(cid)
+    st.write("Tus socios reservan solos desde el celular: abren el link (o escanean el QR del mostrador), "
+             "escriben su DNI y ven su plan, sus reservas y las clases de los próximos "
+             f"{gim.DIAS_RESERVA_WEB} días con los lugares que quedan. Reservan o cancelan con las mismas reglas "
+             "que en recepción (mismo cupo y lista de espera) y lo agregan a su Google Calendar.")
+    activa = st.toggle("Los socios pueden reservar desde el celular", value=web["activa"])
+    if activa != web["activa"]:
+        gim.prender_reservas_web(cid, activa)
+        st.session_state["aviso_planes"] = ("Listo: ya pueden reservar desde el celular. Compartí el link o el QR."
+                                            if activa else "Apagaste las reservas desde el celular: el link ya no abre.")
+        st.rerun()
+    if web["activa"]:
+        link = gui.link_reservas(web["codigo"])
+        st.markdown("**El link para tus socios** (mandalo por WhatsApp o ponelo en Instagram):")
+        st.code(link, language=None)
+        st.link_button("Abrir la página del socio", link)
+        if link.startswith(("http://localhost", "http://127.")):
+            st.info("En tu PC este link abre solo en esta computadora. Para que los socios reserven desde su casa, "
+                    "el sistema tiene que estar en internet (como la demo, y como va a estar en la nube).")
+        if qr := calendario.codigo_qr_png(link):
+            q1, q2 = st.columns([1, 2], vertical_alignment="center")
+            q1.image(qr, width=220)
+            with q2:
+                st.markdown("**El QR para el mostrador:** imprimilo y pegalo en recepción. El socio lo escanea "
+                            "con la cámara y le abre la página para reservar.")
+                st.download_button("Descargar el QR para imprimir", qr, file_name="qr-reservas.png",
+                                   mime="image/png", on_click="ignore")
+        else:
+            st.caption("Para ver el QR, instalá segno: `python -m pip install segno`.")
+        st.caption("Para entrar alcanza con el DNI. Si alguien prueba muchos DNIs que no son de socios, la página "
+                   "frena unos minutos. Las reservas que hace el socio aparecen con 📱 en Clases.")
+        if st.button("🔄 Cambiar el link"):
+            confirmar_link_nuevo()

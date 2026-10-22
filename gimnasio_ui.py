@@ -1,8 +1,9 @@
 """Partes de pantalla que usan varias pantallas del gimnasio: el cartel verde/rojo, cobrar la cuota,
-elegir un socio, darlo de alta y el botón "📅 Agregar al calendario"."""
+elegir un socio, darlo de alta, el botón "📅 Agregar al calendario" y el link de reservas del socio."""
 
 import html
 from datetime import date
+from urllib.parse import urlsplit
 
 import pandas as pd
 import streamlit as st
@@ -11,6 +12,7 @@ import calendario
 import operaciones as op
 import operaciones_gimnasio as gim
 from comun import MEDIOS_DE_PAGO, es_jefe, insignia, pesos, plural
+from config import URL_PUBLICA
 
 COLOR_SITUACION = {"Al día": "verde", "Debe": "roja", "Nunca pagó": "roja", "Sin clases": "roja", "Baja": "gris",
                    "Vence hoy": "amarilla"}
@@ -172,16 +174,22 @@ def texto_cuota_cobrada(cuota):
             "Entró a la caja abierta.")
 
 
-def boton_calendario(comercio, reserva, clave):
-    """"📅 Agregar al calendario": Google Calendar, archivo .ics, QR para escanear y WhatsApp.
-
-    reserva: diccionario con "disciplina", "inicio", "fin", "profesor", "socio" (nombre) y "telefono".
-    """
+def evento_calendario(comercio, reserva):
+    """Título, detalle, lugar y link de Google Calendar de una reserva (para el calendario del socio)."""
     titulo = f"{reserva['disciplina']} en {comercio['nombre']}"
     detalle = (f"Clase de {reserva['disciplina']}" + (f" con {reserva['profesor']}" if reserva.get("profesor") else "")
                + ". Si no podés ir, avisá con tiempo para que el lugar lo use otro.")
     lugar = comercio.get("direccion") or comercio["nombre"]
-    google = calendario.link_google_calendar(titulo, reserva["inicio"], reserva["fin"], detalle, lugar)
+    return titulo, detalle, lugar, calendario.link_google_calendar(titulo, reserva["inicio"], reserva["fin"], detalle, lugar)
+
+
+def boton_calendario(comercio, reserva, clave, para_el_socio=False):
+    """"📅 Agregar al calendario": Google Calendar, archivo .ics, QR para escanear y WhatsApp.
+
+    reserva: diccionario con "disciplina", "inicio", "fin", "profesor", "socio" (nombre) y "telefono".
+    para_el_socio: en la página de reservas del socio (ya está en su celular) van solo Google y el .ics.
+    """
+    titulo, detalle, lugar, google = evento_calendario(comercio, reserva)
     with st.popover("📅 Agregar al calendario"):
         st.markdown(f"**{titulo}** · {reserva['inicio']:%d/%m} a las {reserva['inicio']:%H:%M}")
         st.link_button("Abrir en Google Calendar", google, width="stretch")
@@ -190,10 +198,34 @@ def boton_calendario(comercio, reserva, clave):
                                                        uid=f"reserva-{reserva.get('reserva_id', clave)}"),
                            file_name=f"clase_{reserva['inicio']:%Y%m%d_%H%M}.ics", mime="text/calendar",
                            key=f"ics_{clave}", on_click="ignore")
-        st.caption("El .ics trae un recordatorio 1 hora antes. Google usa el recordatorio que el socio tenga puesto.")
+        st.caption("El .ics trae un recordatorio 1 hora antes. Google usa el recordatorio que tengas puesto."
+                   if para_el_socio else
+                   "El .ics trae un recordatorio 1 hora antes. Google usa el recordatorio que el socio tenga puesto.")
+        if para_el_socio:
+            return
         if qr := calendario.codigo_qr_png(google):
             st.image(qr, caption="Que lo escanee con la cámara del celular", width=200)
         mensaje = (f"¡Hola {reserva['socio'].split()[0]}! Te anotamos en {reserva['disciplina']} el "
                    f"{reserva['inicio']:%d/%m} a las {reserva['inicio']:%H:%M}. Agregalo a tu calendario: {google}")
         if wa := calendario.link_whatsapp(reserva.get("telefono"), mensaje):
             st.link_button("📲 Mandárselo por WhatsApp", wa, width="stretch")
+
+
+def url_del_sistema():
+    """La dirección del sistema sin la pantalla (https://algo.streamlit.app o http://localhost:8501)."""
+    if URL_PUBLICA:
+        return URL_PUBLICA.rstrip("/")
+    try:
+        url = st.context.url  # Streamlit nuevo: la dirección con la que se abrió la página
+    except AttributeError:
+        url = None
+    if url:
+        partes = urlsplit(url)
+        return f"{partes.scheme}://{partes.netloc}"
+    host = st.context.headers.get("Host") or "localhost:8501"
+    return f"{'http' if host.startswith(('localhost', '127.')) else 'https'}://{host}"
+
+
+def link_reservas(codigo):
+    """El link que el gimnasio comparte con sus socios para que reserven desde el celular."""
+    return f"{url_del_sistema()}/?reservar={codigo}"

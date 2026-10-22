@@ -87,6 +87,11 @@ PUEDE_APAGARSE = not MODO_DEMO and not EN_STREAMLIT_CLOUD
 # de la app: FORMULARIO_RESENAS = "https://forms.gle/..."), aparece el botón "Dejá tu reseña".
 FORMULARIO_RESENAS = _texto("FORMULARIO_RESENAS")
 
+# La dirección pública del sistema (por ejemplo "https://mi-sistema.onrender.com"), para armar el link
+# de reservas que los gimnasios comparten con sus socios. Si no está, se usa la dirección con la que se
+# abrió la página (en la demo, la de Streamlit Cloud; en la PC, localhost).
+URL_PUBLICA = _texto("URL_PUBLICA")
+
 
 def token_telegram():
     """El token del bot de Telegram ("" si no hay). Se lee cada vez, así al pegarlo anda sin reiniciar.

@@ -46,9 +46,12 @@ CREATE TABLE configuracion_gimnasio (
 	clases_sobrantes VARCHAR(20) DEFAULT 'vencen' NOT NULL, 
 	vencimiento VARCHAR(20) DEFAULT 'dias_plan' NOT NULL, 
 	dias_aviso INTEGER DEFAULT '7' NOT NULL, 
+	reservas_web BOOLEAN DEFAULT 0 NOT NULL, 
+	codigo_web VARCHAR(20), 
 	PRIMARY KEY (id), 
 	UNIQUE (comercio_id), 
-	FOREIGN KEY(comercio_id) REFERENCES comercios (id)
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
+	UNIQUE (codigo_web)
 );
 
 CREATE TABLE configuracion_telegram (

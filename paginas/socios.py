@@ -106,7 +106,8 @@ with reservas:
         c1, c2, c3 = st.columns([3, 2, 1], vertical_alignment="center")
         estado_txt = {"espera": "⏳ en lista de espera", "vino": "✅ vino"}.get(r["estado"], "reservado")
         c1.markdown(f"**{r['disciplina']}** · {gim.DIAS_SEMANA[r['fecha_reserva'].weekday()]} "
-                    f"{r['fecha_reserva']:%d/%m} {r['hora_inicio']} · {estado_txt}")
+                    f"{r['fecha_reserva']:%d/%m} {r['hora_inicio']} · {estado_txt}"
+                    + (" · 📱 desde el celular" if r["origen"] == "web" else ""))
         with c2:
             if r["estado"] == "reservado":
                 gui.boton_calendario(comercio, {"disciplina": r["disciplina"], "inicio": inicio, "fin": fin,
