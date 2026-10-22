@@ -39,6 +39,18 @@ CREATE TABLE cajas (
 	FOREIGN KEY(comercio_id) REFERENCES comercios (id)
 );
 
+CREATE TABLE configuracion_gimnasio (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	horas_cancelacion INTEGER DEFAULT '2' NOT NULL, 
+	clases_sobrantes VARCHAR(20) DEFAULT 'vencen' NOT NULL, 
+	vencimiento VARCHAR(20) DEFAULT 'dias_plan' NOT NULL, 
+	dias_aviso INTEGER DEFAULT '7' NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (comercio_id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id)
+);
+
 CREATE TABLE configuracion_telegram (
 	id INTEGER NOT NULL, 
 	comercio_id INTEGER NOT NULL, 
@@ -49,6 +61,15 @@ CREATE TABLE configuracion_telegram (
 	conectado DATETIME, 
 	PRIMARY KEY (id), 
 	UNIQUE (comercio_id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id)
+);
+
+CREATE TABLE disciplinas (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	nombre VARCHAR(100) NOT NULL, 
+	activa BOOLEAN DEFAULT 1 NOT NULL, 
+	PRIMARY KEY (id), 
 	FOREIGN KEY(comercio_id) REFERENCES comercios (id)
 );
 
@@ -63,6 +84,19 @@ CREATE TABLE gastos (
 	FOREIGN KEY(comercio_id) REFERENCES comercios (id)
 );
 
+CREATE TABLE planes (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	nombre VARCHAR(100) NOT NULL, 
+	precio FLOAT NOT NULL, 
+	duracion_meses INTEGER, 
+	duracion_dias INTEGER NOT NULL, 
+	cantidad_clases INTEGER, 
+	activo BOOLEAN DEFAULT 1 NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id)
+);
+
 CREATE TABLE proveedores (
 	id INTEGER NOT NULL, 
 	comercio_id INTEGER NOT NULL, 
@@ -70,6 +104,21 @@ CREATE TABLE proveedores (
 	telefono VARCHAR(30), 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(comercio_id) REFERENCES comercios (id)
+);
+
+CREATE TABLE clases (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	disciplina_id INTEGER NOT NULL, 
+	dia_semana VARCHAR(20) NOT NULL, 
+	hora_inicio VARCHAR(10) NOT NULL, 
+	duracion_minutos INTEGER DEFAULT '60' NOT NULL, 
+	profesor VARCHAR(100), 
+	cupo_maximo INTEGER NOT NULL, 
+	activa BOOLEAN DEFAULT 1 NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
+	FOREIGN KEY(disciplina_id) REFERENCES disciplinas (id)
 );
 
 CREATE TABLE compras (
@@ -82,6 +131,18 @@ CREATE TABLE compras (
 	PRIMARY KEY (id), 
 	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
 	FOREIGN KEY(proveedor_id) REFERENCES proveedores (id)
+);
+
+CREATE TABLE planes_disciplinas (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	plan_id INTEGER NOT NULL, 
+	disciplina_id INTEGER NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT actividad_una_vez_por_plan UNIQUE (plan_id, disciplina_id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
+	FOREIGN KEY(plan_id) REFERENCES planes (id), 
+	FOREIGN KEY(disciplina_id) REFERENCES disciplinas (id)
 );
 
 CREATE TABLE productos (
@@ -118,6 +179,26 @@ CREATE TABLE relevos_caja (
 	PRIMARY KEY (id), 
 	FOREIGN KEY(caja_id) REFERENCES cajas (id), 
 	FOREIGN KEY(comercio_id) REFERENCES comercios (id)
+);
+
+CREATE TABLE socios (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	nombre VARCHAR(100) NOT NULL, 
+	dni VARCHAR(20) NOT NULL, 
+	telefono VARCHAR(30), 
+	email VARCHAR(100), 
+	fecha_alta DATETIME NOT NULL, 
+	plan_id INTEGER, 
+	fecha_vencimiento DATE, 
+	clases_restantes INTEGER DEFAULT '0' NOT NULL, 
+	estado VARCHAR(20) DEFAULT 'al_dia' NOT NULL, 
+	activo BOOLEAN DEFAULT 1 NOT NULL, 
+	nota VARCHAR(200), 
+	PRIMARY KEY (id), 
+	CONSTRAINT socio_unico_por_comercio UNIQUE (comercio_id, dni), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
+	FOREIGN KEY(plan_id) REFERENCES planes (id)
 );
 
 CREATE TABLE ventas (
@@ -160,6 +241,34 @@ CREATE TABLE compras_detalle (
 	FOREIGN KEY(producto_id) REFERENCES productos (id)
 );
 
+CREATE TABLE cuotas_cobradas (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	socio_id INTEGER NOT NULL, 
+	plan_id INTEGER NOT NULL, 
+	venta_id INTEGER, 
+	caja_id INTEGER, 
+	relevo_id INTEGER, 
+	fecha DATETIME NOT NULL, 
+	monto FLOAT NOT NULL, 
+	medio_pago VARCHAR(20) NOT NULL, 
+	cobrada_por VARCHAR(100), 
+	clases_cargadas INTEGER, 
+	clases_antes INTEGER, 
+	clases_despues INTEGER, 
+	vence_antes DATE, 
+	vence_nuevo DATE NOT NULL, 
+	anulada DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
+	FOREIGN KEY(socio_id) REFERENCES socios (id), 
+	FOREIGN KEY(plan_id) REFERENCES planes (id), 
+	UNIQUE (venta_id), 
+	FOREIGN KEY(venta_id) REFERENCES ventas (id), 
+	FOREIGN KEY(caja_id) REFERENCES cajas (id), 
+	FOREIGN KEY(relevo_id) REFERENCES relevos_caja (id)
+);
+
 CREATE TABLE lotes (
 	id INTEGER NOT NULL, 
 	comercio_id INTEGER NOT NULL, 
@@ -188,6 +297,25 @@ CREATE TABLE mermas (
 	FOREIGN KEY(producto_id) REFERENCES productos (id)
 );
 
+CREATE TABLE reservas (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	clase_id INTEGER NOT NULL, 
+	socio_id INTEGER NOT NULL, 
+	fecha_reserva DATE NOT NULL, 
+	estado VARCHAR(20) DEFAULT 'reservado' NOT NULL, 
+	creada DATETIME NOT NULL, 
+	origen VARCHAR(20) DEFAULT 'recepcion' NOT NULL, 
+	hecha_por VARCHAR(100), 
+	clase_descontada BOOLEAN DEFAULT 0 NOT NULL, 
+	cancelada DATETIME, 
+	clase_devuelta BOOLEAN DEFAULT 0 NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
+	FOREIGN KEY(clase_id) REFERENCES clases (id), 
+	FOREIGN KEY(socio_id) REFERENCES socios (id)
+);
+
 CREATE TABLE tickets (
 	id INTEGER NOT NULL, 
 	venta_id INTEGER NOT NULL, 
@@ -209,4 +337,19 @@ CREATE TABLE ventas_detalle (
 	PRIMARY KEY (id), 
 	FOREIGN KEY(venta_id) REFERENCES ventas (id), 
 	FOREIGN KEY(producto_id) REFERENCES productos (id)
+);
+
+CREATE TABLE asistencias (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	socio_id INTEGER NOT NULL, 
+	fecha_hora DATETIME NOT NULL, 
+	resultado VARCHAR(20) NOT NULL, 
+	motivo VARCHAR(200), 
+	reserva_id INTEGER, 
+	registrado_por VARCHAR(100), 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
+	FOREIGN KEY(socio_id) REFERENCES socios (id), 
+	FOREIGN KEY(reserva_id) REFERENCES reservas (id)
 );

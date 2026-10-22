@@ -1,4 +1,5 @@
-"""Avisos al celular del jefe por Telegram: apertura y cierre de caja, relevo de turno y stock bajo.
+"""Avisos al celular del jefe por Telegram: apertura y cierre de caja, relevo de turno y stock bajo
+(y en los gimnasios, cuando alguien de la lista de espera entra solo a una clase).
 
 Cómo funciona, en simple:
 
@@ -39,7 +40,9 @@ EVENTOS = {
     "cierre": "🔒 Cierre de caja y arqueo",
     "relevo": "🔄 Relevo de turno",
     "stock": "📦 Falta de stock (llega al mínimo)",
+    "espera": "🏋️ Lista de espera: alguien entró solo a una clase",
 }
+EVENTOS_SOLO_GIMNASIO = {"espera"}  # en Mis comercios, este aviso se ofrece solo a los gimnasios
 
 
 class TokenInvalido(Exception):
@@ -270,6 +273,10 @@ def avisar_cierre(comercio_id, cerro, resumen, efectivo_contado, nota=None):
     lineas = [
         f"👤 Cerró: {negrita(cerro)}",
         f"🧾 Ventas: {resumen['cantidad']} por <b>{_pesos(resumen['total'])}</b>",
+    ]
+    if resumen.get("cuotas"):  # gimnasio: las cuotas ya están dentro de las ventas
+        lineas.append(f"🏋️ De eso, cuotas: {resumen['cuotas']} por {_pesos(resumen['total_cuotas'])}")
+    lineas += [
         "",
         f"💵 Efectivo esperado: {_pesos(resumen['efectivo_esperado'])}",
         f"🖐 Efectivo contado: {_pesos(efectivo_contado)}",
@@ -307,6 +314,17 @@ def avisar_stock_bajo(comercio_id, productos):
     ]
     lineas.append("\nAcordate de comprar 🛒")
     avisar(comercio_id, "stock", "📦 <b>Falta de stock</b>", lineas)
+
+
+def avisar_lista_de_espera(comercio_id, socio, actividad, inicio, telefono=None):
+    """Alguien de la lista de espera entró solo a una clase (porque otro canceló). Así recepción le avisa."""
+    lineas = [
+        f"🙋 {negrita(socio)} entró a {negrita(actividad)} del {inicio:%d/%m} a las {inicio:%H:%M}",
+        "Se liberó un lugar y era el primero de la lista de espera.",
+    ]
+    if telefono:
+        lineas.append(f"📞 {escapar(telefono)}")
+    avisar(comercio_id, "espera", "🏋️ <b>Lista de espera</b>", lineas)
 
 
 def mensaje_de_prueba(comercio_id):

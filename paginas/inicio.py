@@ -6,7 +6,8 @@ from datetime import date
 import streamlit as st
 
 import operaciones as op
-from comun import RUBROS, aviso_temporada, insignia, pesos, plural, texto_vencimientos
+import operaciones_gimnasio as gim
+from comun import RUBROS, aviso_temporada, es_gimnasio, insignia, pesos, plural, texto_vencimientos
 
 dueno = st.session_state["dueno"]
 hoy = date.today()
@@ -21,6 +22,13 @@ accesos[1].page_link("paginas/compras.py", label="Compras", icon="📦")
 accesos[2].page_link("paginas/gastos.py", label="Gastos", icon="🧾")
 accesos[3].page_link("paginas/panel_del_dia.py", label="Panel del día", icon="📊")
 accesos[4].page_link("paginas/stock.py", label="Stock", icon="📋")
+if es_gimnasio(st.session_state.get("comercio")):  # las pantallas del gimnasio, si está elegido un gimnasio
+    accesos = st.columns(5)
+    accesos[0].page_link("paginas/ingreso_dni.py", label="Ingreso por DNI", icon="🚪")
+    accesos[1].page_link("paginas/socios.py", label="Socios", icon="👥")
+    accesos[2].page_link("paginas/cuotas.py", label="Cuotas", icon="💳")
+    accesos[3].page_link("paginas/clases.py", label="Clases", icon="📅")
+    accesos[4].page_link("paginas/planes.py", label="Planes", icon="🏷️")
 
 comercios = op.listar_comercios(dueno["id"])
 if comercios.empty:
@@ -41,6 +49,14 @@ columnas = st.columns(min(len(comercios), 3))
 for i, c in enumerate(comercios.itertuples()):
     del_dia = op.resumen_periodo(c.id, hoy, hoy)
     del_mes = op.resumen_periodo(c.id, op.primer_dia_del_mes(hoy), hoy)
+    gimnasio = c.rubro == "gimnasio"
+    if gimnasio:  # en un gimnasio, las cuotas también son plata que entró (y no tienen costo de mercadería)
+        cuotas_dia = gim.cuotas_periodo(c.id, hoy, hoy)
+        cuotas_mes = gim.cuotas_periodo(c.id, op.primer_dia_del_mes(hoy), hoy)
+        del_dia = {"cantidad": del_dia["cantidad"] + cuotas_dia["cantidad"],
+                   "total": del_dia["total"] + cuotas_dia["total"], "ganancia": del_dia["ganancia"] + cuotas_dia["total"]}
+        del_mes = {"cantidad": del_mes["cantidad"] + cuotas_mes["cantidad"],
+                   "total": del_mes["total"] + cuotas_mes["total"], "ganancia": del_mes["ganancia"] + cuotas_mes["total"]}
     productos = op.listar_productos(c.id)
     stock_bajo = int((productos["stock"] <= productos["stock_minimo"]).sum())
     total_hoy += del_dia["total"]
@@ -54,7 +70,12 @@ for i, c in enumerate(comercios.itertuples()):
         st.markdown(f'<div class="tarjeta-titulo"><h3>{html.escape(c.nombre)}</h3>{estado}</div>',
                     unsafe_allow_html=True)
         st.caption(f"{RUBROS.get(c.rubro, c.rubro)} · {c.direccion or ''}")
-        if del_dia["cantidad"]:
+        if gimnasio:
+            st.metric("Cobrado hoy", pesos(del_dia["total"]), help="Cuotas y ventas del buffet de hoy.")
+            hoy_txt = (f"{plural(cuotas_dia['cantidad'], 'cuota', 'cuotas')} hoy" if cuotas_dia["cantidad"]
+                       else "Hoy todavía no hay cuotas")
+            st.caption(f"{hoy_txt} · {pesos(del_mes['total'])} en el mes")
+        elif del_dia["cantidad"]:
             st.metric("Vendido hoy", pesos(del_dia["total"]))
             st.caption(f"{plural(del_dia['cantidad'], 'venta', 'ventas')} hoy · {pesos(del_mes['total'])} en el mes")
         else:
@@ -68,6 +89,13 @@ for i, c in enumerate(comercios.itertuples()):
                 st.metric("Vendido hoy", pesos(0))
             st.caption(f"Hoy todavía no hay ventas · {pesos(del_mes['total'])} en el mes")
         avisos = []
+        if gimnasio:
+            socios = gim.resumen_socios(c.id)
+            avisos.append(insignia(f"🏋️ {plural(socios['al_dia'], 'socio al día', 'socios al día')}", "verde"))
+            if socios["vencen_hoy"]:
+                avisos.append(insignia(f"{plural(socios['vencen_hoy'], 'vence', 'vencen')} hoy", "amarilla"))
+            if socios["deben"]:
+                avisos.append(insignia(f"{plural(socios['deben'], 'debe', 'deben')} la cuota", "roja"))
         if stock_bajo:
             avisos.append(insignia(f"{plural(stock_bajo, 'producto', 'productos')} con stock bajo", "amarilla"))
         if aviso := texto_vencimientos(op.avisos_vencimientos(c.id)):
@@ -76,12 +104,18 @@ for i, c in enumerate(comercios.itertuples()):
             st.markdown("".join(avisos), unsafe_allow_html=True)
         if caja:
             st.caption(f"Abierta por {caja['responsable']} desde las {caja['abierta']:%H:%M}")
-        if st.button("Ir a la caja", key=f"abrir_{c.id}", on_click=elegir_comercio, args=(c.nombre,)):
+        if gimnasio:
+            b1, b2 = st.columns(2)
+            if b1.button("Ir al ingreso", key=f"ingreso_{c.id}", on_click=elegir_comercio, args=(c.nombre,)):
+                st.switch_page("paginas/ingreso_dni.py")
+            if b2.button("Ir a la caja", key=f"abrir_{c.id}", on_click=elegir_comercio, args=(c.nombre,)):
+                st.switch_page("paginas/caja.py")
+        elif st.button("Ir a la caja", key=f"abrir_{c.id}", on_click=elegir_comercio, args=(c.nombre,)):
             st.switch_page("paginas/caja.py")
 
 if len(comercios) > 1:
     st.subheader("Todos tus comercios juntos")
     t1, t2, t3 = st.columns(3)
-    t1.metric("Vendido hoy", pesos(total_hoy))
+    t1.metric("Vendido hoy", pesos(total_hoy), help="En los gimnasios, también las cuotas.")
     t2.metric("Vendido este mes", pesos(total_mes))
     t3.metric("Ganancia bruta del mes", pesos(ganancia_mes), help="Ventas menos lo que costó la mercadería. Todavía no resta los gastos.")

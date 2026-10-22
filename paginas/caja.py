@@ -14,7 +14,7 @@ import streamlit as st
 
 import operaciones as op
 from comun import (MEDIOS_DE_PAGO, alta_rapida, buscar_por_codigo, comercio_actual, dejar_listo_el_lector,
-                   encabezado, es_jefe, permisos_de, pesos, plural, texto_vencimientos)
+                   encabezado, es_gimnasio, es_jefe, permisos_de, pesos, plural, texto_vencimientos)
 
 
 def pesos_md(valor):
@@ -325,7 +325,9 @@ def relevo_de_turno():
 def cerrar_caja():
     resumen = op.resumen_caja(caja["id"])
     cobradas = "cobrada" if resumen["cantidad"] == 1 else "cobradas"
-    st.write(f"**{ventas_texto(resumen['cantidad'])}** {cobradas} en esta caja, por **{pesos_md(resumen['total'])}**:")
+    st.write(f"**{ventas_texto(resumen['cantidad'])}** {cobradas} en esta caja, por **{pesos_md(resumen['total'])}**"
+             + (f" (incluye {plural(resumen['cuotas'], 'cuota', 'cuotas')} del gimnasio por "
+                f"{pesos_md(resumen['total_cuotas'])})" if resumen["cuotas"] else "") + ":")
     st.dataframe(
         pd.DataFrame(
             [{"Medio de pago": MEDIOS_DE_PAGO.get(m, m), "Cobrado ($)": t} for m, t in resumen["por_medio"].items()]
@@ -377,6 +379,19 @@ if not abierta_hoy:
 
 carrito = st.session_state.setdefault(clave_carrito, [])
 productos = op.listar_productos(comercio["id"]).set_index("id")
+
+# En un gimnasio, la cuota del socio también se cobra acá (entra a esta misma caja y al arqueo)
+if es_gimnasio(comercio):
+    import gimnasio_ui as gui
+
+    if aviso := st.session_state.pop("cuota_en_caja", None):
+        st.success(aviso)
+    with st.expander("🏋️ Cobrar la cuota de un socio"):
+        socio_id = gui.elegir_socio(comercio["id"], f"caja_socio_{comercio['id']}", incluir_bajas=True)
+        if socio_id is not None and (cuota := gui.formulario_cobro(comercio, socio_id, "caja")):
+            st.session_state["cuota_en_caja"] = gui.texto_cuota_cobrada(cuota)
+            st.session_state.pop(f"caja_socio_{comercio['id']}", None)
+            st.rerun()
 
 # Si recién se cobró una venta, mostrar el aviso y el ticket para descargar
 ultima = st.session_state.get("ultima_venta")
@@ -541,7 +556,9 @@ with derecha:
         st.rerun()
 
     en_caja = op.resumen_caja(caja["id"])
-    st.caption(f"En esta caja van {ventas_texto(en_caja['cantidad'])} por {pesos_md(en_caja['total'])}.")
+    cuotas = (f" (incluye {plural(en_caja['cuotas'], 'cuota', 'cuotas')} por {pesos_md(en_caja['total_cuotas'])})"
+              if en_caja["cuotas"] else "")
+    st.caption(f"En esta caja van {ventas_texto(en_caja['cantidad'])} por {pesos_md(en_caja['total'])}{cuotas}.")
     if turno_actual["relevos_previos"] and puede_ajustar():
         with st.expander("🔄 Turnos de hoy"):
             mostrar_turnos(caja["id"])

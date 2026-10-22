@@ -15,8 +15,9 @@ from datetime import date
 import streamlit as st
 
 # Los archivos del sistema, en el orden en que se importan entre sí.
-MODULOS_PROPIOS = ["config", "base_datos", "operaciones", "tema", "comun", "ticket", "reportes", "ingreso",
-                   "generar_datos_prueba", "demo_panaderia"]
+MODULOS_PROPIOS = ["config", "base_datos", "notificaciones_telegram", "operaciones", "operaciones_gimnasio", "tema",
+                   "comun", "calendario", "gimnasio_ui", "ticket", "reportes", "ingreso", "generar_datos_prueba",
+                   "demo_panaderia", "demo_gimnasio"]
 
 
 @st.cache_resource
@@ -45,7 +46,7 @@ recargar_si_cambiaron()
 import operaciones as op  # noqa: E402 (va después de recargar)
 import reportes
 from ingreso import pantalla_ingreso
-from comun import RUBROS, a_python, aplicar_estilos, correr_script, permisos_de
+from comun import RUBROS, a_python, aplicar_estilos, correr_script, es_gimnasio, permisos_de
 import tema
 from tema import switch_tema
 from config import EN_STREAMLIT_CLOUD, FORMULARIO_RESENAS, MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE
@@ -66,9 +67,11 @@ def preparar_base():
         for dueno_id in op.listar_duenos()["id"]:
             if not op.tiene_pin(int(dueno_id)):
                 op.guardar_pin(int(dueno_id), PIN_DEMO)
-    if EN_STREAMLIT_CLOUD:  # solo en la demo en línea: una panadería para ver los vencimientos
+    if EN_STREAMLIT_CLOUD:  # solo en la demo en línea: una panadería (vencimientos) y un gimnasio (socios y clases)
         import demo_panaderia
+        import demo_gimnasio
         demo_panaderia.crear()
+        demo_gimnasio.crear()
     return True
 
 
@@ -149,7 +152,8 @@ if rol not in ("jefe", "empleado"):
             confirmar_apagado()
     # Cualquier dirección (por ejemplo /caja si alguien recarga la página) muestra el ingreso;
     # después de entrar, sigue en esa misma pantalla.
-    rutas = ["caja", "compras", "gastos", "panel_del_dia", "stock", "reportes", "mis_comercios", "importar_excel"]
+    rutas = ["caja", "compras", "gastos", "panel_del_dia", "stock", "reportes", "mis_comercios", "importar_excel",
+             "vencimientos", "ingreso_dni", "socios", "cuotas", "clases", "planes"]
     ingreso = [st.Page(pantalla_ingreso, title="Ingresar", icon="🔑", default=True)]
     ingreso += [st.Page(pantalla_ingreso, title="Ingresar", icon="🔑", url_path=r) for r in rutas]
     st.navigation(ingreso, position="hidden").run()
@@ -212,22 +216,40 @@ vencimientos = st.Page("paginas/vencimientos.py", title="Vencimientos", icon="�
 # Vencimientos aparece solo donde sirve: en panaderías o si algún producto tiene días de duración
 actual = st.session_state.get("comercio")
 con_vencimientos = bool(actual) and (actual["rubro"] == "panaderia" or op.usa_vencimientos(actual["id"]))
+# Las pantallas del gimnasio aparecen solo si el comercio elegido es un gimnasio
+gimnasio = es_gimnasio(actual)
+ingreso_dni = st.Page("paginas/ingreso_dni.py", title="Ingreso por DNI", icon="🚪")
+socios = st.Page("paginas/socios.py", title="Socios", icon="👥")
+cuotas = st.Page("paginas/cuotas.py", title="Cuotas y vencimientos", icon="💳")
+clases = st.Page("paginas/clases.py", title="Clases", icon="📅")
 if rol == "jefe":
-    paginas = {
-        "": [st.Page("paginas/inicio.py", title="Inicio", icon="🏠", default=True)],
+    paginas = {"": [st.Page("paginas/inicio.py", title="Inicio", icon="🏠", default=True)]}
+    if gimnasio:
+        paginas["Gimnasio"] = [ingreso_dni, socios, cuotas, clases]
+    paginas |= {
         "Día a día": [caja, compras, gastos] + ([vencimientos] if con_vencimientos else []),
         "Control": [panel, stock, st.Page("paginas/reportes.py", title="Reportes", icon="📑")],
-        "Configuración": [
-            st.Page("paginas/mis_comercios.py", title="Mis comercios", icon="🏬"),
-            st.Page("paginas/importar_excel.py", title="Importar / exportar Excel", icon="📥"),
-        ],
+        "Configuración": (
+            ([st.Page("paginas/planes.py", title="Planes y actividades", icon="🏷️")] if gimnasio else [])
+            + [st.Page("paginas/mis_comercios.py", title="Mis comercios", icon="🏬"),
+               st.Page("paginas/importar_excel.py", title="Importar / exportar Excel", icon="📥")]
+        ),
     }
 else:
-    # El empleado ve la Caja y solo lo que el jefe le habilitó en Mis comercios
+    # El empleado ve la Caja y solo lo que el jefe le habilitó en Mis comercios.
+    # En un gimnasio, la recepción arranca en el Ingreso por DNI (lo ve siempre, como la Caja).
     permisos = permisos_de(st.session_state["comercio"])
-    caja = st.Page("paginas/caja.py", title="Caja", icon="💵", default=True)
+    caja = st.Page("paginas/caja.py", title="Caja", icon="💵", default=not gimnasio)
     habilitadas = {"compras": compras, "gastos": gastos, "panel_del_dia": panel, "stock": stock}
     if con_vencimientos:
         habilitadas["vencimientos"] = vencimientos
     paginas = [caja] + [pagina for clave, pagina in habilitadas.items() if clave in permisos]
+    if gimnasio:
+        # Son muchas pantallas para una sola fila: las del gimnasio van juntas en su menú
+        ingreso_dni = st.Page("paginas/ingreso_dni.py", title="Ingreso por DNI", icon="🚪", default=True)
+        del_gimnasio = {"socios": socios, "cuotas": cuotas, "clases": clases}
+        paginas = {"": [ingreso_dni, caja],
+                   "Gimnasio": [pagina for clave, pagina in del_gimnasio.items() if clave in permisos],
+                   "Día a día": paginas[1:]}
+        paginas = {seccion: lista for seccion, lista in paginas.items() if lista}
 st.navigation(paginas, position="top").run()

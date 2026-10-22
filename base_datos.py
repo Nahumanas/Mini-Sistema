@@ -12,7 +12,17 @@ Cómo se relacionan las tablas:
             ├── ventas  ── ventas_detalle    (lo que el comercio vende a clientes)
             │     └── tickets  (si el cliente pidió ticket)
             ├── gastos         (alquiler, luz, sueldos, etc.)
-            └── configuracion_telegram (a qué chat de Telegram le llegan los avisos al jefe)
+            ├── configuracion_telegram (a qué chat de Telegram le llegan los avisos al jefe)
+            │
+            │   Solo los gimnasios (rubro "gimnasio") usan estas. Los otros comercios las tienen vacías:
+            ├── configuracion_gimnasio (las reglas: horas para cancelar, qué pasa con las clases que sobran...)
+            ├── disciplinas    (las actividades: crossfit, funcional, pesas libres... las agrega el jefe)
+            ├── planes         (por mes o varios meses; libre o con X clases por mes; con su precio)
+            │     └── planes_disciplinas (qué actividades incluye cada plan; ninguna = todas)
+            ├── socios ── cuotas_cobradas  (cada cuota es también una venta de la caja: así entra al arqueo)
+            │     └── asistencias          (cada vez que el socio pasa por recepción con su DNI)
+            └── clases         (la grilla de la semana: disciplina, día, hora, profe y cupo)
+                  └── reservas (qué socio va a qué clase y qué día: reservado, vino, faltó, canceló o en espera)
 
 Las tablas están escritas con SQLAlchemy en vez de SQL a mano. La ventaja es que
 la misma definición sirve para SQLite hoy y para una base en la nube mañana.
@@ -27,11 +37,13 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     MetaData,
     String,
     Table,
     Text,
+    UniqueConstraint,
     create_engine,
     false,
     true,
@@ -46,6 +58,8 @@ metadata = MetaData()
 
 # Al crear un comercio, el empleado ve (además de la Caja) el Panel del día y el Stock
 PERMISOS_EMPLEADO_INICIALES = "panel_del_dia,stock,compras,vencimientos"  # el jefe le saca lo que quiera desde Mis comercios
+# En un gimnasio, la recepción además ve los socios, las cuotas y las clases (el Ingreso por DNI lo ve siempre)
+PERMISOS_GIMNASIO_INICIALES = "socios,cuotas,clases"
 
 duenos = Table(
     "duenos",
@@ -273,6 +287,158 @@ configuracion_telegram = Table(
     Column("eventos", String(100), nullable=False, default=EVENTOS_TELEGRAM_INICIALES,
            server_default=EVENTOS_TELEGRAM_INICIALES),
     Column("conectado", DateTime),  # cuándo se conectó el chat
+)
+
+
+# ---------------------------------------------------------------------------
+# Módulo Gimnasio (ver operaciones_gimnasio.py)
+# Todas las tablas llevan comercio_id: cada gimnasio ve solo lo suyo, aunque compartan la base.
+# ---------------------------------------------------------------------------
+
+# Las reglas de cada gimnasio (una fila por comercio). Si no hay fila, se usan las de REGLAS_GIMNASIO.
+configuracion_gimnasio = Table(
+    "configuracion_gimnasio",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False, unique=True),
+    # Hasta cuántas horas antes de la clase se puede cancelar y que te devuelvan la clase
+    Column("horas_cancelacion", Integer, nullable=False, default=2, server_default="2"),
+    # Al renovar el plan, las clases que no usó: "vencen" (arranca de cero) o "se_acumulan" (se suman)
+    Column("clases_sobrantes", String(20), nullable=False, default="vencen", server_default="vencen"),
+    # Hasta cuándo vale la cuota: "dias_plan" (los días del plan) o "fin_de_mes" (hasta el último día del mes)
+    Column("vencimiento", String(20), nullable=False, default="dias_plan", server_default="dias_plan"),
+    # Con cuántos días de anticipación se avisa que a un socio se le vence la cuota
+    Column("dias_aviso", Integer, nullable=False, default=7, server_default="7"),
+)
+
+disciplinas = Table(
+    "disciplinas",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
+    Column("nombre", String(100), nullable=False),  # la actividad: Crossfit, Funcional, Pesas libres...
+    Column("activa", Boolean, nullable=False, default=True, server_default=true()),
+)
+
+planes = Table(
+    "planes",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
+    Column("nombre", String(100), nullable=False),  # "Pase libre mensual", "8 clases por mes", "Trimestral"...
+    Column("precio", Float, nullable=False),
+    # Cuánto dura: en meses (1 = mensual, 3 = trimestral...) o, si duracion_meses está vacío, en días
+    Column("duracion_meses", Integer),
+    Column("duracion_dias", Integer, nullable=False, default=30),
+    Column("cantidad_clases", Integer),  # clases POR MES. Vacío = libre (sin límite de clases)
+    Column("activo", Boolean, nullable=False, default=True, server_default=true()),
+)
+
+# Qué actividades incluye cada plan (una o varias: "Funcional + Pesas libres").
+# Un plan sin ninguna fila acá sirve para todas las actividades del gimnasio.
+planes_disciplinas = Table(
+    "planes_disciplinas",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
+    Column("plan_id", Integer, ForeignKey("planes.id"), nullable=False),
+    Column("disciplina_id", Integer, ForeignKey("disciplinas.id"), nullable=False),
+    UniqueConstraint("plan_id", "disciplina_id", name="actividad_una_vez_por_plan"),
+)
+
+socios = Table(
+    "socios",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
+    Column("nombre", String(100), nullable=False),
+    Column("dni", String(20), nullable=False),  # solo números (sin puntos), así se encuentra siempre igual
+    Column("telefono", String(30)),
+    Column("email", String(100)),  # para cuando el socio reserve desde su celular (con la nube)
+    Column("fecha_alta", DateTime, nullable=False),
+    Column("plan_id", Integer, ForeignKey("planes.id")),  # el último plan que pagó
+    Column("fecha_vencimiento", Date),  # último día que vale la cuota (vacío = nunca pagó)
+    Column("clases_restantes", Integer, nullable=False, default=0, server_default="0"),
+    # "al_dia" o "debe". Se recalcula solo con la fecha de vencimiento (ver operaciones_gimnasio.estado_socio)
+    Column("estado", String(20), nullable=False, default="al_dia", server_default="al_dia"),
+    Column("activo", Boolean, nullable=False, default=True, server_default=true()),  # False = se dio de baja
+    Column("nota", String(200)),
+    # El mismo DNI no se puede repetir dentro de un gimnasio (sí en dos gimnasios distintos)
+    UniqueConstraint("comercio_id", "dni", name="socio_unico_por_comercio"),
+)
+
+clases = Table(
+    "clases",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
+    Column("disciplina_id", Integer, ForeignKey("disciplinas.id"), nullable=False),
+    Column("dia_semana", String(20), nullable=False),  # Lunes, Martes...
+    Column("hora_inicio", String(10), nullable=False),  # "19:00"
+    Column("duracion_minutos", Integer, nullable=False, default=60, server_default="60"),
+    Column("profesor", String(100)),
+    Column("cupo_maximo", Integer, nullable=False),
+    Column("activa", Boolean, nullable=False, default=True, server_default=true()),
+)
+
+reservas = Table(
+    "reservas",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
+    Column("clase_id", Integer, ForeignKey("clases.id"), nullable=False),
+    Column("socio_id", Integer, ForeignKey("socios.id"), nullable=False),
+    Column("fecha_reserva", Date, nullable=False),  # el día de la clase (la clase es "los lunes 19:00")
+    # reservado, vino, falto, cancelado o espera (lista de espera: entra sola si alguien cancela)
+    Column("estado", String(20), nullable=False, default="reservado", server_default="reservado"),
+    Column("creada", DateTime, nullable=False),  # el orden de la lista de espera sale de acá
+    Column("origen", String(20), nullable=False, default="recepcion", server_default="recepcion"),  # o "web"
+    Column("hecha_por", String(100)),
+    Column("clase_descontada", Boolean, nullable=False, default=False, server_default=false()),
+    Column("cancelada", DateTime),
+    Column("clase_devuelta", Boolean, nullable=False, default=False, server_default=false()),
+)
+
+# Para contar rápido cuántos lugares quedan en una clase de un día
+Index("reservas_por_clase_y_dia", reservas.c.clase_id, reservas.c.fecha_reserva)
+
+# Cada cuota cobrada. El cobro también se guarda como una venta (sin productos) en la caja abierta:
+# así suma en el arqueo, en el relevo de turno y en el cierre, igual que cualquier venta.
+cuotas_cobradas = Table(
+    "cuotas_cobradas",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
+    Column("socio_id", Integer, ForeignKey("socios.id"), nullable=False),
+    Column("plan_id", Integer, ForeignKey("planes.id"), nullable=False),
+    Column("venta_id", Integer, ForeignKey("ventas.id"), unique=True),  # la plata, en la tabla de ventas
+    Column("caja_id", Integer, ForeignKey("cajas.id")),
+    Column("relevo_id", Integer, ForeignKey("relevos_caja.id")),  # el último relevo de esa caja (vacío = primer turno)
+    Column("fecha", DateTime, nullable=False),
+    Column("monto", Float, nullable=False),
+    Column("medio_pago", String(20), nullable=False),
+    Column("cobrada_por", String(100)),  # quién la cobró (la recepcionista o el jefe)
+    Column("clases_cargadas", Integer),  # cuántas clases le sumó (vacío = pase libre)
+    # Cómo estaba el socio antes de pagar: sirve para deshacer el cobro si se anula
+    Column("clases_antes", Integer),
+    Column("clases_despues", Integer),
+    Column("vence_antes", Date),
+    Column("vence_nuevo", Date, nullable=False),
+    Column("anulada", DateTime),
+)
+
+# Cada vez que un socio pasa por recepción con su DNI (entre o no entre)
+asistencias = Table(
+    "asistencias",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
+    Column("socio_id", Integer, ForeignKey("socios.id"), nullable=False),
+    Column("fecha_hora", DateTime, nullable=False),
+    Column("resultado", String(20), nullable=False),  # "paso" o "rechazado"
+    Column("motivo", String(200)),  # por qué no pasó (venció, no le quedan clases...) o a qué clase vino
+    Column("reserva_id", Integer, ForeignKey("reservas.id")),
+    Column("registrado_por", String(100)),
 )
 
 

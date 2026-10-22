@@ -44,11 +44,14 @@ def listar_comercios(dueno_id):
 
 
 def crear_comercio(dueno_id, nombre, rubro, direccion, usa_ticket):
+    valores = {}
+    if rubro == "gimnasio":  # la recepción del gimnasio arranca viendo socios, cuotas y clases
+        valores["permisos_empleado"] = f"{bd.PERMISOS_EMPLEADO_INICIALES},{bd.PERMISOS_GIMNASIO_INICIALES}"
     with motor.begin() as con:
         resultado = con.execute(
             bd.comercios.insert().values(
                 dueno_id=dueno_id, nombre=nombre, rubro=rubro,
-                direccion=direccion, usa_ticket=usa_ticket,
+                direccion=direccion, usa_ticket=usa_ticket, **valores,
             )
         )
         return resultado.inserted_primary_key[0]
@@ -258,7 +261,11 @@ def abrir_caja(comercio_id, responsable, monto_inicial):
 
 
 def resumen_caja(caja_id):
-    """Lo cobrado en una caja: total por medio de pago, cantidad de ventas y efectivo que debería haber."""
+    """Lo cobrado en una caja: total por medio de pago, cantidad de ventas y efectivo que debería haber.
+
+    Las cuotas de un gimnasio también son ventas de la caja (ya están sumadas en el total). Además se
+    dice cuántas fueron y por cuánto, para mostrarlo aparte ("incluye 3 cuotas por $ 75.000").
+    """
     with motor.connect() as con:
         caja = dict(con.execute(select(bd.cajas).where(bd.cajas.c.id == caja_id)).mappings().one())
         filas = con.execute(
@@ -266,6 +273,11 @@ def resumen_caja(caja_id):
             .where(bd.ventas.c.caja_id == caja_id, VALIDA)
             .group_by(bd.ventas.c.medio_pago)
         ).all()
+        cuotas, total_cuotas = con.execute(
+            select(func.count(), func.coalesce(func.sum(bd.ventas.c.total), 0))
+            .select_from(bd.ventas.join(bd.cuotas_cobradas, bd.cuotas_cobradas.c.venta_id == bd.ventas.c.id))
+            .where(bd.ventas.c.caja_id == caja_id, VALIDA)
+        ).one()
     por_medio = {medio: total for medio, _, total in filas}
     return {
         "caja": caja,
@@ -273,6 +285,8 @@ def resumen_caja(caja_id):
         "cantidad": sum(n for _, n, _ in filas),
         "total": sum(por_medio.values()),
         "efectivo_esperado": caja["monto_inicial"] + por_medio.get("efectivo", 0),
+        "cuotas": cuotas,
+        "total_cuotas": total_cuotas,
     }
 
 
@@ -483,21 +497,31 @@ def _caja_cerrada(con, caja_id):
 
 
 def ventas_de_caja(caja_id):
-    """Las ventas cobradas en una caja (sin las anuladas), con lo que se llevó el cliente."""
+    """Las ventas cobradas en una caja (sin las anuladas), con lo que se llevó el cliente.
+
+    Las cuotas de un gimnasio aparecen como "Cuota: 8 clases (Juan Pérez)".
+    """
     consulta = (
         select(
             bd.ventas.c.id, bd.ventas.c.fecha, bd.ventas.c.medio_pago, bd.ventas.c.total,
             bd.ventas_detalle.c.cantidad, bd.productos.c.nombre,
+            bd.planes.c.nombre.label("plan"), bd.socios.c.nombre.label("socio"),
         )
         .select_from(
-            bd.ventas.join(bd.ventas_detalle, bd.ventas_detalle.c.venta_id == bd.ventas.c.id)
-            .join(bd.productos, bd.productos.c.id == bd.ventas_detalle.c.producto_id)
+            bd.ventas.outerjoin(bd.ventas_detalle, bd.ventas_detalle.c.venta_id == bd.ventas.c.id)
+            .outerjoin(bd.productos, bd.productos.c.id == bd.ventas_detalle.c.producto_id)
+            .outerjoin(bd.cuotas_cobradas, bd.cuotas_cobradas.c.venta_id == bd.ventas.c.id)
+            .outerjoin(bd.planes, bd.planes.c.id == bd.cuotas_cobradas.c.plan_id)
+            .outerjoin(bd.socios, bd.socios.c.id == bd.cuotas_cobradas.c.socio_id)
         )
         .where(bd.ventas.c.caja_id == caja_id, VALIDA)
     )
     lineas = pd.read_sql(consulta, motor, parse_dates=["fecha"])
     # Armado con f-string (no con "+"), así funciona aunque la caja no tenga ventas
-    lineas["producto"] = [f"{cantidad} x {nombre}" for cantidad, nombre in zip(lineas["cantidad"], lineas["nombre"])]
+    lineas["producto"] = [
+        f"Cuota: {plan} ({socio})" if pd.isna(nombre) else f"{cantidad} x {nombre}"
+        for cantidad, nombre, plan, socio in zip(lineas["cantidad"], lineas["nombre"], lineas["plan"], lineas["socio"])
+    ]
     return (
         lineas.groupby(["id", "fecha", "medio_pago", "total"], as_index=False)["producto"].agg(", ".join)
         .rename(columns={"producto": "productos"})
@@ -519,6 +543,7 @@ def anular_venta(caja_id, venta_id, hecho_por, motivo):
             raise AjusteInvalido("Esa venta no está en la caja o ya se anuló.")
         ahora = datetime.now()
         con.execute(bd.ventas.update().where(bd.ventas.c.id == venta_id).values(anulada=ahora))
+        _deshacer_cuota(con, venta_id, ahora)  # si era la cuota de un socio del gimnasio, se la saca
         for linea in con.execute(select(bd.ventas_detalle).where(bd.ventas_detalle.c.venta_id == venta_id)).mappings():
             con.execute(
                 bd.productos.update()
@@ -529,6 +554,32 @@ def anular_venta(caja_id, venta_id, hecho_por, motivo):
             caja_id=caja_id, fecha=ahora, hecho_por=hecho_por, tipo="anular_venta",
             venta_id=venta_id, monto=venta["total"], motivo=motivo,
         ))
+
+
+def _deshacer_cuota(con, venta_id, ahora):
+    """Si la venta anulada era una cuota del gimnasio: la cuota queda anulada y el socio vuelve a como estaba.
+
+    Si fue la última cuota que pagó, vuelve al vencimiento y a las clases de antes (menos las que usó
+    desde que pagó). Si después pagó otra, el vencimiento no se toca (lo manda la cuota nueva):
+    solo se le restan las clases que se le habían cargado.
+    """
+    cuota = con.execute(
+        select(bd.cuotas_cobradas).where(bd.cuotas_cobradas.c.venta_id == venta_id,
+                                         bd.cuotas_cobradas.c.anulada.is_(None))
+    ).mappings().first()
+    if cuota is None:
+        return
+    con.execute(bd.cuotas_cobradas.update().where(bd.cuotas_cobradas.c.id == cuota["id"]).values(anulada=ahora))
+    socio = con.execute(select(bd.socios).where(bd.socios.c.id == cuota["socio_id"])).mappings().one()
+    actuales = socio["clases_restantes"] or 0
+    cambios = {"clases_restantes": max(actuales - (cuota["clases_cargadas"] or 0), 0)}
+    if socio["fecha_vencimiento"] == cuota["vence_nuevo"]:  # fue la última cuota que pagó
+        # Vuelve a las clases que tenía antes, menos las que usó desde que pagó
+        usadas = max((cuota["clases_despues"] if cuota["clases_despues"] is not None else actuales) - actuales, 0)
+        cambios["clases_restantes"] = max((cuota["clases_antes"] or 0) - usadas, 0)
+        cambios["fecha_vencimiento"] = cuota["vence_antes"]
+        cambios["estado"] = "al_dia" if cuota["vence_antes"] and cuota["vence_antes"] >= ahora.date() else "debe"
+    con.execute(bd.socios.update().where(bd.socios.c.id == cuota["socio_id"]).values(**cambios))
 
 
 def recontar_efectivo(caja_id, efectivo, hecho_por, motivo):
@@ -1112,6 +1163,8 @@ def detalle_ventas(comercio_ids, desde=None, hasta=None):
     if desde is not None:
         consulta = consulta.where(_entre_dias(bd.ventas.c.fecha, desde, hasta))
     df = pd.read_sql(consulta, motor)
+    if df.empty:  # sin ventas las columnas vienen como texto y las cuentas de los reportes fallan (0/0)
+        df = df.astype({c: "float64" for c in ("cantidad", "precio_unitario", "costo_unitario", "subtotal")})
     df["fecha"] = pd.to_datetime(df["fecha"])
     df["costo_total"] = df["cantidad"] * df["costo_unitario"]
     df["ganancia"] = df["subtotal"] - df["costo_total"]

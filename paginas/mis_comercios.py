@@ -8,7 +8,7 @@ import streamlit as st
 
 import notificaciones_telegram as avisos
 import operaciones as op
-from comun import PERMISOS_EMPLEADO, RUBROS, aviso_temporada, permisos_de
+from comun import PERMISOS_EMPLEADO, PERMISOS_SOLO_GIMNASIO, RUBROS, aviso_temporada, permisos_de
 from config import EN_STREAMLIT_CLOUD, MODO_DEMO, guardar_en_env, token_telegram
 
 dueno = st.session_state["dueno"]
@@ -83,12 +83,18 @@ for c in comercios.itertuples():
             op.cambiar_resumen_semanal(c.id, semanal)
             st.rerun()
         actuales = permisos_de(c._asdict())
+        gimnasio = c.rubro == "gimnasio"
+        # Socios, Cuotas y Clases se ofrecen solo en los gimnasios
+        opciones = [p for p in PERMISOS_EMPLEADO if gimnasio or p not in PERMISOS_SOLO_GIMNASIO]
         elegidos = st.multiselect(
-            "Qué ve el empleado además de la Caja", list(PERMISOS_EMPLEADO), default=actuales,
-            format_func=PERMISOS_EMPLEADO.get, key=f"permisos_{c.id}", placeholder="Solo la Caja",
-            help="El empleado nunca ve el Inicio, los Reportes, la ganancia ni esta pantalla.",
+            "Qué ve el empleado además de la Caja" + (" y el Ingreso por DNI" if gimnasio else ""), opciones,
+            default=[p for p in actuales if p in opciones],
+            format_func=PERMISOS_EMPLEADO.get, key=f"permisos_{c.id}",
+            placeholder="Solo la Caja" + (" y el Ingreso" if gimnasio else ""),
+            help="El empleado nunca ve el Inicio, los Reportes, la ganancia ni esta pantalla"
+                 + (" (ni los Planes del gimnasio)." if gimnasio else "."),
         )
-        if elegidos != actuales:
+        if elegidos != [p for p in actuales if p in opciones]:
             op.cambiar_permisos_empleado(c.id, elegidos)
             st.toast("Listo: el empleado lo ve la próxima vez que toque algo.")
         horarios_y_turnos(c.id)
@@ -108,8 +114,10 @@ with st.form("nuevo_comercio", clear_on_submit=True):
         else:
             op.crear_comercio(dueno["id"], nombre.strip(), rubro, direccion.strip() or None, usa_ticket)
             st.session_state["mensaje_comercios"] = (
-                f"Listo, creaste {nombre.strip()}. Elegilo en el menú de la izquierda y cargá sus productos "
-                "en **Stock** o desde **Importar / exportar Excel**."
+                f"Listo, creaste {nombre.strip()}. Elegilo en el menú de la izquierda y "
+                + ("armá sus planes, actividades y clases en **Planes y actividades** (hay un ejemplo para arrancar)."
+                   if rubro == "gimnasio" else
+                   "cargá sus productos en **Stock** o desde **Importar / exportar Excel**.")
             )
             st.rerun()
 
@@ -208,10 +216,13 @@ def avisos_telegram():
             if activo != bool(config["activo"]):
                 avisos.cambiar_activo(comercio_id, activo)
                 st.rerun()
-            elegidos = st.multiselect("Qué avisos querés", list(avisos.EVENTOS), default=config["eventos"],
+            es_gim = comercios.set_index("id").loc[comercio_id, "rubro"] == "gimnasio"
+            opciones = [e for e in avisos.EVENTOS if es_gim or e not in avisos.EVENTOS_SOLO_GIMNASIO]
+            elegidos = st.multiselect("Qué avisos querés", opciones,
+                                      default=[e for e in config["eventos"] if e in opciones],
                                       format_func=avisos.EVENTOS.get, key=f"tg_eventos_{comercio_id}",
                                       placeholder="Ninguno")
-            if elegidos != config["eventos"]:
+            if elegidos != [e for e in config["eventos"] if e in opciones]:
                 avisos.cambiar_eventos(comercio_id, elegidos)
                 st.toast("Listo, guardado.")
             b1, b2, _ = st.columns([1, 1, 2])

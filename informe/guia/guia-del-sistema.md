@@ -4,7 +4,7 @@ Esta guía explica el sistema completo: qué hace, cómo está armado por dentro
 
 ## 1. Qué es
 
-Mini-Sistema es un **mini ERP** para comercios de barrio (kiosco, almacén, ferretería, ropa, panadería). Sirve para llevar la caja, las ventas, las compras, los gastos y el stock, y para ver cuánto se vende y cuánto se gana.
+Mini-Sistema es un **mini ERP** para comercios de barrio (kiosco, almacén, ferretería, ropa, panadería, gimnasio). Sirve para llevar la caja, las ventas, las compras, los gastos y el stock, y para ver cuánto se vende y cuánto se gana. Los gimnasios suman socios, planes, cuotas, ingreso por DNI y clases con reservas (ver la sección 7).
 
 - Un **dueño** puede tener uno o varios **comercios** y elegir cuál ver.
 - Cada comercio tiene un **jefe** (el dueño, que entra con PIN) y **empleados**, que ven solo lo que el jefe les permite.
@@ -53,6 +53,11 @@ El sistema tiene tres partes, una encima de la otra:
 | 📑 Reportes | Las 5 preguntas (cuánto vendí, gané y gasté, qué se vende más y qué me falta comprar) y el Excel con gráficos. | Jefe |
 | 🏬 Mis comercios | Crear comercios, prender el ticket, el resumen semanal, elegir qué ve el empleado, cargar los **horarios y turnos** del local y cambiar el PIN. | Jefe |
 | 📥 Importar / exportar Excel | Cargar o actualizar muchos productos de una vez con Excel. | Jefe |
+| 🚪 Ingreso por DNI | Solo gimnasios. El DNI del socio y el cartel verde, amarillo o rojo; cobrar en el momento y dar de alta. | Jefe y empleado (siempre; es la primera pantalla de recepción) |
+| 👥 Socios | Solo gimnasios. Buscador, filtros y la ficha de cada socio (cuota, reservas, historial, datos). | Jefe (y empleado si tiene permiso) |
+| 💳 Cuotas y vencimientos | Solo gimnasios. Cobrar, quién vence y quién debe (con recordatorio por WhatsApp), últimas cuotas. | Jefe (y empleado si tiene permiso) |
+| 📅 Clases | Solo gimnasios. Grilla de la semana con cupo, reservas, lista de espera, asistencia y "Agregar al calendario". El jefe arma la grilla. | Jefe (y empleado si tiene permiso) |
+| 🏷️ Planes y actividades | Solo gimnasios. Planes, actividades y reglas. | Jefe |
 
 ### Modo claro u oscuro
 
@@ -74,6 +79,8 @@ Las tablas se dibujan como imagen y no toman colores de CSS: en modo oscuro se "
 | Horarios y turnos del local | Los carga en Mis comercios | No |
 | Cargar lo que llega (Compras) | Sí | Sí, sin ver costos (el jefe se lo puede sacar) |
 | Crear productos | Sí (en Stock, o en el momento desde la Caja o Compras) | No: le avisa al jefe |
+| Gimnasio: cobrar cuotas, anotar en clases, dar de alta socios | Sí | Sí (con los permisos Socios, Cuotas y Clases, que vienen prendidos en los gimnasios nuevos) |
+| Gimnasio: descuentos, cambiar el vencimiento, devolver una clase cancelada tarde, dar de baja, planes y grilla | Sí | No |
 
 - Si el PIN se pone mal 3 veces, hay que esperar 30 segundos.
 - Si el jefe se olvida el PIN, en la PC del sistema se corre `python olvide_mi_pin.py "Nombre"` y al entrar crea uno nuevo.
@@ -189,7 +196,58 @@ El lector (la "pistola" del súper) se enchufa por USB y funciona como un teclad
 
 **Importante:** el Excel no es donde se guardan los datos. Es solo una forma rápida de cargarlos: al importarlo, cada fila se guarda en la tabla `productos` de la base, y desde ahí la leen la Caja, el Stock y los reportes.
 
-## 7. La base de datos por dentro
+## 7. El gimnasio
+
+Si el comercio es del rubro **Gimnasio**, el sistema suma cinco pantallas. Un kiosco o una ferretería no ven nada nuevo. Todo está en la misma base, en tablas nuevas, y todo se busca por `comercio_id`: un gimnasio nunca ve los socios, planes ni clases de otro, aunque sean del mismo dueño. El DNI no se puede repetir dentro de un gimnasio, pero sí en dos gimnasios distintos.
+
+### Planes y actividades (solo el jefe)
+
+- **Actividades:** crossfit, funcional, spinning, pesas libres... El jefe agrega las que quiera y las puede apagar.
+- **Planes:** cada uno tiene precio, **duración** (1, 2, 3, 6 o 12 meses, o una cantidad de días), **clases** (libre o una cantidad por mes) y **actividades** (todas, o solo algunas). Ejemplos: "8 clases por mes", "Pase libre mensual", "Pesas libres mensual" (solo esa actividad), "Trimestral Crossfit (8 por mes)", que carga 24 clases juntas.
+- **Reglas:** hasta cuántas horas antes se puede cancelar y que se devuelva la clase (2 por defecto); si las clases que sobran **vencen** o **se acumulan** al renovar; si la cuota de un plan por meses vale los meses del calendario o **hasta fin de mes**; y con cuántos días de anticipación avisar que vence.
+- Si el gimnasio está vacío, **Cargar el ejemplo** deja armadas las actividades, 6 planes y la grilla (y, si se tilda, socios de prueba).
+
+### La cuota entra a la caja
+
+1. Recepción elige el socio y el plan. El sistema muestra hasta cuándo vale y con cuántas clases queda, y avisa si se pierden clases que no usó.
+2. Al tocar **Cobrar**, en una sola transacción: se crea una **venta** en la caja abierta (sin productos), una fila en `cuotas_cobradas` (quién cobró, en qué turno y cómo estaba el socio antes) y se le actualizan al socio el plan, el vencimiento y las clases.
+3. Como es una venta, la cuota suma en el **arqueo**, en el **relevo de turno**, en el **cierre** y en el aviso de **Telegram**, sin cambiar nada de eso.
+4. Si renueva antes de que venza, lo nuevo empieza cuando termina lo que ya pagó.
+5. Si fue un error, el jefe la **anula** en Cajas anteriores (como cualquier venta) y el socio vuelve a como estaba: su vencimiento anterior y sus clases, menos las que ya usó.
+
+El empleado cobra el precio del plan. El jefe además puede hacer un descuento o cambiar el vencimiento.
+
+### Ingreso por DNI (recepción)
+
+Se escribe el DNI y Enter, o se pasa el DNI por el lector (el sistema saca el número del código del DNI). Sale un cartel grande:
+
+| Color | Qué quiere decir | Qué pasa |
+|---|---|---|
+| 🟢 Verde | Al día y con reserva hoy (o plan libre) | Se anota la entrada sola y la reserva pasa a "vino". |
+| 🟡 Amarillo | Al día, pero sin reserva hoy, o vence pronto | Se lo anota en una clase de hoy (le descuenta una) o se lo deja pasar igual. |
+| 🔴 Rojo | Debe la cuota, no le quedan clases o está de baja | Se le cobra ahí mismo. Queda anotado que no pasó. |
+
+Si el DNI no está, se lo da de alta en el momento. Si alguien pasa dos veces en una hora, no se anota dos veces.
+
+### Clases, reservas y lista de espera
+
+- La **grilla** se arma una vez (actividad, día, hora, duración, profe y cupo) y se repite todas las semanas.
+- **Reservar** descuenta una clase, solo si es para un día y una actividad que cubre su plan, si está al día y si le quedan clases.
+- **Sin sobrecupo:** al reservar, el sistema traba la clase mientras cuenta los lugares. Si dos personas reservan el último lugar a la vez, entra una sola y la otra va a la **lista de espera**. Se probó con 25 reservas al mismo tiempo para 3 lugares: 3 adentro y 22 en espera, en SQLite y en PostgreSQL.
+- **Cancelar a tiempo** devuelve la clase; tarde, se pierde (el jefe puede devolverla igual). El primero de la espera entra solo, y el jefe puede recibir un aviso por Telegram.
+- Las clases que ya pasaron se cierran solas: quien tenía reserva y no vino queda como "faltó".
+- **📅 Agregar al calendario:** link de **Google Calendar** (con la hora de Argentina), archivo **.ics** con recordatorio 1 hora antes, **QR** para escanear con el celular y el mensaje listo para **WhatsApp**.
+
+### Preparado para el turno web
+
+Cuando el sistema esté en la nube, el socio va a reservar desde su celular, con su usuario, y va a ver solo lo suyo. Lo que ya está hecho para eso:
+
+- `clases_disponibles(comercio_id, socio_id, desde, dias)`: las clases que puede reservar con su plan, con los lugares libres.
+- `reservas_del_socio(...)`, `reservar_clase(..., origen="web")` y `cancelar_reserva(...)`: las mismas reglas que en recepción.
+- La tabla `reservas` guarda el `origen` (recepción o web) y `socios` tiene el `email` para crear su usuario.
+- En Supabase, las reglas de seguridad (RLS) van a filtrar por `comercio_id` y por socio.
+
+## 8. La base de datos por dentro
 
 Un dueño tiene uno o más comercios, y cada comercio tiene sus propias tablas:
 
@@ -203,7 +261,9 @@ duenos
         ├── ventas  ── ventas_detalle
         │     └── tickets
         ├── gastos
-        └── configuracion_telegram
+        ├── configuracion_telegram
+        └── (gimnasios) configuracion_gimnasio, disciplinas, planes ── planes_disciplinas,
+                        socios, clases ── reservas, cuotas_cobradas, asistencias
 ```
 
 | Tabla | Qué guarda |
@@ -222,6 +282,14 @@ duenos
 | `tickets` | El número de ticket de las ventas que lo pidieron. |
 | `gastos` | Gastos del comercio por fecha y categoría. |
 | `configuracion_telegram` | Una fila por comercio: el chat de Telegram del jefe, el código del link para conectarse (se borra al usarlo), si los avisos están prendidos y cuáles quiere. |
+| `configuracion_gimnasio` | Las reglas de cada gimnasio: horas para cancelar, qué pasa con las clases que sobran, cómo vence la cuota y con cuántos días avisar. |
+| `disciplinas` | Las actividades del gimnasio (crossfit, funcional...). |
+| `planes` y `planes_disciplinas` | Cada plan (precio, meses o días, clases por mes; vacío = libre) y qué actividades incluye (sin filas = todas). |
+| `socios` | Nombre, DNI (único en cada gimnasio), teléfono, email, plan, hasta cuándo pagó, cuántas clases le quedan, si está al día o debe, y si está activo. |
+| `clases` | La grilla: actividad, día, hora, duración, profe y cupo. |
+| `reservas` | Qué socio reservó qué clase y para qué día; cómo terminó (reservado, vino, faltó, canceló o en espera), si se le descontó la clase, si se le devolvió y desde dónde se hizo. |
+| `cuotas_cobradas` | Cada cuota: su venta (y por eso su caja), el relevo de turno, quién cobró, el monto, y cómo estaba el socio antes y después (para poder anularla). |
+| `asistencias` | Cada vez que alguien pasa por el ingreso (o no pasa, y por qué). |
 
 **¿Por qué ventas y ventas_detalle por separado?** Porque una venta (un cliente que paga) puede tener varios productos. `ventas` guarda el total y el medio de pago; `ventas_detalle` guarda cada producto.
 
@@ -237,13 +305,13 @@ duenos
 
 Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 
-## 8. Los Excel del sistema
+## 9. Los Excel del sistema
 
 - **Importar:** plantilla con `codigo`, `nombre`, `precio_costo`, `precio_venta`, `stock` (obligatorias) y `categoria`, `stock_minimo`, `codigo_barras`, `dias_duracion` (opcionales). Si el código ya existe actualiza el producto; si no, lo crea. Las filas con errores se muestran aparte y no se importan.
 - **Exportar:** baja los productos a Excel para cambiar muchos precios juntos y volver a subirlos.
-- **Reportes:** un Excel con gráficos y las hojas Resumen, Por comercio, Productos, Qué comprar, Ventas, Compras y Gastos. El del mes pasado se guarda solo en `reportes/<comercio>/mensuales`. El semanal se prende por comercio (conviene en temporada alta; de diciembre a febrero el Inicio lo sugiere).
+- **Reportes:** un Excel con gráficos y las hojas Resumen, Por comercio, Productos, Qué comprar, Ventas, Compras y Gastos (y **Cuotas**, si hubo cuotas de gimnasio: cada una y lo cobrado por plan). El del mes pasado se guarda solo en `reportes/<comercio>/mensuales`. El semanal se prende por comercio (conviene en temporada alta; de diciembre a febrero el Inicio lo sugiere).
 
-## 9. Los archivos del proyecto
+## 10. Los archivos del proyecto
 
 | Archivo | Para qué sirve |
 |---|---|
@@ -258,6 +326,10 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 | `reportes.py` | Arma los Excel de reportes con gráficos. |
 | `ticket.py` | Arma el ticket en PDF. |
 | `notificaciones_telegram.py` | Los avisos por Telegram: conectar el chat del jefe y mandar los mensajes en segundo plano. |
+| `operaciones_gimnasio.py` | Las lecturas y escrituras del gimnasio (socios, planes, cuotas, clases, reservas e ingreso). Cada función recibe primero el `comercio_id`. |
+| `gimnasio_ui.py` | Partes de pantalla que comparten las del gimnasio: el cartel de colores, elegir socio, el cobro y el botón del calendario. |
+| `calendario.py` | Google Calendar, el archivo .ics, WhatsApp y el QR. |
+| `demo_gimnasio.py` y `demo_panaderia.py` | El gimnasio y la panadería de la demo online (el gimnasio también es el de "Cargar el ejemplo"). |
 | `.env` | Secretos de la PC, como el token del bot (no se sube a GitHub). |
 | `generar_datos_prueba.py` | Crea 2 dueños, 4 comercios y 6 meses y medio de ventas de prueba. |
 | `ver_resumen.py` | Consultas SQL de ejemplo. |
@@ -267,17 +339,17 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 | `mini_sistema.db` | La base de datos (no se sube a GitHub). |
 | `informe/` | Guía, plan, capturas y Excel de ejemplo. |
 
-## 10. GitHub y la demo en línea
+## 11. GitHub y la demo en línea
 
 - El código está en **GitHub**: https://github.com/Nahumanas/Mini-Sistema. Es el portfolio: cualquiera puede ver el código, el README y las capturas.
 - **No se suben** la base de datos, los reportes ni el plan interno (lo controla el archivo `.gitignore`).
-- **Modo demo:** en Streamlit Community Cloud se publica con `MODO_DEMO = "1"`. Si no hay base, la crea sola con datos de prueba, el PIN de jefe es **1234** y no aparece el botón de apagar.
+- **Modo demo:** en Streamlit Community Cloud se publica con `MODO_DEMO = "1"`. Si no hay base, la crea sola con datos de prueba, el PIN de jefe es **1234** y no aparece el botón de apagar. Además arma la **Panadería La Espiga** (vencimientos) y el **Gimnasio Fuerza Norte** (socios, cuotas y clases; el DNI `30000000` es de un socio de prueba).
 - La demo está en **https://mini-sistema-demo.streamlit.app**. Cada vez que se sube un cambio a GitHub, se actualiza sola.
 - En Streamlit Cloud el sistema se muestra adentro de otra página (un marco). Por eso el JavaScript del sistema usa la página donde corre (`correr_script` en `comun.py`) y no la de "afuera": si no, el lector no quedaría listo para escanear.
 - **Reseñas:** con `FORMULARIO_RESENAS = "https://forms.gle/..."` en los Secrets de la demo aparece el botón **💬 Dejá tu reseña**, que abre un formulario de Google. Las respuestas quedan en una planilla de Google del dueño, no en la base (la demo en la nube borra la base cuando se reinicia).
 - **Videos:** en `informe/videos` están el tutorial completo, la versión corta para LinkedIn y un GIF de la caja con la pistola (el GIF va en el README).
 
-## 11. Cuánto cobrarlo (propuesta)
+## 12. Cuánto cobrarlo (propuesta)
 
 - **Un solo plan de $19.900 por mes** (unos US$13), con sucursales gratis.
 - **Sin límite de facturación** en ningún plan: cada empleado cobra todo lo que venda. Otros sistemas limitan cuánto puede facturar cada empleado según el plan (por ejemplo, $250.000), y una panadería lo marcó como un problema.
@@ -287,15 +359,15 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 - Con la factura ARCA, subir a unos $29.900. Ajuste por inflación cada 3 meses.
 - Los costos de la nube rondan US$30-35 por mes: con 3 clientes ya se cubren.
 
-## 12. Lo que viene
+## 13. Lo que viene
 
-1. **La nube:** base en **Supabase** (PostgreSQL) y la página en **Render** o **Railway**. Varios locales en una sola base y el dueño viendo todo en vivo desde el celular. Ingreso con Gmail.
+1. **La nube:** base en **Supabase** (PostgreSQL) y la página en **Render** o **Railway**. Varios locales en una sola base y el dueño viendo todo en vivo desde el celular. Ingreso con Gmail. En los gimnasios, el **turno web**: el socio reserva desde su celular (ya está preparado, ver la sección 7).
 2. **Cobro con posnet o QR de Mercado Pago** desde la Caja.
 3. **Caja sin internet:** que guarde las ventas y las suba cuando vuelve la conexión.
 4. **Versión 2:** factura electrónica ARCA y "servicios sin stock" (para peluquerías, por ejemplo).
 5. **Impresión directa** en la ticketera térmica (hoy se imprime el PDF).
 
-## 13. Palabras que aparecen
+## 14. Palabras que aparecen
 
 | Palabra | Qué significa |
 |---|---|
@@ -319,3 +391,9 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 | Token | La clave secreta de un bot. Con ella el sistema puede mandar mensajes en su nombre: no se comparte. |
 | Chat ID | El número con el que Telegram identifica tu chat. El sistema lo guarda al conectarte. |
 | Segundo plano | Algo que el programa hace por detrás, sin hacer esperar a quien está usando la pantalla. |
+| Cupo | Cuántas personas entran en una clase. |
+| Lista de espera | Los que quisieron reservar una clase llena. Si alguien cancela, entra solo el primero. |
+| Transacción | Varias escrituras en la base que se hacen todas juntas o ninguna. |
+| Bloqueo (lock) | Cuando una transacción "traba" una fila para que otra no la cambie al mismo tiempo. Así no se reserva dos veces el último lugar. |
+| Archivo .ics | Un archivo de calendario que entienden el iPhone, Google y Outlook. |
+| Multi-tenant | Muchos clientes en la misma base, cada uno viendo solo lo suyo (acá, por `comercio_id`). |

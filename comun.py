@@ -23,6 +23,7 @@ RUBROS = {
     "ropa": "👕 Ropa",
     "almacen": "🛒 Almacén",
     "panaderia": "🥖 Panadería",
+    "gimnasio": "🏋️ Gimnasio",
     "otro": "🏪 Otro",
 }
 
@@ -35,7 +36,16 @@ PERMISOS_EMPLEADO = {
     "gastos": "🧾 Gastos",
     "vencimientos": "🗓️ Vencimientos (cargar tandas y retirar lo vencido)",
     "ajustar_caja": "✏️ Ajustar cajas cerradas (ve las cajas anteriores)",
+    # Solo en los gimnasios (el Ingreso por DNI lo ve siempre, como la Caja)
+    "socios": "👥 Socios (fichas, altas y reservas de cada socio)",
+    "cuotas": "💳 Cuotas y vencimientos",
+    "clases": "📅 Clases (reservar y tomar asistencia)",
 }
+PERMISOS_SOLO_GIMNASIO = ("socios", "cuotas", "clases")
+
+
+def es_gimnasio(comercio):
+    return bool(comercio) and comercio.get("rubro") == "gimnasio"
 
 # Temporada alta (verano): en estos meses el sistema sugiere activar el resumen semanal
 MESES_TEMPORADA = (12, 1, 2)  # diciembre, enero y febrero
@@ -278,6 +288,30 @@ ESTILOS = """<style>
 [data-testid="stVegaLiteChart"] text { fill: var(--texto-suave) !important; }
 [data-testid="stVegaLiteChart"] .mark-rule line, [data-testid="stVegaLiteChart"] .domain,
 [data-testid="stVegaLiteChart"] .tick line { stroke: var(--borde) !important; }
+
+/* ---------- Gimnasio ---------- */
+/* Ingreso por DNI: el cartel grande verde, amarillo o rojo (se ve desde lejos) */
+.semaforo { border: 2px solid var(--borde); border-radius: 12px; padding: 1.2rem 1.5rem; margin: 0.4rem 0 1rem; }
+.semaforo-titulo { font-size: 1.9rem; font-weight: 700; line-height: 1.2; font-family: "Manrope", "Inter", sans-serif; }
+.semaforo-nombre { font-size: 1.3rem; font-weight: 600; color: var(--texto); margin-top: 0.35rem; }
+.semaforo-detalle { font-size: 1.08rem; color: var(--texto); margin-top: 0.25rem; }
+.semaforo-verde { background: color-mix(in srgb, #22C55E 15%, var(--tarjeta)); border-color: color-mix(in srgb, #22C55E 65%, transparent); }
+.semaforo-verde .semaforo-titulo { color: var(--aviso-exito); }
+.semaforo-amarillo { background: color-mix(in srgb, #EAB308 16%, var(--tarjeta)); border-color: color-mix(in srgb, #EAB308 70%, transparent); }
+.semaforo-amarillo .semaforo-titulo { color: var(--aviso-cuidado); }
+.semaforo-rojo { background: color-mix(in srgb, #EF4444 14%, var(--tarjeta)); border-color: color-mix(in srgb, #EF4444 65%, transparent); }
+.semaforo-rojo .semaforo-titulo { color: var(--aviso-error); }
+/* El casillero del DNI, bien grande */
+.stApp .st-key-casillero_dni input { font-size: 1.6rem !important; padding: 0.6rem 0.8rem !important; letter-spacing: 0.04em; }
+/* Grilla de clases: cada clase es un botón; la rayita de la izquierda dice si hay lugar */
+.stApp [class*="st-key-clase_"] button { justify-content: flex-start; text-align: left; border-left-width: 5px !important; min-height: 3rem; }
+.stApp [class*="st-key-clase_libre"] button { border-left-color: #22C55E !important; }
+.stApp [class*="st-key-clase_casi"] button { border-left-color: #EAB308 !important; }
+.stApp [class*="st-key-clase_llena"] button { border-left-color: #EF4444 !important; }
+.stApp [class*="st-key-clase_termino"] button { opacity: 0.6; }
+.stApp [class*="st-key-clase_elegida"] button { border-color: var(--acento) !important; background: color-mix(in srgb, var(--acento) 14%, var(--tarjeta)) !important; border-left-color: var(--acento) !important; }
+.dia-grilla { font-weight: 600; color: var(--texto); padding: 0.2rem 0 0.35rem; border-bottom: 1px solid var(--borde); margin-bottom: 0.4rem; }
+.dia-grilla.hoy { color: var(--acento-fuerte); border-bottom: 2px solid var(--acento); }
 
 /* ---------- Caja ---------- */
 /* El total y el botón Cobrar bien grandes, que es lo que se mira y se toca con apuro */

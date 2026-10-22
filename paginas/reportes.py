@@ -6,6 +6,7 @@ from datetime import date, timedelta
 import streamlit as st
 
 import operaciones as op
+import operaciones_gimnasio as gim
 import reportes as rep
 import tema
 from comun import aviso_temporada, comercio_actual, encabezado, pesos, plural
@@ -64,10 +65,11 @@ else:
     periodo = rep.periodo_fechas(*fechas)
 
 datos = rep.datos_del_periodo(ids, periodo)
-este = rep.resumen(datos["ventas"], datos["gastos"], datos["compras"], datos["mermas"])
+este = rep.resumen(datos["ventas"], datos["gastos"], datos["compras"], datos["mermas"], datos["cuotas"])
 anterior = rep.resumen(datos["ventas_anterior"], datos["gastos_anterior"], datos["compras_anterior"],
-                       datos["mermas_anterior"])
+                       datos["mermas_anterior"], datos["cuotas_anterior"])
 hubo_vencidos = bool(este["vencido"] or anterior["vencido"])
+hubo_cuotas = bool(este["cantidad_cuotas"] or anterior["cantidad_cuotas"])  # solo pasa en los gimnasios
 
 
 def cambio(clave):
@@ -81,10 +83,19 @@ if periodo.en_curso:
 
 # --- 1. ¿Cuánto vendí? ---
 st.markdown("#### 1. ¿Cuánto vendí?")
-m1, m2, m3 = st.columns(3)
-m1.metric("Ventas", pesos(este["ventas"]), cambio("ventas"))
-m2.metric("Cantidad de ventas", f"{este['cantidad']:,}".replace(",", "."), cambio("cantidad"))
-m3.metric("Ticket promedio", pesos(este["ticket_promedio"] or 0), cambio("ticket_promedio"))
+if hubo_cuotas:
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total cobrado", pesos(este["cobrado"]), cambio("cobrado"), help="Productos más cuotas.")
+    m2.metric("Cuotas", pesos(este["cuotas"]), cambio("cuotas"),
+              help=plural(este["cantidad_cuotas"], "cuota cobrada", "cuotas cobradas"))
+    m3.metric("Ventas de productos", pesos(este["ventas"]), cambio("ventas"),
+              help=plural(este["cantidad"], "venta", "ventas") + " (buffet, accesorios...). Ticket promedio: "
+                   + pesos(este["ticket_promedio"] or 0) + ".")
+else:
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Ventas", pesos(este["ventas"]), cambio("ventas"))
+    m2.metric("Cantidad de ventas", f"{este['cantidad']:,}".replace(",", "."), cambio("cantidad"))
+    m3.metric("Ticket promedio", pesos(este["ticket_promedio"] or 0), cambio("ticket_promedio"))
 
 # --- 2. ¿Cuánto gané? ---
 st.markdown("#### 2. ¿Cuánto gané?")
@@ -93,7 +104,8 @@ if hubo_vencidos:
 else:
     m1, m2, m3 = st.columns(3)
 m1.metric("Ganancia bruta", pesos(este["ganancia_bruta"]), cambio("ganancia_bruta"),
-          help="Lo vendido menos lo que costó esa mercadería.")
+          help="Lo vendido menos lo que costó esa mercadería" + (", más las cuotas (no tienen costo)."
+                                                                 if hubo_cuotas else "."))
 m2.metric("Gastos del período", pesos(este["gastos"]), cambio("gastos"), delta_color="inverse",
           help="Los gastos del mes (alquiler, luz, sueldos...) repartidos por día: "
                f"a este período le tocan {plural(periodo.dias, 'día', 'días')}.")
@@ -121,6 +133,21 @@ if gastos.empty:
 else:
     por_categoria = gastos.groupby("categoria")["parte"].sum().sort_values(ascending=False)
     g2.bar_chart(por_categoria, horizontal=True, x_label="", y_label="$ del período", color=tema.color("acento"))
+
+# --- Gimnasio: cuotas por plan y socios ---
+if hubo_cuotas or any(c["rubro"] == "gimnasio" for c in elegidos):
+    st.markdown("#### 🏋️ Gimnasio")
+    socios = gim.altas_y_bajas([c["id"] for c in elegidos if c["rubro"] == "gimnasio"], periodo.desde, periodo.hasta)
+    s1, s2, s3 = st.columns([1, 1, 2])
+    s1.metric("Socios nuevos", socios["altas"], help="Dados de alta en estas fechas.")
+    s2.metric("Socios al día hoy", socios["al_dia_hoy"])
+    por_plan = rep.cuotas_por_plan(datos["cuotas"])
+    if por_plan.empty:
+        s3.caption("No se cobraron cuotas en estas fechas.")
+    else:
+        s3.bar_chart(por_plan.set_index("plan")["monto"], horizontal=True, x_label="", y_label="$ cobrado",
+                     color=tema.color("acento"))
+        st.caption("Cuánto cobraste por cada plan. En el Excel está cada cuota, en la hoja Cuotas.")
 
 # --- 4. ¿Qué se vende más? ---
 st.markdown("#### 4. ¿Qué se vende más?")
@@ -173,7 +200,7 @@ st.download_button(
     type="primary", on_click="ignore",
 )
 st.caption("Trae estas 5 respuestas con gráficos, el ranking de productos, la lista de qué comprar "
-           "por proveedor y el detalle de ventas, compras y gastos.")
+           "por proveedor y el detalle de ventas, compras y gastos" + (" (y de las cuotas)." if hubo_cuotas else "."))
 
 with st.expander("🗂️ Reportes guardados automáticamente"):
     st.write("Al abrir el sistema se guarda solo el Excel del **mes pasado** en la carpeta "

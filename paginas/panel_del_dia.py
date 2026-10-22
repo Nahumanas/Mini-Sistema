@@ -10,8 +10,9 @@ import pandas as pd
 import streamlit as st
 
 import operaciones as op
+import operaciones_gimnasio as gim
 import tema
-from comun import MEDIOS_DE_PAGO, comercio_actual, encabezado, es_jefe, pesos
+from comun import MEDIOS_DE_PAGO, comercio_actual, encabezado, es_gimnasio, es_jefe, pesos, plural
 
 comercio = comercio_actual()
 encabezado("📊", "Panel del día", comercio)
@@ -22,8 +23,30 @@ else:
     dia = date.today()  # el empleado ve solo el día de hoy
 
 
+def cuotas_del_dia(comercio_id, dia):
+    """Gimnasio: las cuotas cobradas ese día (entran a la caja como ventas, pero sin productos)."""
+    cuotas = gim.listar_cuotas(comercio_id, desde=dia, hasta=dia)
+    st.subheader("🏋️ Cuotas del gimnasio")
+    if cuotas.empty:
+        st.caption("Todavía no se cobraron cuotas este día.")
+        return
+    g1, g2, g3 = st.columns(3)
+    g1.metric("Cobrado en cuotas", pesos(cuotas["monto"].sum()))
+    g2.metric("Cuotas", len(cuotas))
+    g3.metric("Socios nuevos", int(cuotas["vence_antes"].isna().sum()), help="Los que pagaron su primera cuota.")
+    cuotas["medio_pago"] = cuotas["medio_pago"].map(MEDIOS_DE_PAGO)
+    st.dataframe(
+        cuotas.head(10), hide_index=True, column_order=["fecha", "socio", "plan", "monto", "medio_pago", "cobrada_por"],
+        column_config={"fecha": st.column_config.DatetimeColumn("Hora", format="HH:mm"), "socio": "Socio",
+                       "plan": "Plan", "monto": st.column_config.NumberColumn("Monto ($)", format="localized"),
+                       "medio_pago": "Pago", "cobrada_por": "Cobró"},
+    )
+    if len(cuotas) > 10:
+        st.caption(f"Y {plural(len(cuotas) - 10, 'cuota más', 'cuotas más')}: están todas en Cuotas y vencimientos.")
+
+
 @st.fragment(run_every="10s")
-def mostrar_panel(comercio_id, dia):
+def mostrar_panel(comercio_id, dia, gimnasio=False):
     ventas = op.ventas_del_dia(comercio_id, dia)
 
     # Para comparar: el mismo día de la semana pasada. Si es hoy, solo hasta esta misma hora.
@@ -52,10 +75,13 @@ def mostrar_panel(comercio_id, dia):
     if es_jefe():  # la ganancia la ve solo el jefe
         m4.metric("Ganancia bruta", pesos(ganancia), help="Lo vendido menos lo que costó esa mercadería.")
     st.caption("Se actualiza solo cada 10 segundos. Las flechas comparan con el mismo día de la semana pasada "
-               "(si es hoy, hasta la misma hora).")
+               "(si es hoy, hasta la misma hora)." + (" Las ventas son de productos; las cuotas van aparte, abajo."
+                                                      if gimnasio else ""))
+    if gimnasio:
+        cuotas_del_dia(comercio_id, dia)
 
     if ventas.empty:
-        st.info("Todavía no hay ventas este día. Cuando cobres algo en **Caja**, aparece acá. "
+        st.info("Todavía no hay ventas de productos este día. Cuando cobres algo en **Caja**, aparece acá. "
                 "También podés elegir otro día arriba.")
         return
 
@@ -112,4 +138,4 @@ def mostrar_panel(comercio_id, dia):
         )
 
 
-mostrar_panel(comercio["id"], dia)
+mostrar_panel(comercio["id"], dia, es_gimnasio(comercio))
