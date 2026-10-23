@@ -11,6 +11,7 @@ El archivo .xlsx tiene estas hojas:
   - Qué comprar:  lo que hay que reponer, ordenado por proveedor, con la cantidad sugerida.
   - Ventas, Compras y Gastos: el detalle, con filtros, para revisar.
   - Cuotas:       solo en los gimnasios: cada cuota cobrada y lo cobrado por plan.
+  - Promos:       solo si hubo descuentos: cuánto descontó cada promo y en qué ventas.
 
 Se usa desde la pantalla Reportes, o desde la terminal:
     python reportes.py               -> guarda el mes pasado (y la semana pasada, si está activado el resumen semanal)
@@ -35,6 +36,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
 import operaciones as op
+import operaciones_descuentos as desc
 import operaciones_gimnasio as gim
 from comun import MEDIOS_DE_PAGO, RUBROS
 from config import CARPETA_PROYECTO
@@ -223,16 +225,21 @@ def datos_del_periodo(comercio_ids, periodo):
         # Gimnasios: las cuotas entran a la caja como ventas sin productos (en los otros rubros vienen vacías)
         "cuotas": gim.cuotas_de(comercio_ids, p.desde, p.hasta),
         "cuotas_anterior": gim.cuotas_de(comercio_ids, p.desde_anterior, p.hasta_anterior),
+        # Lo que se descontó con promos (las ventas ya están guardadas con el descuento hecho)
+        "descuentos": desc.descuentos_de(comercio_ids, p.desde, p.hasta),
+        "descuentos_anterior": desc.descuentos_de(comercio_ids, p.desde_anterior, p.hasta_anterior),
         # Para "qué comprar" siempre se miran las últimas 4 semanas hasta hoy
         "ventas_recientes": op.detalle_ventas(comercio_ids, hoy - timedelta(days=DIAS_HISTORIA - 1), hoy),
     }
 
 
-def resumen(ventas, gastos, compras, mermas=None, cuotas=None):
+def resumen(ventas, gastos, compras, mermas=None, cuotas=None, descuentos=None):
     """Los números del período: cuánto vendí, cuánto gané y cuánto gasté.
 
     mermas: lo vencido, tirado o regalado (a costo). Es plata perdida, así que se resta de la ganancia neta.
     cuotas: las cuotas del gimnasio. No tienen costo de mercadería, así que suman enteras a la ganancia.
+    descuentos: lo que se descontó con promos. Solo se informa: las ventas y las cuotas ya vienen con el
+      descuento hecho, así que la ganancia ya es la real.
     """
     total = ventas["subtotal"].sum()
     costo = ventas["costo_total"].sum()
@@ -243,7 +250,12 @@ def resumen(ventas, gastos, compras, mermas=None, cuotas=None):
     total_cuotas = cuotas["monto"].sum() if cuotas is not None and not cuotas.empty else 0
     cobrado = total + total_cuotas
     bruta = total - costo + total_cuotas
+    hay_descuentos = descuentos is not None and not descuentos.empty
+    descontado = descuentos["monto"].sum() if hay_descuentos else 0
     return {
+        "descuentos": descontado,
+        "ventas_con_promo": descuentos["venta_id"].nunique() if hay_descuentos else 0,
+        "sin_promos": cobrado + descontado,  # lo que se habría cobrado sin ninguna promo
         "ventas": total,
         "cantidad": cantidad,
         "ticket_promedio": total / cantidad if cantidad else None,
@@ -326,14 +338,15 @@ def que_comprar(productos, ventas_recientes):
     return tabla[tabla["comprar"] > 0].sort_values(["proveedor", "urgencia", "nombre"])
 
 
-def por_comercio(ventas, gastos, compras, comercios, mermas=None, cuotas=None):
+def por_comercio(ventas, gastos, compras, comercios, mermas=None, cuotas=None, descuentos=None):
     """Un renglón por comercio con sus números del período."""
     filas = []
     for c in comercios:
         r = resumen(ventas[ventas["comercio_id"] == c["id"]], gastos[gastos["comercio_id"] == c["id"]],
                     compras[compras["comercio_id"] == c["id"]],
                     None if mermas is None else mermas[mermas["comercio_id"] == c["id"]],
-                    None if cuotas is None else cuotas[cuotas["comercio_id"] == c["id"]])
+                    None if cuotas is None else cuotas[cuotas["comercio_id"] == c["id"]],
+                    None if descuentos is None else descuentos[descuentos["comercio_id"] == c["id"]])
         filas.append({"comercio": c["nombre"], "rubro": RUBROS.get(c["rubro"], "· " + c["rubro"]).split(" ", 1)[1], **r})
     return pd.DataFrame(filas)
 
@@ -464,10 +477,12 @@ def generar_reporte(comercios, periodo, nombre_alcance=None):
     datos = datos_del_periodo(ids, p)
     ventas, compras, gastos = datos["ventas"], datos["compras"], datos["gastos"]
     cuotas = datos["cuotas"]
-    este = resumen(ventas, gastos, compras, datos["mermas"], cuotas)
+    descuentos = datos["descuentos"]
+    este = resumen(ventas, gastos, compras, datos["mermas"], cuotas, descuentos)
     anterior = resumen(datos["ventas_anterior"], datos["gastos_anterior"], datos["compras_anterior"],
-                       datos["mermas_anterior"], datos["cuotas_anterior"])
+                       datos["mermas_anterior"], datos["cuotas_anterior"], datos["descuentos_anterior"])
     hubo_vencidos = bool(este["vencido"] or anterior["vencido"])
+    hubo_descuentos = bool(este["descuentos"] or anterior["descuentos"])
     hubo_cuotas = bool(este["cantidad_cuotas"] or anterior["cantidad_cuotas"])
     ranking = ranking_productos(ventas, datos["productos"])
     comprar = que_comprar(datos["productos"], datos["ventas_recientes"])
@@ -507,6 +522,8 @@ def generar_reporte(comercios, periodo, nombre_alcance=None):
             ("Unidades vendidas", "unidades", ENTERO),
             *([("Cuotas del gimnasio", "cuotas", PESOS), ("Cantidad de cuotas", "cantidad_cuotas", ENTERO),
                ("Total cobrado (productos + cuotas)", "cobrado", PESOS)] if hubo_cuotas else []),
+            *([("Descontado con promos (no se cobró)", "descuentos", PESOS),
+               ("Ventas con alguna promo", "ventas_con_promo", ENTERO)] if hubo_descuentos else []),
         ]),
         ("2. ¿Cuánto gané?", [
             ("Costo de la mercadería vendida", "costo", PESOS),
@@ -560,6 +577,9 @@ def generar_reporte(comercios, periodo, nombre_alcance=None):
     if hubo_cuotas:
         notas.append("Las cuotas del gimnasio no tienen costo de mercadería: suman enteras a la ganancia. "
                      "El detalle está en la hoja Cuotas.")
+    if hubo_descuentos:
+        notas.append("Las ventas ya están con el descuento de las promos hecho: la ganancia es sobre lo que se "
+                     "cobró de verdad. Cuánto descontó cada promo está en la hoja Promos.")
     if p.tipo != "mes" or p.en_curso:
         notas.append("Los gastos del mes (alquiler, luz, sueldos...) se reparten por día: "
                      f"a este período le tocan {p.dias} {'día' if p.dias == 1 else 'días'}. El detalle está en la hoja Gastos.")
@@ -655,11 +675,13 @@ def generar_reporte(comercios, periodo, nombre_alcance=None):
     if varios:
         hoja = libro.create_sheet("Por comercio")
         _titulo(hoja, f"Cada comercio · {p.nombre}", "Cuánto vendió, cuánto ganó y cuánto gastó cada uno")
-        tabla = por_comercio(ventas, gastos, compras, comercios, datos["mermas"], cuotas)
+        tabla = por_comercio(ventas, gastos, compras, comercios, datos["mermas"], cuotas, descuentos)
         columnas = [("comercio", "Comercio", None, 26), ("rubro", "Rubro", None, 12),
                     ("ventas", "Ventas", PESOS, 15), ("cantidad", "Cantidad de ventas", ENTERO, 18)]
         if hubo_cuotas:
             columnas.append(("cuotas", "Cuotas del gimnasio", PESOS, 19))
+        if hubo_descuentos:
+            columnas.append(("descuentos", "Descontado con promos", PESOS, 21))
         columnas += [("ganancia_bruta", "Ganancia bruta", PESOS, 16), ("margen", "Margen bruto", PORCENTAJE, 13),
                      ("gastos", "Gastos", PESOS, 15), ("ganancia_neta", "Ganancia neta", PESOS, 16),
                      ("compras", "Compras a proveedores", PESOS, 21)]
@@ -748,7 +770,9 @@ def generar_reporte(comercios, periodo, nombre_alcance=None):
         columnas.append(("comercio", "Comercio", None, 22))
     columnas += [("codigo", "Código", None, 11), ("producto", "Producto", None, 30),
                  ("categoria", "Categoría", None, 16), ("cantidad", "Cantidad", ENTERO, 10),
-                 ("precio_unitario", "Precio unitario", PESOS, 15), ("subtotal", "Subtotal", PESOS, 13),
+                 ("precio_unitario", "Precio unitario", PESOS, 15),
+                 *([("descuento", "Descuento (promos)", PESOS, 18)] if hubo_descuentos else []),
+                 ("subtotal", "Subtotal" + (" (ya con la promo)" if hubo_descuentos else ""), PESOS, 13),
                  ("costo_total", "Costo", PESOS, 13), ("ganancia", "Ganancia", PESOS, 13),
                  ("medio", "Medio de pago", None, 18)]
     _tabla(hoja, detalle, 4, 1, columnas, "tabla_ventas", estilo="TableStyleLight9")
@@ -804,6 +828,31 @@ def generar_reporte(comercios, periodo, nombre_alcance=None):
         ], "tabla_cuotas_por_plan")
         if len(planes):
             g = _grafico_barras("Cobrado por plan", hoja, col, [col + 2], 5, fin, horizontal=True, ancho=14, alto=8)
+            hoja.add_chart(g, f"{get_column_letter(col)}{fin + 3}")
+        hoja.freeze_panes = "A5"
+
+    if hubo_descuentos:
+        hoja = libro.create_sheet("Promos")
+        _titulo(hoja, f"Descuentos y promos · {p.nombre}",
+                f"Se descontaron {_pesos_texto(este['descuentos'])} en {este['ventas_con_promo']} "
+                f"{'venta' if este['ventas_con_promo'] == 1 else 'ventas'}. Sin promos se habría cobrado "
+                f"{_pesos_texto(este['sin_promos'])}.")
+        detalle = descuentos.assign(dia=descuentos["fecha"].dt.date, hora=descuentos["fecha"].dt.time,
+                                    medio=descuentos["medio_pago"].map(MEDIOS_DE_PAGO))
+        columnas = [("dia", "Fecha", FECHA, 12), ("hora", "Hora", HORA, 8), ("venta_id", "N° de venta", None, 12)]
+        if varios:
+            columnas.append(("comercio", "Comercio", None, 22))
+        columnas += [("promo", "Promo", None, 34), ("monto", "Descontó", PESOS, 13),
+                     ("medio", "Medio de pago", None, 18)]
+        _tabla(hoja, detalle, 4, 1, columnas, "tabla_promos", estilo="TableStyleLight9")
+        col = len(columnas) + 2
+        hoja.cell(row=3, column=col, value="Por promo").font = Font(bold=True, size=12, color=AZUL)
+        tabla = desc.por_promo(descuentos)
+        fin = _tabla(hoja, tabla, 4, col, [
+            ("promo", "Promo", None, 34), ("ventas", "Ventas", ENTERO, 10), ("monto", "Descontó", PESOS, 15),
+        ], "tabla_por_promo")
+        if len(tabla):
+            g = _grafico_barras("Descontado por promo", hoja, col, [col + 2], 5, fin, horizontal=True, ancho=14, alto=8)
             hoja.add_chart(g, f"{get_column_letter(col)}{fin + 3}")
         hoja.freeze_panes = "A5"
 

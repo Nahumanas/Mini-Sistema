@@ -7,12 +7,14 @@ Una caja cerrada ya no se puede modificar. Si hubo un error, el jefe le hace un 
 (anular una venta o corregir el efectivo contado), que queda anotado con fecha, quién y por qué.
 """
 
+import html
 from datetime import date, datetime
 
 import pandas as pd
 import streamlit as st
 
 import operaciones as op
+import operaciones_descuentos as desc
 from comun import (MEDIOS_DE_PAGO, alta_rapida, buscar_por_codigo, comercio_actual, dejar_listo_el_lector,
                    encabezado, es_gimnasio, es_jefe, permisos_de, pesos, plural, texto_vencimientos)
 
@@ -362,12 +364,15 @@ def cerrar_caja():
         except op.CajaCerrada:
             pass  # ya la había cerrado otra pantalla: se muestra igual el arqueo
         st.session_state.pop(clave_carrito, None)
+        st.session_state.pop(clave_promos, None)
         st.session_state.pop("ultima_venta", None)
         st.session_state["caja_recien_cerrada"] = caja["id"]
         st.rerun()
 
 
 clave_carrito = f"carrito_{comercio['id']}"
+clave_medio = f"medio_pago_{comercio['id']}"
+clave_promos = f"promos_elegidas_{comercio['id']}"  # las promos "con botón" que tocó el empleado
 if cerrar:
     cerrar_caja()
 if relevar:
@@ -397,7 +402,8 @@ if es_gimnasio(comercio):
 ultima = st.session_state.get("ultima_venta")
 if ultima and ultima["comercio_id"] == comercio["id"]:
     with st.container(border=True):
-        st.success(f"Venta cobrada: {pesos(ultima['total'])} en {MEDIOS_DE_PAGO[ultima['medio_pago']].lower()}.")
+        st.success(f"Venta cobrada: {pesos_md(ultima['total'])} en {MEDIOS_DE_PAGO[ultima['medio_pago']].lower()}."
+                   + (f" El cliente ahorró {pesos_md(ultima['ahorro'])} con las promos. 🎁" if ultima.get("ahorro") else ""))
         if ultima.get("vuelto"):
             st.info(f"💵 Vuelto a entregar: **{pesos_md(ultima['vuelto'])}**")
         for aviso in ultima["avisos"]:
@@ -414,6 +420,23 @@ if ultima and ultima["comercio_id"] == comercio["id"]:
             st.rerun()
 
 izquierda, derecha = st.columns([3, 2], gap="large")
+
+# Las promos que armó el jefe (en Descuentos y promos). La cuenta se hace en cada cambio del carrito,
+# del medio de pago o de los botones de promos, así el total que se ve es siempre el que se va a cobrar.
+promos = desc.promos_activas(comercio["id"])
+con_boton = {p["id"]: p for p in desc.promos_con_boton(promos)}
+if clave_promos in st.session_state:  # si el jefe apagó una promo mientras tanto, se saca de la venta
+    st.session_state[clave_promos] = [i for i in st.session_state[clave_promos] if i in con_boton]
+
+
+def items_para_cuenta():
+    return [{**i, "categoria": productos.loc[i["producto_id"], "categoria"] if i["producto_id"] in productos.index
+             else None} for i in carrito]
+
+
+cuenta = desc.calcular(promos, items_para_cuenta(), st.session_state.get(clave_medio, next(iter(MEDIOS_DE_PAGO))),
+                       elegidas=st.session_state.get(clave_promos, []),
+                       combinar=comercio.get("combinar_promos") or desc.forma_de_combinar(comercio["id"]))
 
 
 def agregar_al_carrito(producto_id, cantidad):
@@ -524,20 +547,36 @@ with izquierda:
     for indice, item in enumerate(carrito):
         # La "key" deja que en el celular la fila no se parta en cuatro renglones (ver ESTILOS en comun.py)
         f1, f2, f3, f4 = st.container(key=f"fila_venta_{indice}").columns([3, 6, 2, 1], vertical_alignment="center")
+        linea = cuenta["lineas"][indice]
         f1.write(item["nombre"])
+        if linea["promos"]:
+            f1.caption("🏷️ " + " + ".join(linea["promos"]))
         with f2:
             botones_de_cantidad(indice, item)
-        f3.write(f"**{pesos(item['cantidad'] * item['precio_unitario'])}**")
+        f3.write(f"**{pesos(linea['total'])}**")
+        if linea["descuento"]:  # el precio sin promo, tachado y chiquito
+            f3.html(f"<span class='precio-antes'>{pesos(item['cantidad'] * item['precio_unitario'])}</span>")
         f4.button("", icon=":material/close:", key=f"quitar_{indice}", help="Quitar de la venta",
                   on_click=quitar_del_carrito, args=(indice,))
 
 # --- Cobrar ---
 with derecha:
-    total = sum(i["cantidad"] * i["precio_unitario"] for i in carrito)
+    total = cuenta["total"]
     with st.container(border=True):
+        if cuenta["descuento"]:
+            # Subtotal, cada promo con lo que descuenta y el total (como en el ticket)
+            filas = [f"<span>Subtotal</span><span class='monto'>{pesos(cuenta['subtotal'])}</span>"]
+            filas += [f"<span class='promo'>🏷️ {html.escape(a['nombre'])}</span>"
+                      f"<span class='monto promo'>−{pesos(a['monto'])}</span>" for a in cuenta["aplicadas"]]
+            st.html(f"<div class='detalle-promos'>{''.join(filas)}</div>")
         st.container(key="total_a_cobrar").metric("Total a cobrar", pesos(total))
+        if con_boton and carrito:
+            st.pills("🏷️ Promos para elegir", list(con_boton), selection_mode="multi", key=clave_promos,
+                     format_func=lambda i: con_boton[i]["nombre"],
+                     help="Tocá la que corresponda (por ejemplo, si el cliente es jubilado). Las otras promos "
+                          "se aplican solas.")
         medio_pago = st.radio(
-            "Medio de pago", list(MEDIOS_DE_PAGO), format_func=MEDIOS_DE_PAGO.get, horizontal=True
+            "Medio de pago", list(MEDIOS_DE_PAGO), format_func=MEDIOS_DE_PAGO.get, horizontal=True, key=clave_medio
         )
         # Si paga en efectivo, el sistema calcula el vuelto (así no se da de más ni de menos)
         clave_paga_con = f"paga_con_{comercio['id']}"
@@ -563,6 +602,7 @@ with derecha:
         if st.button("Cancelar venta", disabled=not carrito):
             carrito.clear()
             st.session_state.pop(clave_paga_con, None)
+            st.session_state.pop(clave_promos, None)
             st.rerun()
 
     if cobrar:
@@ -572,22 +612,26 @@ with derecha:
             if productos.loc[i["producto_id"], "stock"] - i["cantidad"] < 0
         ]
         try:
-            venta_id, numero = op.registrar_venta(comercio["id"], carrito, medio_pago, con_ticket, caja["id"])
+            venta_id, numero, cobrada = op.registrar_venta(comercio["id"], carrito, medio_pago, con_ticket, caja["id"],
+                                                           promos_elegidas=st.session_state.get(clave_promos, []))
         except op.CajaCerrada:
             st.error("La caja se cerró (quizás desde otra pantalla). Abrí una nueva para cobrar.")
             st.stop()
+        if vuelto is not None:  # por si una promo cambió justo entre que se vio el total y se cobró
+            vuelto += total - cobrada["total"]
         ultima = {
-            "comercio_id": comercio["id"], "total": total, "medio_pago": medio_pago,
-            "numero": numero, "avisos": avisos, "vuelto": vuelto,
+            "comercio_id": comercio["id"], "total": cobrada["total"], "medio_pago": medio_pago,
+            "numero": numero, "avisos": avisos, "vuelto": vuelto, "ahorro": cobrada["descuento"],
         }
         if numero:
             ultima["ticket_pdf"] = generar_ticket_pdf(
                 comercio, numero, datetime.now(),
                 [{**i, "subtotal": i["cantidad"] * i["precio_unitario"]} for i in carrito],
-                total, medio_pago,
+                cobrada["total"], medio_pago, cobrada["aplicadas"],
             )
         st.session_state["ultima_venta"] = ultima
         st.session_state.pop(clave_paga_con, None)
+        st.session_state.pop(clave_promos, None)
         carrito.clear()
         st.rerun()
 

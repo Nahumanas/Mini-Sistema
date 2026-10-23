@@ -10,6 +10,7 @@ import streamlit as st
 
 import calendario
 import operaciones as op
+import operaciones_descuentos as desc
 import operaciones_gimnasio as gim
 from comun import MEDIOS_DE_PAGO, es_jefe, insignia, pesos, plural
 from config import URL_PUBLICA
@@ -108,7 +109,8 @@ def _caja_para_cobrar(comercio):
 def formulario_cobro(comercio, socio_id, clave):
     """Cobrar la cuota de un socio en la caja abierta. Devuelve la cuota cobrada (o None).
 
-    El empleado cobra el precio del plan. El jefe además puede hacer un descuento o cambiar el vencimiento.
+    El empleado cobra el precio del plan (con las promos que armó el jefe en Descuentos y promos).
+    El jefe además puede hacer un descuento a mano o cambiar el vencimiento.
     """
     socio = gim.socio(comercio["id"], socio_id)
     planes = gim.listar_planes(comercio["id"]).set_index("id")
@@ -132,11 +134,28 @@ def formulario_cobro(comercio, socio_id, clave):
     plan = planes.loc[plan_id]
     medio = st.radio("Medio de pago", list(MEDIOS_DE_PAGO), format_func=MEDIOS_DE_PAGO.get, horizontal=True,
                      key=f"cobro_medio_{clave}")
-    monto, vence = float(plan["precio"]), previa["vence"]
+    # Promos: las del plan y las del medio de pago (si son para toda la venta) se aplican solas;
+    # las "con botón" (jubilados, familiar de socio...) aparecen para elegir
+    promos = desc.promos_activas(comercio["id"])
+    con_boton = {p["id"]: p for p in desc.promos_con_boton(promos, tipos=("plan", "medio_pago"))
+                 if p["tipo"] == "plan" or desc._alcanza_todo(p)}
+    elegidas = []
+    if con_boton:
+        elegidas = st.pills("🏷️ Promos para elegir", list(con_boton), selection_mode="multi",
+                            key=f"cobro_promos_{clave}", format_func=lambda i: con_boton[i]["nombre"]) or []
+    cuenta = desc.calcular(promos, [], medio, plan={"id": plan_id, "nombre": plan["nombre"], "precio": plan["precio"]},
+                           elegidas=elegidas, combinar=desc.forma_de_combinar(comercio["id"]))
+    if cuenta["descuento"]:
+        filas = [f"<span>Precio del plan</span><span class='monto'>{pesos(cuenta['subtotal'])}</span>"]
+        filas += [f"<span class='promo'>🏷️ {html.escape(a['nombre'])}</span>"
+                  f"<span class='monto promo'>−{pesos(a['monto'])}</span>" for a in cuenta["aplicadas"]]
+        st.html(f"<div class='detalle-promos'>{''.join(filas)}</div>")
+    monto, vence = cuenta["total"], previa["vence"]
     if es_jefe():
         j1, j2 = st.columns(2)
         monto = j1.number_input("Monto ($)", min_value=0.0, value=monto, step=500.0, format="%.0f",
-                                key=f"cobro_monto_{clave}_{plan_id}", help="Si le hacés un descuento, cambialo acá.")
+                                key=f"cobro_monto_{clave}_{plan_id}_{medio}_{'-'.join(map(str, sorted(elegidas)))}",
+                                help="Ya tiene las promos. Si le hacés otro descuento, cambialo acá.")
         vence = j2.date_input("Vale hasta", value=previa["vence"], min_value=date.today(), format="DD/MM/YYYY",
                               key=f"cobro_vence_{clave}_{plan_id}", help="Calculado con las reglas del gimnasio.")
     clases = "" if previa["clases_cargadas"] is None else f" · queda con **{plural(previa['clases'], 'clase', 'clases')}**"
@@ -157,11 +176,12 @@ def formulario_cobro(comercio, socio_id, clave):
             st.success(f"💵 Vuelto: **{pesos_md(paga_con - monto)}**")
     if st.button(f"💵 Cobrar {pesos(monto)}", type="primary", key=f"cobro_boton_{clave}", disabled=not vuelto_ok):
         try:
-            cuota = gim.cobrar_cuota_socio(comercio["id"], socio_id, plan_id, medio, caja["id"], quien(), monto, vence)
+            cuota = gim.cobrar_cuota_socio(comercio["id"], socio_id, plan_id, medio, caja["id"], quien(), monto, vence,
+                                           promos_elegidas=elegidas)
         except (gim.ErrorGimnasio, op.CajaCerrada) as error:
             st.error(str(error))
             return None
-        for sufijo in ("plan", "medio", "paga"):
+        for sufijo in ("plan", "medio", "paga", "promos"):
             st.session_state.pop(f"cobro_{sufijo}_{clave}", None)
         return cuota
     return None

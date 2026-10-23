@@ -31,6 +31,7 @@ from sqlalchemy.exc import IntegrityError
 import base_datos as bd
 import notificaciones_telegram as avisos
 import operaciones as op
+import operaciones_descuentos as desc
 
 motor = op.motor
 
@@ -625,13 +626,14 @@ def vista_previa_cuota(comercio_id, socio_id, plan_id, hoy=None):
 
 
 def cobrar_cuota_socio(comercio_id, socio_id, plan_id, medio_pago, caja_id, cobrada_por=None, monto=None,
-                       vence=None, ahora=None):
+                       vence=None, ahora=None, promos_elegidas=()):
     """Cobra la cuota en la caja abierta y le carga el plan al socio (vencimiento y clases).
 
     - La plata entra a la caja como una venta: suma en el arqueo, en el relevo de turno y en el cierre.
     - Queda anotado quién la cobró (cobrada_por), quién atendía la caja en ese momento y en qué turno
       (relevo_id: el último relevo de esa caja; vacío si fue en el primer turno).
-    - monto: si no se dice, el precio del plan (el jefe puede hacer un descuento).
+    - monto: si no se dice, el precio del plan con las promos (ver operaciones_descuentos.py). El jefe
+      puede poner otro: lo que baje de más queda anotado como "Descuento a mano".
     - vence: si no se dice, se calcula con las reglas (el jefe puede cambiarla).
     Todo pasa junto: o se guarda todo, o nada. Devuelve la cuota guardada (diccionario).
     """
@@ -655,13 +657,23 @@ def cobrar_cuota_socio(comercio_id, socio_id, plan_id, medio_pago, caja_id, cobr
         vence = vence or cuenta["vence"]
         if vence < hoy:
             raise ErrorGimnasio("La fecha de vencimiento no puede ser anterior a hoy.")
-        monto = float(nuevo["precio"] if monto is None else monto)
+        precio = float(nuevo["precio"])
+        con_promos = desc.calcular_cuota(comercio_id, {"id": plan_id, "nombre": nuevo["nombre"], "precio": precio},
+                                     medio_pago, promos_elegidas, con, hoy)
+        monto = float(con_promos["total"] if monto is None else monto)
         if monto < 0:
             raise ErrorGimnasio("El monto no puede ser negativo.")
         venta_id = con.execute(bd.ventas.insert().values(
             comercio_id=comercio_id, caja_id=caja_id, fecha=ahora, medio_pago=medio_pago, total=monto,
-            responsable_turno=caja["responsable"],
+            responsable_turno=caja["responsable"], descuento_total=max(precio - monto, 0),
         )).inserted_primary_key[0]
+        # Qué descuentos tuvo: las promos y, si el jefe bajó el monto todavía más, el resto "a mano"
+        if monto < precio:
+            promos = con_promos["aplicadas"] if monto <= con_promos["total"] + 0.5 else []
+            a_mano = precio - monto - sum(a["monto"] for a in promos)
+            if a_mano >= 0.5:
+                promos = promos + [{"promocion_id": None, "nombre": "Descuento a mano", "monto": a_mano}]
+            desc.guardar_aplicadas(con, comercio_id, venta_id, promos)
         relevo_id = con.execute(
             select(func.max(bd.relevos_caja.c.id)).where(bd.relevos_caja.c.caja_id == caja_id)
         ).scalar()

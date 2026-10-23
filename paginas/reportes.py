@@ -6,6 +6,7 @@ from datetime import date, timedelta
 import streamlit as st
 
 import operaciones as op
+import operaciones_descuentos as desc
 import operaciones_gimnasio as gim
 import reportes as rep
 import tema
@@ -65,9 +66,11 @@ else:
     periodo = rep.periodo_fechas(*fechas)
 
 datos = rep.datos_del_periodo(ids, periodo)
-este = rep.resumen(datos["ventas"], datos["gastos"], datos["compras"], datos["mermas"], datos["cuotas"])
+este = rep.resumen(datos["ventas"], datos["gastos"], datos["compras"], datos["mermas"], datos["cuotas"],
+                   datos["descuentos"])
 anterior = rep.resumen(datos["ventas_anterior"], datos["gastos_anterior"], datos["compras_anterior"],
-                       datos["mermas_anterior"], datos["cuotas_anterior"])
+                       datos["mermas_anterior"], datos["cuotas_anterior"], datos["descuentos_anterior"])
+hubo_descuentos = bool(este["descuentos"] or anterior["descuentos"])
 hubo_vencidos = bool(este["vencido"] or anterior["vencido"])
 hubo_cuotas = bool(este["cantidad_cuotas"] or anterior["cantidad_cuotas"])  # solo pasa en los gimnasios
 
@@ -96,6 +99,20 @@ else:
     m1.metric("Ventas", pesos(este["ventas"]), cambio("ventas"))
     m2.metric("Cantidad de ventas", f"{este['cantidad']:,}".replace(",", "."), cambio("cantidad"))
     m3.metric("Ticket promedio", pesos(este["ticket_promedio"] or 0), cambio("ticket_promedio"))
+
+if hubo_descuentos:
+    d1, d2 = st.columns([1, 2])
+    d1.metric("🎁 Descontado con promos", pesos(este["descuentos"]), cambio("descuentos"), delta_color="off",
+              help=f"Lo que no se cobró por las promos, en {plural(este['ventas_con_promo'], 'venta', 'ventas')}. "
+                   f"Sin promos se habría cobrado {pesos(este['sin_promos'])}. Las ventas y la ganancia de "
+                   "esta pantalla ya están con el descuento hecho.")
+    tabla_promos = desc.por_promo(datos["descuentos"])
+    if tabla_promos.empty:
+        d2.caption("En estas fechas no se usó ninguna promo.")
+    else:
+        d2.dataframe(tabla_promos, hide_index=True, column_config={
+            "promo": "Promo", "ventas": st.column_config.NumberColumn("Ventas"),
+            "monto": st.column_config.NumberColumn("Descontó ($)", format="localized")})
 
 # --- 2. ¿Cuánto gané? ---
 st.markdown("#### 2. ¿Cuánto gané?")
@@ -200,7 +217,8 @@ st.download_button(
     type="primary", on_click="ignore",
 )
 st.caption("Trae estas 5 respuestas con gráficos, el ranking de productos, la lista de qué comprar "
-           "por proveedor y el detalle de ventas, compras y gastos" + (" (y de las cuotas)." if hubo_cuotas else "."))
+           "por proveedor y el detalle de ventas, compras y gastos" + (" (y de las cuotas)" if hubo_cuotas else "")
+           + (" y cuánto descontó cada promo." if hubo_descuentos else "."))
 
 with st.expander("🗂️ Reportes guardados automáticamente"):
     st.write("Al abrir el sistema se guarda solo el Excel del **mes pasado** en la carpeta "

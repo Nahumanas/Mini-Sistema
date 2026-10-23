@@ -12,13 +12,15 @@ def formato_pesos(valor):
     return f"$ {valor:,.0f}".replace(",", ".")
 
 
-def generar_ticket_pdf(comercio, numero, fecha, items, total, medio_pago):
+def generar_ticket_pdf(comercio, numero, fecha, items, total, medio_pago, promos=None):
     """Devuelve el PDF del ticket como bytes, listo para descargar o imprimir.
 
     comercio: diccionario con nombre y direccion.
-    items: lista de diccionarios con nombre, cantidad, precio_unitario y subtotal.
+    items: lista de diccionarios con nombre, cantidad, precio_unitario y subtotal (sin la promo).
+    promos: las promos aplicadas [{nombre, monto}]: salen abajo, con lo que ahorró el cliente.
     """
-    alto = 80 + 9 * len(items)  # el largo del papel depende de cuántos productos haya
+    promos = [p for p in (promos or []) if p["monto"] > 0]
+    alto = 80 + 9 * len(items) + (12 + 5 * len(promos) if promos else 0)  # el largo del papel depende de lo que haya
     pdf = FPDF(unit="mm", format=(ANCHO, alto))
     pdf.set_margins(5, 5, 5)
     pdf.set_auto_page_break(False)
@@ -44,11 +46,24 @@ def generar_ticket_pdf(comercio, numero, fecha, items, total, medio_pago):
         pdf.ln(1)
 
     _linea(pdf)
+    if promos:
+        pdf.set_font("Helvetica", "", 8)
+        pdf.cell(ancho_util * 0.6, 4, "Subtotal")
+        pdf.cell(ancho_util * 0.4, 4, formato_pesos(sum(i["subtotal"] for i in items)), align="R",
+                 new_x="LMARGIN", new_y="NEXT")
+        for promo in promos:
+            pdf.cell(ancho_util * 0.7, 5, f"Promo: {promo['nombre']}"[:42])
+            pdf.cell(ancho_util * 0.3, 5, "-" + formato_pesos(promo["monto"]), align="R", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(ancho_util * 0.5, 7, "TOTAL")
     pdf.cell(ancho_util * 0.5, 7, formato_pesos(total), align="R", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 8)
     pdf.cell(ancho_util, 5, f"Medio de pago: {medio_pago.capitalize()}", new_x="LMARGIN", new_y="NEXT")
+    if promos:
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.cell(ancho_util, 5, f"Usted ahorró {formato_pesos(sum(p['monto'] for p in promos))}", align="C",
+                 new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 8)
     _linea(pdf)
     pdf.cell(ancho_util, 4, "¡Gracias por su compra!", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "I", 7)

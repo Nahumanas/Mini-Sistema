@@ -16,7 +16,8 @@ from datetime import date
 import streamlit as st
 
 # Los archivos del sistema, en el orden en que se importan entre sí.
-MODULOS_PROPIOS = ["config", "base_datos", "notificaciones_telegram", "operaciones", "operaciones_gimnasio", "tema",
+MODULOS_PROPIOS = ["config", "base_datos", "notificaciones_telegram", "operaciones", "operaciones_descuentos",
+                   "operaciones_gimnasio", "tema",
                    "comun", "calendario", "gimnasio_ui", "ticket", "reportes", "ingreso", "generar_datos_prueba",
                    "demo_panaderia", "demo_gimnasio"]
 
@@ -168,7 +169,7 @@ if rol not in ("jefe", "empleado"):
     # Cualquier dirección (por ejemplo /caja si alguien recarga la página) muestra el ingreso;
     # después de entrar, sigue en esa misma pantalla.
     rutas = ["caja", "compras", "gastos", "panel_del_dia", "stock", "reportes", "mis_comercios", "importar_excel",
-             "vencimientos", "ingreso_dni", "socios", "cuotas", "clases", "planes"]
+             "vencimientos", "ingreso_dni", "socios", "cuotas", "clases", "planes", "descuentos"]
     ingreso = [st.Page(pantalla_ingreso, title="Ingresar", icon="🔑", default=True)]
     ingreso += [st.Page(pantalla_ingreso, title="Ingresar", icon="🔑", url_path=r) for r in rutas]
     st.navigation(ingreso, position="hidden").run()
@@ -246,7 +247,8 @@ if rol == "jefe":
         "Control": [panel, stock, st.Page("paginas/reportes.py", title="Reportes", icon="📑")],
         "Configuración": (
             ([st.Page("paginas/planes.py", title="Planes y actividades", icon="🏷️")] if gimnasio else [])
-            + [st.Page("paginas/mis_comercios.py", title="Mis comercios", icon="🏬"),
+            + [st.Page("paginas/descuentos.py", title="Descuentos y promos", icon="🎁"),
+               st.Page("paginas/mis_comercios.py", title="Mis comercios", icon="🏬"),
                st.Page("paginas/importar_excel.py", title="Importar / exportar Excel", icon="📥")]
         ),
     }

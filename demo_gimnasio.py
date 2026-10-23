@@ -184,6 +184,7 @@ def crear():
         dueno_id = con.execute(select(bd.duenos.c.id).order_by(bd.duenos.c.id)).scalar()
     if existente:
         _link_de_la_demo(existente)
+        _promos_de_la_demo(existente)
         return
     comercio_id = op.crear_comercio(dueno_id, NOMBRE, "gimnasio", "Av. Cabildo 3200", False)
     op.actualizar_horarios_comercio(comercio_id, "07:00", "22:00", [
@@ -192,6 +193,7 @@ def crear():
     ])
     poblar(comercio_id, con_socios=True)
     _link_de_la_demo(comercio_id)
+    _promos_de_la_demo(comercio_id)
     # Unos productos para vender en la Caja (bebidas y suplementos)
     for j, (nombre, costo, precio, stock) in enumerate([
         ("Agua mineral 500 ml", 500, 1200, 40), ("Bebida isotónica 500 ml", 900, 2000, 24),
@@ -210,6 +212,21 @@ def crear():
         ]:
             if mes.replace(day=dia) <= hoy:
                 op.registrar_gasto(comercio_id, mes.replace(day=dia), categoria, descripcion, monto)
+
+
+def _promos_de_la_demo(comercio_id):
+    """Dos promos de ejemplo para las cuotas: 10 % en los planes trimestrales (sola) y una con botón."""
+    import operaciones_descuentos as desc
+
+    if desc.listar_promociones(comercio_id):
+        return
+    trimestral = gim.listar_planes(comercio_id)
+    trimestral = trimestral[trimestral["nombre"].str.startswith("Trimestral")]
+    if not trimestral.empty:
+        desc.crear_promocion(comercio_id, {"nombre": "10 % en el plan trimestral", "tipo": "plan", "porcentaje": 10,
+                                           "plan_id": int(trimestral["id"].iloc[0])})
+    desc.crear_promocion(comercio_id, {"nombre": "Familiar de socio 15 %", "tipo": "plan", "porcentaje": 15,
+                                       "automatica": False})
 
 
 def _link_de_la_demo(comercio_id):

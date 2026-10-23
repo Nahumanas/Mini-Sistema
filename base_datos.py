@@ -13,6 +13,8 @@ Cómo se relacionan las tablas:
             │     └── tickets  (si el cliente pidió ticket)
             ├── gastos         (alquiler, luz, sueldos, etc.)
             ├── configuracion_telegram (a qué chat de Telegram le llegan los avisos al jefe)
+            ├── promociones    (2x1, 2da unidad al %, % en productos, % por medio de pago, % en planes: las arma el jefe)
+            │     └── descuentos_aplicados (cuánto descontó cada promo en cada venta: para los reportes)
             │
             │   Solo los gimnasios (rubro "gimnasio") usan estas. Los otros comercios las tienen vacías:
             ├── configuracion_gimnasio (las reglas: horas para cancelar, clases que sobran, reservas desde el celular...)
@@ -92,6 +94,9 @@ comercios = Table(
     Column("hora_cierre", String(5)),
     # Los turnos, como texto JSON: [{"nombre": "Mañana", "desde": "08:00", "hasta": "14:00"}, ...]
     Column("turnos_config", Text),
+    # Cómo se combinan las promos cuando a un producto le tocan varias (lo elige el jefe en Descuentos):
+    # "mejor" = la que más ahorra, y la de medio de pago encima; "todas" = se suman todas
+    Column("combinar_promos", String(10), nullable=False, default="mejor", server_default="mejor"),
 )
 
 productos = Table(
@@ -170,6 +175,8 @@ ventas = Table(
     Column("total", Float, nullable=False),
     Column("anulada", DateTime),  # vacío = venta válida; con fecha = se anuló con un ajuste de caja
     Column("responsable_turno", String(100)),  # quién atendía la caja cuando se cobró (cambia con cada relevo)
+    # Cuánto se le descontó al cliente con las promociones. "total" ya viene con el descuento hecho.
+    Column("descuento_total", Float, nullable=False, default=0, server_default="0"),
 )
 
 # Relevos de turno: cambia quien atiende, pero la caja sigue abierta. El que se va cuenta el efectivo
@@ -215,7 +222,10 @@ ventas_detalle = Table(
     Column("cantidad", Integer, nullable=False),
     Column("precio_unitario", Float, nullable=False),  # a cuánto se vendió ese día
     Column("costo_unitario", Float, nullable=False),  # cuánto costaba ese día (para calcular ganancia)
+    # Lo que se cobró de verdad por esa fila: cantidad x precio − descuento. Los reportes suman esto.
     Column("subtotal", Float, nullable=False),
+    # Cuánto se le descontó a esa fila con las promos (incluida su parte del descuento por medio de pago)
+    Column("descuento", Float, nullable=False, default=0, server_default="0"),
 )
 
 tickets = Table(
@@ -288,6 +298,55 @@ configuracion_telegram = Table(
            server_default=EVENTOS_TELEGRAM_INICIALES),
     Column("conectado", DateTime),  # cuándo se conectó el chat
 )
+
+
+# ---------------------------------------------------------------------------
+# Descuentos y promociones (ver operaciones_descuentos.py). Las arma el jefe; la Caja las aplica sola.
+# ---------------------------------------------------------------------------
+# tipo:
+#   "producto"   -> un % de descuento en un producto, en una categoría o en todo
+#   "combo"      -> cada "cantidad" unidades, la más barata sale con "porcentaje" de descuento
+#                   (2x1 = cantidad 2 y 100 %; 3x2 = cantidad 3 y 100 %; 2da unidad al 50 % = cantidad 2 y 50 %)
+#   "medio_pago" -> un % si paga con ese medio (por ejemplo, 10 % en efectivo)
+#   "plan"       -> un % en la cuota de un plan del gimnasio (o de todos los planes)
+TIPOS_PROMOCION = ("producto", "combo", "medio_pago", "plan")
+promociones = Table(
+    "promociones",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
+    Column("nombre", String(100), nullable=False),  # lo que ve el cliente en el ticket: "2x1 en Facturas"
+    Column("tipo", String(20), nullable=False),
+    Column("porcentaje", Float, nullable=False),  # 10 = 10 %; en un 2x1, 100 (la segunda sale gratis)
+    Column("cantidad", Integer),  # solo en "combo": cada cuántas unidades (2 en un 2x1, 3 en un 3x2)
+    Column("medio_pago", String(20)),  # solo en "medio_pago": efectivo, debito, credito o transferencia
+    # A qué se aplica: un producto, una categoría o (los dos vacíos) todo
+    Column("producto_id", Integer, ForeignKey("productos.id")),
+    Column("categoria", String(50)),
+    Column("plan_id", Integer, ForeignKey("planes.id")),  # solo en "plan": vacío = todos los planes
+    Column("desde", Date),  # vacío = ya vale
+    Column("hasta", Date),  # vacío = no termina
+    Column("dias_semana", String(20)),  # "0,2" = lunes y miércoles (0 es lunes). Vacío = todos los días
+    # True = la Caja la aplica sola. False = aparece como botón en la Caja y el empleado la elige
+    # (para lo que el sistema no puede saber solo: jubilados, cliente frecuente, empleados...)
+    Column("automatica", Boolean, nullable=False, default=True, server_default=true()),
+    Column("activa", Boolean, nullable=False, default=True, server_default=true()),
+    Column("creada", DateTime, nullable=False),
+)
+
+# Cada promo que se aplicó en cada venta y cuánto descontó. El nombre se copia: si el jefe después
+# cambia o borra la promo, los reportes viejos siguen diciendo lo que pasó.
+descuentos_aplicados = Table(
+    "descuentos_aplicados",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("comercio_id", Integer, ForeignKey("comercios.id"), nullable=False),
+    Column("venta_id", Integer, ForeignKey("ventas.id"), nullable=False),
+    Column("promocion_id", Integer, ForeignKey("promociones.id")),  # vacío = descuento a mano del jefe
+    Column("nombre", String(100), nullable=False),
+    Column("monto", Float, nullable=False),
+)
+Index("descuentos_por_venta", descuentos_aplicados.c.venta_id)
 
 
 # ---------------------------------------------------------------------------
@@ -476,6 +535,9 @@ def actualizar_base(motor):
         ("ventas", "responsable_turno", "VARCHAR(100)"),
         ("configuracion_gimnasio", "reservas_web", "BOOLEAN NOT NULL DEFAULT false"),
         ("configuracion_gimnasio", "codigo_web", "VARCHAR(20)"),
+        ("ventas", "descuento_total", "FLOAT NOT NULL DEFAULT 0"),
+        ("ventas_detalle", "descuento", "FLOAT NOT NULL DEFAULT 0"),
+        ("comercios", "combinar_promos", "VARCHAR(10) NOT NULL DEFAULT 'mejor'"),
     ]
     for tabla, columna, tipo in nuevas:
         if columna not in {c["name"] for c in revisor.get_columns(tabla)}:

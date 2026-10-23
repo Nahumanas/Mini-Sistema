@@ -21,6 +21,7 @@ CREATE TABLE comercios (
 	hora_apertura VARCHAR(5), 
 	hora_cierre VARCHAR(5), 
 	turnos_config TEXT, 
+	combinar_promos VARCHAR(10) DEFAULT 'mejor' NOT NULL, 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(dueno_id) REFERENCES duenos (id)
 );
@@ -213,6 +214,7 @@ CREATE TABLE ventas (
 	total FLOAT NOT NULL, 
 	anulada DATETIME, 
 	responsable_turno VARCHAR(100), 
+	descuento_total FLOAT DEFAULT '0' NOT NULL, 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
 	FOREIGN KEY(caja_id) REFERENCES cajas (id)
@@ -300,6 +302,29 @@ CREATE TABLE mermas (
 	FOREIGN KEY(producto_id) REFERENCES productos (id)
 );
 
+CREATE TABLE promociones (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	nombre VARCHAR(100) NOT NULL, 
+	tipo VARCHAR(20) NOT NULL, 
+	porcentaje FLOAT NOT NULL, 
+	cantidad INTEGER, 
+	medio_pago VARCHAR(20), 
+	producto_id INTEGER, 
+	categoria VARCHAR(50), 
+	plan_id INTEGER, 
+	desde DATE, 
+	hasta DATE, 
+	dias_semana VARCHAR(20), 
+	automatica BOOLEAN DEFAULT 1 NOT NULL, 
+	activa BOOLEAN DEFAULT 1 NOT NULL, 
+	creada DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
+	FOREIGN KEY(producto_id) REFERENCES productos (id), 
+	FOREIGN KEY(plan_id) REFERENCES planes (id)
+);
+
 CREATE TABLE reservas (
 	id INTEGER NOT NULL, 
 	comercio_id INTEGER NOT NULL, 
@@ -337,6 +362,7 @@ CREATE TABLE ventas_detalle (
 	precio_unitario FLOAT NOT NULL, 
 	costo_unitario FLOAT NOT NULL, 
 	subtotal FLOAT NOT NULL, 
+	descuento FLOAT DEFAULT '0' NOT NULL, 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(venta_id) REFERENCES ventas (id), 
 	FOREIGN KEY(producto_id) REFERENCES productos (id)
@@ -355,4 +381,17 @@ CREATE TABLE asistencias (
 	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
 	FOREIGN KEY(socio_id) REFERENCES socios (id), 
 	FOREIGN KEY(reserva_id) REFERENCES reservas (id)
+);
+
+CREATE TABLE descuentos_aplicados (
+	id INTEGER NOT NULL, 
+	comercio_id INTEGER NOT NULL, 
+	venta_id INTEGER NOT NULL, 
+	promocion_id INTEGER, 
+	nombre VARCHAR(100) NOT NULL, 
+	monto FLOAT NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(comercio_id) REFERENCES comercios (id), 
+	FOREIGN KEY(venta_id) REFERENCES ventas (id), 
+	FOREIGN KEY(promocion_id) REFERENCES promociones (id)
 );

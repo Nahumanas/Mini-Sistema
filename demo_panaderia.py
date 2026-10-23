@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 import base_datos as bd
 import operaciones as op
+import operaciones_descuentos as desc
 
 NOMBRE = "Panadería La Espiga"
 
@@ -74,10 +75,26 @@ def crear_caja_de_ayer(comercio_id, ayer):
         ))
 
 
+def crear_promos(comercio_id):
+    """Tres promos de ejemplo (si la panadería todavía no tiene ninguna): una 2da unidad al 50 %,
+    un 10 % en efectivo (las dos automáticas) y una de jubilados con botón en la Caja."""
+    if desc.listar_promociones(comercio_id):
+        return
+    for promo in [
+        {"nombre": "2da unidad al 50 % en Facturas", "tipo": "combo", "cantidad": 2, "porcentaje": 50,
+         "categoria": "Facturas"},
+        {"nombre": "10 % pagando en efectivo", "tipo": "medio_pago", "medio_pago": "efectivo", "porcentaje": 10},
+        {"nombre": "Jubilados 10 %", "tipo": "producto", "porcentaje": 10, "automatica": False},
+    ]:
+        desc.crear_promocion(comercio_id, promo)
+
+
 def crear():
     """Crea la panadería de prueba para el primer dueño, si todavía no existe."""
     with op.motor.connect() as con:
-        if con.execute(select(bd.comercios.c.id).where(bd.comercios.c.nombre == NOMBRE)).first():
+        existente = con.execute(select(bd.comercios.c.id).where(bd.comercios.c.nombre == NOMBRE)).scalar()
+        if existente:
+            crear_promos(existente)  # una demo ya armada antes de que existieran las promos
             return
         dueno_id = con.execute(select(bd.duenos.c.id).order_by(bd.duenos.c.id)).scalar()
     comercio_id = op.crear_comercio(dueno_id, NOMBRE, "panaderia", "Av. San Juan 2100", True)
@@ -107,3 +124,4 @@ def crear():
                     motivo="Vencido", hecho_por="Demo",
                 ))
     crear_caja_de_ayer(comercio_id, hoy - timedelta(days=1))
+    crear_promos(comercio_id)

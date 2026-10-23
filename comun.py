@@ -351,6 +351,16 @@ ESTILOS = """<style>
 }
 .stApp [class*="st-key-venta_menos_"] button:disabled, .stApp [class*="st-key-venta_mas_"] button:disabled { opacity: 0.4; }
 .numero-cantidad { display: inline-block; min-width: 1.6rem; text-align: center; font-size: 1.15rem; font-weight: 600; }
+/* Promos: el detalle arriba del total (la promo a la izquierda, lo que descuenta a la derecha),
+   el precio sin promo tachado en cada producto y el botón de la promo elegida bien marcado */
+.detalle-promos { display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 0.75rem; color: var(--texto); }
+.detalle-promos .monto { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.detalle-promos .promo { color: var(--acento-fuerte); font-weight: 500; }
+.precio-antes { text-decoration: line-through; color: var(--texto-suave); font-size: 0.9rem; white-space: nowrap; }
+.stApp [data-testid="stBaseButton-pillsActive"], .stApp button[data-variant="pills"][aria-pressed="true"] {
+    background: color-mix(in srgb, var(--acento) 20%, var(--tarjeta)) !important;
+    border-color: var(--acento) !important; color: var(--acento-fuerte) !important; font-weight: 600;
+}
 
 /* En el celular: menos espacio en blanco arriba, y cada producto de la venta en dos renglones
    (el nombre arriba; cantidad, precio y la X abajo) en vez de cuatro */
@@ -362,6 +372,7 @@ ESTILOS = """<style>
     [class*="st-key-fila_venta"] [data-testid="stColumn"]:first-child { flex: 1 1 100%; }
     [class*="st-key-fila_venta"] [data-testid="stColumn"]:last-child { flex: 0 0 auto; }
     [class*="st-key-fila_venta"] p { white-space: nowrap; }
+    [class*="st-key-fila_venta"] [data-testid="stCaptionContainer"] p { white-space: normal; }  /* la promo, en 2 renglones si hace falta */
 }
 </style>"""
 

@@ -757,14 +757,19 @@ def crear_proveedor(comercio_id, nombre, telefono):
 # ---------------------------------------------------------------------------
 # Ventas, compras y gastos
 # ---------------------------------------------------------------------------
-def registrar_venta(comercio_id, items, medio_pago, con_ticket=False, caja_id=None):
+def registrar_venta(comercio_id, items, medio_pago, con_ticket=False, caja_id=None, con_promos=True, promos_elegidas=()):
     """Guarda una venta, descuenta el stock y, si se pide, genera el ticket.
 
     items: lista de diccionarios con producto_id, cantidad y precio_unitario.
     caja_id: la caja abierta donde se cobra. Si esa caja ya está cerrada, no guarda nada.
-    Devuelve (venta_id, numero_de_ticket o None).
+    con_promos: aplica las promociones que armó el jefe (ver operaciones_descuentos.py): las automáticas
+    y las "con botón" que el empleado eligió en la Caja (promos_elegidas: sus ids).
+    Devuelve (venta_id, numero_de_ticket o None, cuenta): "cuenta" es el detalle de las promos
+    (subtotal, descuento, total y cada promo aplicada), igual al que mostró la Caja.
     Todo pasa dentro de una transacción: o se guarda todo, o nada.
     """
+    import operaciones_descuentos as desc  # acá adentro: ese archivo también usa este
+
     ahora = datetime.now()
     with motor.begin() as con:
         responsable = None
@@ -774,31 +779,36 @@ def registrar_venta(comercio_id, items, medio_pago, con_ticket=False, caja_id=No
             ).one()
             if cerrada is not None:
                 raise CajaCerrada("La caja ya está cerrada. Abrí una nueva para seguir cobrando.")
-        costos = dict(con.execute(
-            select(bd.productos.c.id, bd.productos.c.precio_costo)
-            .where(bd.productos.c.id.in_([i["producto_id"] for i in items]))
-        ).all())
-        total = sum(i["cantidad"] * i["precio_unitario"] for i in items)
+        datos = {pid: (costo, categoria) for pid, costo, categoria in con.execute(
+            select(bd.productos.c.id, bd.productos.c.precio_costo, bd.productos.c.categoria)
+            .where(bd.productos.c.id.in_([i["producto_id"] for i in items]),
+                   bd.productos.c.comercio_id == comercio_id)
+        ).all()}
+        items = [{**i, "categoria": datos[i["producto_id"]][1]} for i in items]
+        cuenta = (desc.calcular_carrito(comercio_id, items, medio_pago, promos_elegidas, con, ahora.date())
+                  if con_promos else desc.calcular([], items))
         ids = {i["producto_id"] for i in items}
         sobre_el_minimo = _sobre_el_minimo(con, ids)
         venta_id = con.execute(
             bd.ventas.insert().values(
-                comercio_id=comercio_id, caja_id=caja_id, fecha=ahora, medio_pago=medio_pago, total=total,
-                responsable_turno=responsable,
+                comercio_id=comercio_id, caja_id=caja_id, fecha=ahora, medio_pago=medio_pago, total=cuenta["total"],
+                responsable_turno=responsable, descuento_total=cuenta["descuento"],
             )
         ).inserted_primary_key[0]
 
-        for i in items:
+        for i, linea in zip(items, cuenta["lineas"]):
+            # El subtotal es lo cobrado de verdad (ya con la promo): así la ganancia de los reportes es la real
             con.execute(bd.ventas_detalle.insert().values(
                 venta_id=venta_id, producto_id=i["producto_id"], cantidad=i["cantidad"],
-                precio_unitario=i["precio_unitario"], costo_unitario=costos[i["producto_id"]],
-                subtotal=i["cantidad"] * i["precio_unitario"],
+                precio_unitario=i["precio_unitario"], costo_unitario=datos[i["producto_id"]][0],
+                subtotal=linea["total"], descuento=linea["descuento"],
             ))
             con.execute(
                 bd.productos.update()
                 .where(bd.productos.c.id == i["producto_id"])
                 .values(stock=bd.productos.c.stock - i["cantidad"])
             )
+        desc.guardar_aplicadas(con, comercio_id, venta_id, cuenta["aplicadas"])
 
         numero = None
         if con_ticket:
@@ -806,7 +816,7 @@ def registrar_venta(comercio_id, items, medio_pago, con_ticket=False, caja_id=No
             con.execute(bd.tickets.insert().values(venta_id=venta_id, numero=numero, fecha_emision=ahora))
         llegaron = _llegaron_al_minimo(con, sobre_el_minimo)
     avisos.avisar_stock_bajo(comercio_id, llegaron)
-    return venta_id, numero
+    return venta_id, numero, cuenta
 
 
 def _sobre_el_minimo(con, producto_ids):
@@ -1151,6 +1161,7 @@ def detalle_ventas(comercio_ids, desde=None, hasta=None):
             bd.ventas_detalle.c.precio_unitario,
             bd.ventas_detalle.c.costo_unitario,
             bd.ventas_detalle.c.subtotal,
+            bd.ventas_detalle.c.descuento,
         )
         .select_from(
             bd.ventas.join(bd.ventas_detalle, bd.ventas_detalle.c.venta_id == bd.ventas.c.id)
@@ -1164,7 +1175,8 @@ def detalle_ventas(comercio_ids, desde=None, hasta=None):
         consulta = consulta.where(_entre_dias(bd.ventas.c.fecha, desde, hasta))
     df = pd.read_sql(consulta, motor)
     if df.empty:  # sin ventas las columnas vienen como texto y las cuentas de los reportes fallan (0/0)
-        df = df.astype({c: "float64" for c in ("cantidad", "precio_unitario", "costo_unitario", "subtotal")})
+        df = df.astype({c: "float64" for c in ("cantidad", "precio_unitario", "costo_unitario", "subtotal",
+                                                "descuento")})
     df["fecha"] = pd.to_datetime(df["fecha"])
     df["costo_total"] = df["cantidad"] * df["costo_unitario"]
     df["ganancia"] = df["subtotal"] - df["costo_total"]

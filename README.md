@@ -4,7 +4,7 @@ Un mini ERP para comercios urbanos (kiosco, ferretería, tienda de ropa, panader
 
 Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 
-▶️ **Probá la demo online:** https://mini-sistema-demo.streamlit.app (entrá como jefe con el PIN `1234`; los datos son inventados). Para ver el gimnasio, elegí el comercio **Gimnasio Fuerza Norte** y probá el DNI `30000000` en el Ingreso. La página para que el socio reserve desde el celular viene apagada: para probarla, prendela en **Planes y actividades → 📱 Reservas desde el celular** y abrí https://mini-sistema-demo.streamlit.app/?reservar=fuerzanorte (entrá con el mismo DNI).
+▶️ **Probá la demo online:** https://mini-sistema-demo.streamlit.app (entrá como jefe con el PIN `1234`; los datos son inventados). Para ver el gimnasio, elegí el comercio **Gimnasio Fuerza Norte** y probá el DNI `30000000` en el Ingreso. La página para que el socio reserve desde el celular viene apagada: para probarla, prendela en **Planes y actividades → 📱 Reservas desde el celular** y abrí https://mini-sistema-demo.streamlit.app/?reservar=fuerzanorte (entrá con el mismo DNI). Para ver las promos, elegí **Panadería La Espiga**: trae una 2da unidad al 50 % en Facturas, 10 % en efectivo y un botón de Jubilados en la Caja.
 
 ![Venta con el lector de código de barras](informe/videos/pistola-caja.gif)
 
@@ -13,6 +13,7 @@ Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 ## Qué hace
 
 - **Caja:** se abre con el efectivo inicial, se cobra producto por producto (descuenta el stock solo) y al cerrar hace el **arqueo**: cuánto efectivo debería haber, cuánto se contó y si sobra o falta. Si cambia quien atiende (mañana / tarde), se hace un **relevo de turno** sin cerrar la caja: el que se va cuenta el efectivo y queda anotado en qué turno faltó o sobró plata. Si pagan en efectivo, calcula el **vuelto**. Una caja cerrada no se puede modificar: si hubo un error, el jefe le hace un **ajuste** (anular una venta o corregir el conteo) que queda anotado con fecha, quién y por qué.
+- **Descuentos y promos:** el jefe arma 2x1, 3x2, 2da unidad al %, un % en un producto o una categoría, un % por medio de pago (por ejemplo, 10 % en efectivo) y, en los gimnasios, un % en la cuota de un plan. Cada promo puede ser **automática** (la Caja la aplica sola) o **con botón** (el empleado la toca si corresponde: jubilados, cliente frecuente...). La Caja muestra el subtotal, cada promo con lo que descuenta y el total; el ticket dice cuánto ahorró el cliente y los reportes, cuánto se descontó.
 - **Lector de código de barras:** en la Caja cada pasada suma el producto a la venta; en Compras pide la cantidad que llegó. Los códigos se cargan en el Excel de productos (o con el lector en Stock), y si aparece uno desconocido el jefe lo da de alta en el momento.
 - **Vencimientos:** para lo que dura pocos días (postres, lácteos, pan). Cada producto puede tener "Dura X días" y cada tanda que entra queda con su fecha. El sistema avisa qué vence hoy y qué hay que retirar, y lo que se tira queda anotado como pérdida en los reportes.
 - **Avisos al celular del jefe por Telegram:** cuando se abre o se cierra la caja (con el efectivo esperado, el contado y si faltó o sobró), en cada relevo de turno y cuando un producto llega al stock mínimo. Salen por detrás: la Caja no se demora y, si no hay internet, se cobra igual.
@@ -61,7 +62,7 @@ Al abrir el sistema elegís el **dueño** y el **comercio**, y entrás como **je
 | Pantalla | Para qué sirve |
 |---|---|
 | 🏠 Inicio | El "launcher": todos tus comercios con lo vendido hoy y en el mes, avisos de stock bajo y un botón para abrir la caja de cada uno. |
-| 💵 Caja | Primero se **abre la caja** con el efectivo inicial. Después cargás cada venta en el momento: pasás el **lector de código de barras** por cada producto (cada pasada suma 1) o, si no tiene código, lo buscás en la lista. Para cambiar cuántas unidades lleva, tocás **−** o **+** al lado del número (el total y el vuelto se recalculan solos; el + no pasa el stock y el − no baja de 1, para sacarlo está la X). Elegís el medio de pago y cobrás (descuenta el stock solo). Si pagan en efectivo, escribís con cuánto pagan y el sistema muestra el **vuelto** (si no alcanza, avisa cuánto falta). Si el lector lee un código que no está cargado, el jefe puede crear el producto ahí mismo. Si cambia quien atiende, el que se va toca **🔄 Relevo de turno**: cuenta el efectivo, escribe quién recibe y queda anotado si en su turno faltó o sobró plata, sin cerrar la caja (el que entra arranca con lo contado). Al final del día se **cierra la caja**: contás el efectivo y el sistema muestra cuánto debería haber y si sobra o falta. Una caja cerrada no se puede modificar, pero el jefe (o el empleado al que le dé el permiso "Ajustar cajas cerradas"), en **Cajas anteriores**, le puede hacer un **ajuste**: anular una venta (deja de contar y la mercadería vuelve al stock) o anotar un nuevo conteo del efectivo. Cada ajuste queda anotado con fecha, quién y motivo, y el historial muestra la diferencia antes y después. En **Turnos de una caja** se ve la línea de tiempo del día: quién abrió, cada relevo y el cierre, con lo que dio cada turno. |
+| 💵 Caja | Primero se **abre la caja** con el efectivo inicial. Después cargás cada venta en el momento: pasás el **lector de código de barras** por cada producto (cada pasada suma 1) o, si no tiene código, lo buscás en la lista. Para cambiar cuántas unidades lleva, tocás **−** o **+** al lado del número (el total y el vuelto se recalculan solos; el + no pasa el stock y el − no baja de 1, para sacarlo está la X). Elegís el medio de pago y cobrás (descuenta el stock solo). Las **promos** se aplican solas: arriba del total aparecen el subtotal y cada promo con lo que descuenta, y en cada producto el precio sin promo tachado. Las promos "con botón" (por ejemplo, jubilados) aparecen en **🏷️ Promos para elegir** para tocarlas si corresponde. Si pagan en efectivo, escribís con cuánto pagan y el sistema muestra el **vuelto** (si no alcanza, avisa cuánto falta). Si el lector lee un código que no está cargado, el jefe puede crear el producto ahí mismo. Si cambia quien atiende, el que se va toca **🔄 Relevo de turno**: cuenta el efectivo, escribe quién recibe y queda anotado si en su turno faltó o sobró plata, sin cerrar la caja (el que entra arranca con lo contado). Al final del día se **cierra la caja**: contás el efectivo y el sistema muestra cuánto debería haber y si sobra o falta. Una caja cerrada no se puede modificar, pero el jefe (o el empleado al que le dé el permiso "Ajustar cajas cerradas"), en **Cajas anteriores**, le puede hacer un **ajuste**: anular una venta (deja de contar y la mercadería vuelve al stock) o anotar un nuevo conteo del efectivo. Cada ajuste queda anotado con fecha, quién y motivo, y el historial muestra la diferencia antes y después. En **Turnos de una caja** se ve la línea de tiempo del día: quién abrió, cada relevo y el cierre, con lo que dio cada turno. |
 | 🧾 Ticket | En los comercios que usan ticket, al cobrar podés tildar "El cliente pide ticket" y se descarga un PDF de 80 mm listo para imprimir. Es un comprobante interno, no una factura de ARCA. |
 | 📦 Compras | Cargar lo que le comprás a un proveedor. Con el lector: pasás el producto, escribís la cantidad que llegó y Enter. Suma al stock y actualiza el precio de costo. El empleado también puede cargar lo que llega (viene habilitado; el jefe se lo saca en Mis comercios), pero solo pone cantidades, sin ver costos. Cada compra guarda quién la cargó. |
 | 🗓️ Vencimientos | Aparece en las panaderías y en los comercios que tengan algún producto con **Dura (días)**. Muestra lo que hay por tanda (cuándo entró y cuándo vence), lo vencido para retirar y lo que vence hoy o mañana. Lo que llega del proveedor se anota solo desde Compras; lo que se hornea o prepara se carga acá ("Cargar lo que salió hoy"). Con **Ya lo retiré** lo vencido sale del stock y queda como pérdida (a costo). Se cuenta que siempre se vende primero lo más viejo. Si no fue así, **Sacar de una tanda** permite elegir de qué tanda salió (vendido, tirado o regalado). El Inicio y la Caja avisan cuando hay algo vencido o que vence hoy. |
@@ -69,6 +70,7 @@ Al abrir el sistema elegís el **dueño** y el **comercio**, y entrás como **je
 | 📊 Panel del día | Cómo viene el día: vendido, cantidad de ventas, ganancia, ventas por hora, medios de pago y lo más vendido. Se actualiza solo cada 10 segundos y compara con el mismo día de la semana pasada. |
 | 📋 Stock | Todos los productos con su estado (✅ OK / ⚠️ Reponer). Podés cambiar precios, cantidades, códigos de barras y cuántos días dura cada producto (**Dura (días)**, vacío = no vence) en la tabla y tocar **Guardar cambios**, o agregar productos nuevos. También podés cargar con el lector los códigos de barras que falten. |
 | 📑 Reportes | Por semana, por mes o por las fechas que elijas: cuánto vendí, cuánto gané, cuánto gasté, qué se vende más y qué me falta comprar. Si se tiró mercadería vencida, aparece como pérdida y se resta de la ganancia neta. Para un comercio o todos juntos, con el botón para **descargar el Excel**. |
+| 🎁 Descuentos y promos | Solo el jefe. Armar promos: **2x1, 3x2 o 2da unidad al %**, **% en un producto, una categoría o todo**, **% por medio de pago** y, en los gimnasios, **% en un plan**. Cada una puede valer solo algunos días de la semana o entre dos fechas, y ser **automática** o **con botón en la Caja**. Se prenden y apagan con un interruptor, se editan y se filtran por tipo. En **⚙️ Cómo se combinan** el jefe elige qué pasa si a un producto le tocan dos promos: va la que más ahorra (viene así) o se suman. La de medio de pago va siempre encima. |
 | 🏬 Mis comercios | Crear un comercio nuevo (sin tocar código), activar o desactivar los tickets de cada uno, prender o apagar el **resumen semanal** (para la temporada), elegir **qué ve el empleado**, cargar los **horarios y turnos** del local (la Caja avisa cuándo termina un turno y si está abierta fuera de horario) y cambiar tu PIN de jefe. |
 | 🚪 Ingreso por DNI | Solo en gimnasios. Se escribe el DNI (o se pasa el DNI por el lector) y el socio sale en **verde** (pasa y queda anotada la entrada; si tenía reserva, pasa a "vino"), **amarillo** (al día pero sin reserva: se lo anota en una clase de hoy o se lo deja pasar igual) o **rojo** (debe la cuota o no le quedan clases: se le cobra ahí mismo). Si el DNI no existe, se lo da de alta en el momento. A la derecha, quién entró hoy. |
 | 👥 Socios | Solo en gimnasios. Buscador por nombre o DNI, filtros (al día, vencen pronto, deben, sin clases, de baja) y la ficha de cada socio: cobrarle la cuota, sus reservas (anotarlo, cancelar, agregar al calendario), sus cuotas y entradas, y sus datos. Dar de baja lo hace solo el jefe. |
@@ -87,7 +89,8 @@ Al abrir el sistema elegís el **dueño** y el **comercio**, y entrás como **je
 | Cajas anteriores | Ve el historial con el arqueo de cada caja, los turnos de cada día y puede ajustarlas | Solo si el jefe le da el permiso "Ajustar cajas cerradas" |
 | Relevo de turno | Sí | Sí (ve solo lo de su turno) |
 | Horarios y turnos del local | Los carga en Mis comercios | No |
-| Gimnasio | Todo, más Planes y actividades | Ingreso por DNI y Caja siempre; Socios, Cuotas y Clases si el jefe se los habilita (en los gimnasios nuevos vienen habilitados). Cobra el precio del plan (el jefe puede hacer descuentos o cambiar el vencimiento) |
+| Descuentos y promos | Los arma en Descuentos y promos | Se le aplican solos en la Caja; toca los botones de las promos "con botón" si corresponde |
+| Gimnasio | Todo, más Planes y actividades | Ingreso por DNI y Caja siempre; Socios, Cuotas y Clases si el jefe se los habilita (en los gimnasios nuevos vienen habilitados). Cobra el precio del plan con sus promos (el jefe puede hacer otro descuento a mano o cambiar el vencimiento) |
 
 Si escribís mal el PIN 3 veces, hay que esperar 30 segundos. Si te olvidaste el PIN, en la carpeta del sistema corré `python olvide_mi_pin.py "Tu nombre"` y al entrar te pide uno nuevo. Si recargás la página, el sistema vuelve a pedir que ingreses.
 
@@ -153,7 +156,7 @@ En **Control → Reportes** elegís el **período** (una semana, un mes o las fe
 
 | Pregunta | Qué muestra |
 |---|---|
-| 1. ¿Cuánto vendí? | Ventas, cantidad de ventas, ticket promedio y unidades, comparado con el período anterior. En un gimnasio, también las cuotas y el total cobrado. |
+| 1. ¿Cuánto vendí? | Ventas, cantidad de ventas, ticket promedio y unidades, comparado con el período anterior. En un gimnasio, también las cuotas y el total cobrado. Si hubo promos, **cuánto se descontó** y cuánto descontó cada una. |
 | 2. ¿Cuánto gané? | Ganancia bruta (ventas − costo de la mercadería, más las cuotas, que no tienen costo), gastos y ganancia neta. Dice si el período dio ganancia o pérdida. |
 | 3. ¿Cuánto gasté? | Gastos por categoría y compras de mercadería a proveedores. |
 | 4. ¿Qué se vende más? | El ranking de productos, del más al menos vendido (incluye los que no se vendieron nada). |
@@ -161,7 +164,7 @@ En **Control → Reportes** elegís el **período** (una semana, un mes o las fe
 
 **Gastos en una semana.** El alquiler, la luz o los sueldos se cargan el día que se pagan, pero son de todo el mes. Por eso se reparten por día: a una semana le tocan 7 días de gastos. En un mes completo, da el gasto entero. Si el período todavía no terminó, se compara con los mismos días del período anterior.
 
-**El Excel** tiene las hojas Resumen (las 5 respuestas con gráficos), Por comercio (si elegís todos), Productos, Qué comprar, Ventas, Compras y Gastos. Si hubo cuotas de gimnasio, suma la hoja **Cuotas** (cada cuota y lo cobrado por plan). En la pantalla, los gimnasios ven además los socios nuevos, los que están al día y lo cobrado por plan.
+**El Excel** tiene las hojas Resumen (las 5 respuestas con gráficos), Por comercio (si elegís todos), Productos, Qué comprar, Ventas, Compras y Gastos. Si hubo cuotas de gimnasio, suma la hoja **Cuotas** (cada cuota y lo cobrado por plan). Si hubo promos, suma la hoja **Promos** (cada descuento, en qué venta, y el total por promo). Las ventas ya están guardadas con el descuento hecho, así que la ganancia es sobre lo que se cobró de verdad. En la pantalla, los gimnasios ven además los socios nuevos, los que están al día y lo cobrado por plan.
 
 **Se guardan solos.** Al abrir el sistema se guarda el Excel del **mes pasado** de cada comercio en `reportes/<comercio>/mensuales` (y uno con todos juntos si el dueño tiene varios). El **resumen semanal** es opcional: se prende y se apaga con un botón por comercio (en Mis comercios o en Reportes) y, si está prendido, también se guarda el Excel de la semana pasada en `reportes/<comercio>/semanales`.
 
@@ -175,7 +178,8 @@ En **Control → Reportes** elegís el **período** (una semana, un mes o las fe
 | `app.py` | Arranca la aplicación y arma el menú. |
 | `paginas/` | Una pantalla por archivo (caja.py, stock.py, etc.). |
 | `operaciones.py` | Todas las lecturas y escrituras en la base. Las pantallas no escriben SQL: llaman a estas funciones. |
-| `ticket.py` | Arma el ticket en PDF. |
+| `ticket.py` | Arma el ticket en PDF (con las promos y lo que ahorró el cliente). |
+| `operaciones_descuentos.py` | Las promociones: la cuenta que aplica las promos a una venta o a una cuota (`calcular`), y guardarlas, prenderlas y leerlas para los reportes. |
 | `notificaciones_telegram.py` | Los avisos al celular del jefe por Telegram: conectar el chat y mandar los mensajes en segundo plano. |
 | `operaciones_gimnasio.py` | Todo lo del gimnasio que lee y escribe en la base: socios, planes, cuotas, clases, reservas con lista de espera e ingreso por DNI. Cada función recibe primero el `comercio_id`. |
 | `gimnasio_ui.py` | Partes de pantalla que comparten las pantallas del gimnasio: el cartel verde/amarillo/rojo, elegir un socio, el formulario de cobro, el botón del calendario y el link de reservas. |
@@ -218,6 +222,8 @@ duenos
         │     └── tickets    solo si el cliente pidió ticket
         ├── gastos           alquiler, luz, sueldos, impuestos
         ├── configuracion_telegram   a qué chat de Telegram le llegan los avisos del jefe
+        ├── promociones      las promos que armó el jefe (2x1, %, medio de pago, plan...)
+        │     └── descuentos_aplicados   cuánto descontó cada promo en cada venta
         └── (solo gimnasios)
               ├── configuracion_gimnasio   las reglas (horas para cancelar, clases que sobran, vencimiento) y el link de reservas
               ├── disciplinas      las actividades: crossfit, funcional, pesas libres...
@@ -230,7 +236,7 @@ duenos
 
 ¿Por qué ventas y ventas_detalle por separado? Porque una venta (un cliente que paga) puede tener varios productos. `ventas` guarda el total, la hora y el medio de pago; `ventas_detalle` guarda cada producto de esa venta. Con compras pasa lo mismo.
 
-`ventas_detalle` guarda el precio **y el costo** del día de la venta. Así la ganancia queda bien calculada aunque después cambien los precios por la inflación.
+`ventas_detalle` guarda el precio **y el costo** del día de la venta. Así la ganancia queda bien calculada aunque después cambien los precios por la inflación. Si hubo promo, `descuento` dice cuánto se le descontó a esa fila y `subtotal` es lo cobrado de verdad (cantidad × precio − descuento); `ventas.descuento_total` guarda el total descontado de la venta.
 
 ## Los datos de prueba
 
