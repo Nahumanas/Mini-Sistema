@@ -113,6 +113,9 @@ if st.query_params.get("reservar"):
 
 # El logo arriba a la izquierda, como en los paneles de Supabase
 st.logo(tema.logo(), size="large")
+if tema.hay_logo_propio():
+    # Streamlit lo deja muy chiquito (32 px de alto); el logo propio es ancho, así que lo agrandamos un poco
+    st.html("<style>[data-testid='stLogo'] { height: 2.75rem; max-width: 15rem; }</style>")
 
 
 @st.cache_resource(show_spinner=False)
