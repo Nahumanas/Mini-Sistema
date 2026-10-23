@@ -340,6 +340,17 @@ ESTILOS = """<style>
 .st-key-vuelto [data-testid="stMetricValue"] div { font-size: 2.6rem; font-weight: 600; color: var(--positivo) !important; }
 .st-key-boton_cobrar button { min-height: 3.6rem; }
 .st-key-boton_cobrar button p { font-size: 1.4rem; font-weight: 700; }
+/* Botones − y + de cada producto: cuadrados, fáciles de tocar con el dedo, con el número en el medio */
+.stApp [class*="st-key-cantidad_venta"] { gap: 0.4rem; }
+.stApp [class*="st-key-venta_menos_"] button, .stApp [class*="st-key-venta_mas_"] button {
+    min-width: 2.5rem; min-height: 2.5rem; padding: 0; border-radius: 8px;
+    background: var(--tarjeta); border: 1px solid var(--borde); color: var(--texto);
+}
+.stApp [class*="st-key-venta_menos_"] button:hover:not(:disabled), .stApp [class*="st-key-venta_mas_"] button:hover:not(:disabled) {
+    border-color: var(--acento); color: var(--acento-fuerte);
+}
+.stApp [class*="st-key-venta_menos_"] button:disabled, .stApp [class*="st-key-venta_mas_"] button:disabled { opacity: 0.4; }
+.numero-cantidad { display: inline-block; min-width: 1.6rem; text-align: center; font-size: 1.15rem; font-weight: 600; }
 
 /* En el celular: menos espacio en blanco arriba, y cada producto de la venta en dos renglones
    (el nombre arriba; cantidad, precio y la X abajo) en vez de cuatro */

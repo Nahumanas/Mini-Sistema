@@ -44,7 +44,7 @@ El sistema tiene tres partes, una encima de la otra:
 | Pantalla | Qué hace | Quién la ve |
 |---|---|---|
 | 🏠 Inicio | Cada comercio con lo vendido hoy y en el mes y el estado de la caja, más los totales y la ganancia bruta del mes. Botón para ir a la caja. | Jefe |
-| 💵 Caja | Abrir caja, vender con el lector o la lista, vuelto, cobrar, ticket, relevo de turno, cerrar caja con arqueo. El jefe ve el historial de cajas, los turnos de cada una y las ajusta. | Jefe y empleado |
+| 💵 Caja | Abrir caja, vender con el lector o la lista, botones − y + para cambiar cantidades, vuelto, cobrar, ticket, relevo de turno, cerrar caja con arqueo. El jefe ve el historial de cajas, los turnos de cada una y las ajusta. | Jefe y empleado |
 | 📦 Compras | Cargar lo que llega del proveedor: con el lector pide la cantidad. Suma al stock. El empleado no ve costos. | Jefe y empleado (viene habilitado; el jefe lo puede sacar) |
 | 🗓️ Vencimientos | Lo que hay por tanda con su fecha de vencimiento, avisos de vencido / vence hoy / vence mañana, cargar lo que se horneó y retirar lo vencido como pérdida. Solo aparece si el comercio es panadería o tiene productos con "Dura (días)". | Jefe y empleado (viene habilitado; el jefe lo puede sacar) |
 | 🧾 Gastos | Cargar gastos del comercio. | Jefe (y empleado si tiene permiso) |
@@ -191,6 +191,7 @@ El lector (la "pistola" del súper) se enchufa por USB y funciona como un teclad
 **Cómo se usa:**
 
 - **Caja:** el cursor ya está en el casillero "Escanear". Cada pasada suma 1 unidad; si se pasa dos veces, suma 2.
+- **Cambiar la cantidad sin volver a escanear:** cada producto de la venta tiene los botones **−** y **+** al lado del número. El total y el vuelto se recalculan solos. El − no baja de 1 (para sacar el producto está la X) y el + no deja pasar el stock que hay cargado.
 - **Compras:** al pasar el producto aparece "Cantidad que llegó": se escribe el número y Enter. Si se pasa otro producto sin escribir la cantidad, el sistema avisa.
 - Los productos sin código (pan suelto, tornillos sueltos) se siguen eligiendo de la lista.
 - Un mismo código no puede estar en dos productos del mismo comercio: el sistema no lo deja.

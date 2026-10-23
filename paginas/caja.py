@@ -430,6 +430,42 @@ def agregar_al_carrito(producto_id, cantidad):
     })
 
 
+def stock_de(producto_id):
+    """Cuántas unidades hay en el stock según la base (puede ser 0 o negativo si el stock está desactualizado)."""
+    return int(productos.loc[producto_id, "stock"]) if producto_id in productos.index else 0
+
+
+def cambiar_cantidad(indice, cambio):
+    """Botones − y +: suma o resta 1 unidad. Nunca baja de 1 (para sacarlo está la X) ni pasa el stock.
+    Corre antes de redibujar la pantalla, así el subtotal, el total y el vuelto ya salen con la cantidad nueva."""
+    item = st.session_state[clave_carrito][indice]
+    nueva = item["cantidad"] + cambio
+    if nueva < 1:
+        return
+    if cambio > 0 and nueva > stock_de(item["producto_id"]):
+        st.toast(f"No hay más {item['nombre']} en stock.", icon="⚠️")
+        return
+    item["cantidad"] = nueva
+
+
+def quitar_del_carrito(indice):
+    st.session_state[clave_carrito].pop(indice)
+
+
+def botones_de_cantidad(indice, item):
+    """Dibuja  [−] 3 [+]  x $ 1.130  en la fila del producto."""
+    stock = stock_de(item["producto_id"])
+    with st.container(horizontal=True, vertical_alignment="center", gap="small", key=f"cantidad_venta_{indice}"):
+        st.button("", icon=":material/remove:", key=f"venta_menos_{indice}", help="Uno menos",
+                  disabled=item["cantidad"] <= 1, on_click=cambiar_cantidad, args=(indice, -1))
+        st.markdown(f"<span class='numero-cantidad'>{item['cantidad']}</span>", unsafe_allow_html=True,
+                    width="content")
+        st.button("", icon=":material/add:", key=f"venta_mas_{indice}",
+                  help="Uno más" if item["cantidad"] < stock else f"No hay más en stock (hay {plural(stock, 'unidad', 'unidades')})",
+                  disabled=item["cantidad"] >= stock, on_click=cambiar_cantidad, args=(indice, +1))
+        st.markdown(f"x {pesos(item['precio_unitario'])}", width="content")
+
+
 ESCANER = "📷 Escanear código de barras"
 clave_escaner = f"escaner_{comercio['id']}"
 clave_desconocido = f"codigo_desconocido_{comercio['id']}"  # código que el lector no encontró
@@ -487,13 +523,13 @@ with izquierda:
         st.info("Agregá productos para empezar la venta.")
     for indice, item in enumerate(carrito):
         # La "key" deja que en el celular la fila no se parta en cuatro renglones (ver ESTILOS en comun.py)
-        f1, f2, f3, f4 = st.container(key=f"fila_venta_{indice}").columns([4, 3, 2, 1], vertical_alignment="center")
+        f1, f2, f3, f4 = st.container(key=f"fila_venta_{indice}").columns([3, 6, 2, 1], vertical_alignment="center")
         f1.write(item["nombre"])
-        f2.write(f"{item['cantidad']} x {pesos(item['precio_unitario'])}")
+        with f2:
+            botones_de_cantidad(indice, item)
         f3.write(f"**{pesos(item['cantidad'] * item['precio_unitario'])}**")
-        if f4.button("", icon=":material/close:", key=f"quitar_{indice}", help="Quitar de la venta"):
-            carrito.pop(indice)
-            st.rerun()
+        f4.button("", icon=":material/close:", key=f"quitar_{indice}", help="Quitar de la venta",
+                  on_click=quitar_del_carrito, args=(indice,))
 
 # --- Cobrar ---
 with derecha:
