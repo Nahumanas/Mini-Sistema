@@ -10,12 +10,10 @@ Cómo funciona (sin recargar la página):
 Para cambiar los colores del sistema alcanza con tocar PALETAS.
 """
 
-from pathlib import Path
-
 import streamlit as st
 
 import operaciones as op
-from config import MODO_DEMO
+from config import MODO_DEMO, logo_propio
 
 TEMAS = ("claro", "oscuro")
 
@@ -119,21 +117,17 @@ def _al_cambiar():
         op.guardar_tema(dueno["id"], nuevo)
 
 
-# Logo propio opcional: si en esta carpeta están logo_claro.png y logo_oscuro.png, se usan en lugar del
-# dibujo de abajo. La carpeta no se sube a GitHub (.gitignore): cada instalación puede poner el suyo.
-CARPETA_LOGO_PROPIO = Path(__file__).parent / "logo_propio"
-
-
-def hay_logo_propio():
-    return (CARPETA_LOGO_PROPIO / f"logo_{tema_activo()}.png").exists()
+def logo_propio_del_tema():
+    """El logo propio para el tema activo (ver config.logo_propio), o None si no hay."""
+    return logo_propio(f"logo_{tema_activo()}.png")
 
 
 def logo():
-    """El logo de arriba a la izquierda. Si hay un logo propio (ver CARPETA_LOGO_PROPIO), usa la imagen
+    """El logo de arriba a la izquierda. Si hay un logo propio (ver config.logo_propio), usa la imagen
     del tema activo; si no, un cuadradito verde con una tiendita y el nombre del sistema.
     Es un dibujo (SVG) hecho acá mismo; va en dos versiones porque el texto cambia de color con el tema."""
-    if hay_logo_propio():
-        return str(CARPETA_LOGO_PROPIO / f"logo_{tema_activo()}.png")
+    if logo_propio_del_tema():
+        return logo_propio_del_tema()
     texto = PALETAS[tema_activo()]["texto"]
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="176" height="32" viewBox="0 0 176 32">
   <rect x="0" y="0" width="32" height="32" rx="8" fill="#3ECF8E"/>

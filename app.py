@@ -51,11 +51,11 @@ from ingreso import pantalla_ingreso
 from comun import RUBROS, a_python, aplicar_estilos, correr_script, es_gimnasio, permisos_de
 import tema
 from tema import switch_tema
-from config import EN_STREAMLIT_CLOUD, FORMULARIO_RESENAS, MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE
+from config import EN_STREAMLIT_CLOUD, FORMULARIO_RESENAS, MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE, logo_propio
 
 _fechas_al_arrancar().update(_fechas_actuales())  # anota cómo estaban los archivos que se usaron
 
-st.set_page_config(page_title="Mini-Sistema", page_icon="🏪", layout="wide")
+st.set_page_config(page_title="Mini-Sistema", page_icon=logo_propio("favicon.png") or "🏪", layout="wide")
 
 
 @st.cache_resource(show_spinner="Preparando los datos de prueba...")
@@ -113,7 +113,7 @@ if st.query_params.get("reservar"):
 
 # El logo arriba a la izquierda, como en los paneles de Supabase
 st.logo(tema.logo(), size="large")
-if tema.hay_logo_propio():
+if tema.logo_propio_del_tema():
     # Streamlit lo deja muy chiquito (32 px de alto); el logo propio es ancho, así que lo agrandamos un poco
     st.html("<style>[data-testid='stLogo'] { height: 2.75rem; max-width: 15rem; }</style>")
 

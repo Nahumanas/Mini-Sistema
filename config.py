@@ -16,6 +16,18 @@ if hasattr(time, "tzset"):
 # Carpeta donde está este archivo (la carpeta del proyecto)
 CARPETA_PROYECTO = Path(__file__).parent
 
+# Logo propio opcional (no se sube a GitHub, ver .gitignore): si en esta carpeta están
+# logo_claro.png / logo_oscuro.png (arriba a la izquierda y en el ingreso), favicon.png (pestaña del
+# navegador) y ticket.png (arriba del ticket), se usan esos. Si falta alguno, queda lo de siempre.
+CARPETA_LOGO_PROPIO = CARPETA_PROYECTO / "logo_propio"
+
+
+def logo_propio(nombre):
+    """La ruta del archivo del logo propio (ej. "favicon.png"), o None si no está."""
+    archivo = CARPETA_LOGO_PROPIO / nombre
+    return str(archivo) if archivo.exists() else None
+
+
 # Dirección de la base de datos.
 # Hoy es un archivo SQLite que vive en la carpeta del proyecto.
 # En el paso 5 (nube) solo cambiamos esta línea por la dirección de la base en internet.

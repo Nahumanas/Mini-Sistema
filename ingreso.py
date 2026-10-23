@@ -9,6 +9,7 @@ import time
 import streamlit as st
 
 import operaciones as op
+import tema
 from comun import RUBROS, a_python
 from config import MODO_DEMO, PIN_DEMO
 
@@ -20,7 +21,10 @@ def pantalla_ingreso():
     """Se muestra en lugar de cualquier pantalla mientras nadie haya entrado."""
     _, centro, _ = st.columns([1, 2, 1])
     with centro:
-        st.title("🏪 Mini-Sistema")
+        if tema.logo_propio_del_tema():
+            st.image(tema.logo_propio_del_tema(), width=320)
+        else:
+            st.title("🏪 Mini-Sistema")
         st.caption("Cuando el sistema esté en la nube, acá vas a entrar con tu Gmail y contraseña.")
         if MODO_DEMO:
             st.info(f"**Demo con datos de prueba.** Entrá como jefe con el PIN **{PIN_DEMO}**, "

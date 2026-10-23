@@ -5,6 +5,8 @@ Es un comprobante interno para el cliente, NO una factura legal de ARCA.
 
 from fpdf import FPDF
 
+from config import logo_propio
+
 ANCHO = 80  # milímetros
 
 
@@ -20,13 +22,17 @@ def generar_ticket_pdf(comercio, numero, fecha, items, total, medio_pago, promos
     promos: las promos aplicadas [{nombre, monto}]: salen abajo, con lo que ahorró el cliente.
     """
     promos = [p for p in (promos or []) if p["monto"] > 0]
-    alto = 80 + 9 * len(items) + (12 + 5 * len(promos) if promos else 0)  # el largo del papel depende de lo que haya
+    logo = logo_propio("ticket.png")
+    alto = (14 if logo else 0) + 80 + 9 * len(items) + (12 + 5 * len(promos) if promos else 0)  # el largo del papel depende de lo que haya
     pdf = FPDF(unit="mm", format=(ANCHO, alto))
     pdf.set_margins(5, 5, 5)
     pdf.set_auto_page_break(False)
     pdf.add_page()
     ancho_util = ANCHO - 10
 
+    if logo:
+        pdf.image(logo, x=(ANCHO - 12) / 2, w=12)  # chiquito y centrado, arriba de todo
+        pdf.ln(2)
     pdf.set_font("Helvetica", "B", 13)
     pdf.multi_cell(ancho_util, 6, comercio["nombre"], align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 8)
