@@ -17,6 +17,20 @@ if not es_gimnasio(comercio):
     st.stop()
 cid = comercio["id"]
 clave_elegido = f"socio_elegido_{cid}"
+clave_vuelta = f"vuelta_tabla_socios_{cid}"
+
+
+def soltar_ficha(socio_nuevo=None):
+    """Cierra la ficha (o abre otra) y desmarca la fila de la tabla.
+
+    La tabla se acuerda de la fila tocada: si no la desmarcamos, en la próxima vuelta vuelve a abrir
+    la misma ficha (por eso "Cerrar ficha" no andaba). Cambiarle el nombre (key) la deja sin marcar."""
+    st.session_state[clave_vuelta] = st.session_state.get(clave_vuelta, 0) + 1
+    if socio_nuevo is None:
+        st.session_state.pop(clave_elegido, None)
+    else:
+        st.session_state[clave_elegido] = socio_nuevo
+
 
 if aviso := st.session_state.pop("aviso_socios", None):
     st.success(aviso)
@@ -30,7 +44,7 @@ m4.metric("Deben", resumen["deben"])
 
 with st.expander("➕ Dar de alta un socio"):
     if nuevo := gui.alta_socio(cid, "socios", titulo="Datos del socio"):
-        st.session_state[clave_elegido] = nuevo
+        soltar_ficha(nuevo)
         st.session_state["aviso_socios"] = "Socio dado de alta. Cobrale la primera cuota acá abajo, en su ficha."
         st.rerun()
 
@@ -48,7 +62,7 @@ else:
         for c, r in zip(socios["cantidad_clases"], socios["clases_restantes"])
     ]
     tabla = st.dataframe(
-        socios, hide_index=True, on_select="rerun", selection_mode="single-row", key=f"tabla_socios_{cid}",
+        socios, hide_index=True, on_select="rerun", selection_mode="single-row", key=f"tabla_socios_{cid}_{st.session_state.get(clave_vuelta, 0)}",
         column_order=["nombre", "dni", "plan", "fecha_vencimiento", "clases", "situacion", "telefono"],
         column_config={
             "nombre": "Socio", "dni": "DNI", "plan": "Plan",
@@ -73,10 +87,31 @@ except gim.ErrorGimnasio:
 st.divider()
 plan = socio["plan_datos"]
 estado = gim.estado_socio(socio, plan)
-encabezado_ficha = st.columns([4, 1], vertical_alignment="center")
-encabezado_ficha[0].subheader(f"{socio['nombre']} · DNI {socio['dni']}")
-if encabezado_ficha[1].button("Cerrar ficha", width="stretch"):
-    st.session_state.pop(clave_elegido, None)
+botones_jefe = es_jefe()
+encabezado_ficha = st.columns([3, 1, 1] if botones_jefe else [4, 1], vertical_alignment="center")
+encabezado_ficha[0].subheader(f"{socio['nombre']} · DNI {socio['dni']}"
+                              + ("" if socio["activo"] else " · dado de baja"))
+if encabezado_ficha[-1].button("✖ Cerrar ficha", width="stretch", key=f"cerrar_ficha_{socio_id}"):
+    soltar_ficha()
+    st.rerun()
+if botones_jefe and socio["activo"]:
+    # Dar de baja pide confirmación: no se borra nada, pero el socio deja de figurar entre los activos
+    with encabezado_ficha[1].popover("🚫 Dar de baja", width="stretch"):
+        st.markdown(f"**¿Dar de baja a {socio['nombre']}?**")
+        st.caption("Deja de figurar entre los activos y sus reservas que vienen se cancelan. "
+                   "No se borra nada: su historial queda guardado y lo podés volver a activar cuando quieras.")
+        if st.button("Sí, darlo de baja", type="primary", width="stretch", key=f"confirmar_baja_{socio_id}"):
+            canceladas = gim.dar_de_baja(cid, socio_id, gui.quien())
+            soltar_ficha(socio_id)
+            st.session_state["aviso_socios"] = f"{socio['nombre']} quedó dado de baja" + (
+                f" y se cancelaron {plural(canceladas, 'reserva', 'reservas')}." if canceladas else ".") + \
+                " Lo encontrás en «Dados de baja»."
+            st.rerun()
+elif botones_jefe and encabezado_ficha[1].button("↩ Volver a activarlo", width="stretch",
+                                                   key=f"reactivar_{socio_id}"):
+    gim.reactivar_socio(cid, socio_id)
+    soltar_ficha(socio_id)
+    st.session_state["aviso_socios"] = f"{socio['nombre']} está activo otra vez."
     st.rerun()
 gui.semaforo(estado["color"], estado["titulo"], plan["nombre"] if plan else "Sin plan", estado["detalle"])
 datos = [f"Socio desde el {socio['fecha_alta']:%d/%m/%Y}"]
@@ -199,14 +234,3 @@ with editar:
             else:
                 st.session_state["aviso_socios"] = "Datos guardados."
                 st.rerun()
-    if es_jefe():
-        if socio["activo"]:
-            if st.button("Dar de baja", help="Deja de figurar entre los activos. Sus reservas que vienen se cancelan. "
-                                             "Si vuelve, se le cobra la cuota y queda activo otra vez."):
-                canceladas = gim.dar_de_baja(cid, socio_id, gui.quien())
-                st.session_state["aviso_socios"] = f"{socio['nombre']} quedó dado de baja" + (
-                    f" y se cancelaron {plural(canceladas, 'reserva', 'reservas')}." if canceladas else ".")
-                st.rerun()
-        elif st.button("Volver a activarlo"):
-            gim.reactivar_socio(cid, socio_id)
-            st.rerun()
