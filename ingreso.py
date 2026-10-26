@@ -21,19 +21,19 @@ def pantalla_ingreso():
     """Se muestra en lugar de cualquier pantalla mientras nadie haya entrado.
 
     Como en Supabase: el logo grande arriba y, abajo, una tarjeta angosta y centrada con el formulario
-    (estilos en comun.ESTILOS, "Pantalla de ingreso"). Los botones y lo elegido van con el azul del logo."""
+    (estilos en comun.ESTILOS, "Pantalla de ingreso"). Los botones y lo elegido van con el azul del logo.
+    Todo tiene que entrar en la pantalla de una notebook sin bajar con el scroll: por eso los textos son cortos."""
     _, centro, _ = st.columns([1, 1.4, 1])
     with centro:
         with st.container(key="logo_ingreso", horizontal_alignment="center"):
             if tema.logo_propio_del_tema():
-                st.image(tema.logo_propio_del_tema(), width=320)
+                st.image(tema.logo_propio_del_tema(), width=240)
             else:
                 st.title("🏪 Mini-Sistema")
         with st.container(border=True, key="tarjeta_ingreso"):
             st.header("Iniciar sesión")
             if MODO_DEMO:
-                st.info(f"**Demo con datos de prueba.** Entrá como jefe con el PIN **{PIN_DEMO}**, "
-                        "o como empleado con cualquier nombre.")
+                st.info(f"**Demo** · PIN de jefe: **{PIN_DEMO}**")
 
             duenos = op.listar_duenos()
             if duenos.empty:
@@ -96,7 +96,9 @@ def pantalla_ingreso():
                 else:
                     bloqueado_hasta = st.session_state.get("pin_bloqueado_hasta", 0)
                     with st.form("entrar_jefe", border=False):
-                        pin = st.text_input("PIN", type="password", max_chars=6)
+                        pin = st.text_input("PIN", type="password", max_chars=6, help=None if MODO_DEMO else
+                                            "¿Te olvidaste el PIN? En la carpeta del sistema corré "
+                                            "`python olvide_mi_pin.py`.")
                         if st.form_submit_button("Entrar", type="primary", width="stretch"):
                             if time.time() < bloqueado_hasta:
                                 st.error(f"Probaste muchas veces. Esperá {int(bloqueado_hasta - time.time()) + 1} segundos.")
@@ -111,4 +113,3 @@ def pantalla_ingreso():
                                     st.error(f"PIN incorrecto. Probaste {INTENTOS_MAXIMOS} veces: esperá {ESPERA_SEGUNDOS} segundos.")
                                 else:
                                     st.error("PIN incorrecto.")
-                    st.caption("¿Te olvidaste el PIN? En la carpeta del sistema corré `python olvide_mi_pin.py`.")

@@ -189,18 +189,24 @@ ESTILOS = """<style>
    o al elegir Jefe), se baja con el scroll en vez de que el logo quede cortado arriba */
 [data-testid="stMainBlockContainer"]:has(.st-key-tarjeta_ingreso) {
     min-height: 100vh; flex-shrink: 0; display: flex; flex-direction: column; justify-content: center;
-    padding-top: 2rem; padding-bottom: 2rem;
+    padding-top: 0.75rem; padding-bottom: 0.75rem;
 }
 [data-testid="stMainBlockContainer"]:has(.st-key-tarjeta_ingreso) > [data-testid="stVerticalBlock"] { justify-content: center; }
-.st-key-logo_ingreso { margin-bottom: 0.5rem; }
+/* Los estilos invisibles de arriba no dejan su espacio (así entra todo sin scroll) */
+[data-testid="stElementContainer"]:has(~ [data-testid="stLayoutWrapper"] .st-key-tarjeta_ingreso) { display: none; }
+.st-key-logo_ingreso { margin-bottom: -0.4rem; }
 .st-key-tarjeta_ingreso {
-    max-width: 420px; width: 100%; margin: 0 auto; padding: 1.75rem 1.75rem 1.5rem !important; border-radius: 12px !important;
+    max-width: 420px; width: 100%; margin: 0 auto; padding: 1.25rem 1.6rem 1.3rem !important; border-radius: 12px !important;
+    gap: 0.65rem;  /* casilleros más juntos, para que entre todo sin scroll en una notebook */
     /* Adentro de la tarjeta, lo verde pasa a ser el azul del logo (botón Entrar, lo elegido, el borde al escribir) */
     --boton: var(--marca); --boton-borde: var(--marca-borde); --boton-texto: #FFFFFF;
     --acento: var(--marca); --acento-fuerte: var(--marca-fuerte); --texto-acento: #FFFFFF;
 }
 [data-testid="stLayoutWrapper"]:has(> .st-key-tarjeta_ingreso) { justify-content: center; }
-.stApp .st-key-tarjeta_ingreso h2 { font-size: 1.45rem !important; padding: 0 0 0.6rem !important; }
+.stApp .st-key-tarjeta_ingreso h2 { font-size: 1.45rem !important; padding: 0 0 0.3rem !important; }
+.st-key-tarjeta_ingreso [data-testid="stAlertContainer"] { padding: 0.55rem 0.85rem !important; }
+.st-key-tarjeta_ingreso [data-testid="stAlertContainer"] p { font-size: 0.88rem; }
+.st-key-tarjeta_ingreso [data-testid="stForm"] [data-testid="stVerticalBlock"] { gap: 0.65rem; }
 .st-key-tarjeta_ingreso [data-testid="stBaseButton-segmented_controlActive"] {
     background: color-mix(in srgb, var(--marca) 14%, var(--tarjeta)) !important; border-color: var(--marca) !important;
 }
