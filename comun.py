@@ -143,7 +143,10 @@ ESTILOS = """<style>
 /* La barra propia de Streamlit queda invisible (solo se ve el botón para abrir la barra de la izquierda):
    en su lugar va la nuestra, pegada arriba y de todo el ancho, aunque bajes en la pantalla */
 [data-testid="stHeader"] { background: transparent !important; border-bottom: none !important; pointer-events: none; }
-[data-testid="stHeader"] button, [data-testid="stHeader"] a { pointer-events: auto; }
+/* En Streamlit Cloud la barra de Streamlit trae Share, la estrella, el lápiz y GitHub, y su franja ocupa todo el
+   ancho: sin esto tapa las pestañas y no se pueden tocar. Solo se pueden tocar sus botones y links. */
+[data-testid="stHeader"] div { pointer-events: none !important; }
+[data-testid="stHeader"] button, [data-testid="stHeader"] a { pointer-events: auto !important; }
 [data-testid="stMainBlockContainer"]:has(.st-key-barra_pestanas) { padding-top: 0 !important; }
 /* Lo que va antes de la barra son estilos y scripts invisibles: sin el espacio que deja cada uno */
 [data-testid="stElementContainer"]:has(~ [data-testid="stLayoutWrapper"] > .st-key-barra_pestanas),
@@ -182,8 +185,11 @@ ESTILOS = """<style>
 .stApp [data-testid="stTabs"] [data-baseweb="tab-border"] { background: var(--borde) !important; }
 
 /* ---------- Pantalla de ingreso (ingreso.py): el logo grande y, abajo, una tarjeta angosta y centrada ---------- */
+/* flex-shrink: 0 hace que crezca con el formulario: si la ventana es más baja que el formulario (una notebook,
+   o al elegir Jefe), se baja con el scroll en vez de que el logo quede cortado arriba */
 [data-testid="stMainBlockContainer"]:has(.st-key-tarjeta_ingreso) {
-    min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding-top: 2rem; padding-bottom: 2rem;
+    min-height: 100vh; flex-shrink: 0; display: flex; flex-direction: column; justify-content: center;
+    padding-top: 2rem; padding-bottom: 2rem;
 }
 [data-testid="stMainBlockContainer"]:has(.st-key-tarjeta_ingreso) > [data-testid="stVerticalBlock"] { justify-content: center; }
 .st-key-logo_ingreso { margin-bottom: 0.5rem; }
