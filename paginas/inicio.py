@@ -1,4 +1,9 @@
-"""Inicio: el "launcher". Muestra todos los comercios del dueño y accesos rápidos."""
+"""Inicio: el "launcher".
+
+Con "Todos" elegido, muestra una tarjeta por comercio. Cada tarjeta es un botón grande: al tocarla, el sistema
+entra a ese comercio (cambia el de la barra de la izquierda y la barra de arriba muestra sus pantallas).
+Con un comercio elegido, muestra el tablero de ese local.
+"""
 
 import html
 from datetime import date
@@ -7,7 +12,8 @@ import streamlit as st
 
 import operaciones as op
 import operaciones_gimnasio as gim
-from comun import RUBROS, aviso_temporada, es_gimnasio, insignia, pesos, plural, texto_vencimientos
+from comun import (RUBROS, TODOS, aviso_temporada, elegir_comercio, fila, insignia, pesos, plural,
+                   texto_vencimientos)
 
 dueno = st.session_state["dueno"]
 hoy = date.today()
@@ -15,103 +21,139 @@ with st.container(key="encabezado"):  # misma cabecera que las otras pantallas (
     st.title(f"Hola, {dueno['nombre'].split()[0]} 👋")
     st.caption(f"Hoy es {hoy:%d/%m/%Y}. Los números se actualizan con cada venta que cargás.")
 
-# Accesos rápidos a las pantallas
-accesos = st.columns(5)
-accesos[0].page_link("paginas/caja.py", label="Caja", icon="💵")
-accesos[1].page_link("paginas/compras.py", label="Compras", icon="📦")
-accesos[2].page_link("paginas/gastos.py", label="Gastos", icon="🧾")
-accesos[3].page_link("paginas/panel_del_dia.py", label="Panel del día", icon="📊")
-accesos[4].page_link("paginas/stock.py", label="Stock", icon="📋")
-if es_gimnasio(st.session_state.get("comercio")):  # las pantallas del gimnasio, si está elegido un gimnasio
-    accesos = st.columns(5)
-    accesos[0].page_link("paginas/ingreso_dni.py", label="Ingreso por DNI", icon="🚪")
-    accesos[1].page_link("paginas/socios.py", label="Socios", icon="👥")
-    accesos[2].page_link("paginas/cuotas.py", label="Cuotas", icon="💳")
-    accesos[3].page_link("paginas/clases.py", label="Clases", icon="📅")
-    accesos[4].page_link("paginas/planes.py", label="Planes", icon="🏷️")
-
 comercios = op.listar_comercios(dueno["id"])
 if comercios.empty:
     st.info("Todavía no tenés comercios. Creá el primero en **Mis comercios**.")
     st.stop()
 
-
 aviso_temporada(comercios.to_dict("records"))
 
 
-def elegir_comercio(nombre):
-    st.session_state["comercio_nombre"] = nombre
-
-
-st.subheader("Tus comercios")
-total_hoy = total_mes = ganancia_mes = 0
-columnas = st.columns(min(len(comercios), 3))
-for i, c in enumerate(comercios.itertuples()):
+def numeros(c):
+    """Lo que se muestra de un comercio: lo vendido hoy y en el mes, la caja y los avisos."""
     del_dia = op.resumen_periodo(c.id, hoy, hoy)
     del_mes = op.resumen_periodo(c.id, op.primer_dia_del_mes(hoy), hoy)
-    gimnasio = c.rubro == "gimnasio"
-    if gimnasio:  # en un gimnasio, las cuotas también son plata que entró (y no tienen costo de mercadería)
+    n = {"gimnasio": c.rubro == "gimnasio", "caja": op.caja_abierta(c.id), "ventas_hoy": del_dia["cantidad"]}
+    if n["gimnasio"]:  # en un gimnasio, las cuotas también son plata que entró (y no tienen costo de mercadería)
         cuotas_dia = gim.cuotas_periodo(c.id, hoy, hoy)
         cuotas_mes = gim.cuotas_periodo(c.id, op.primer_dia_del_mes(hoy), hoy)
+        n["cuotas_hoy"] = cuotas_dia["cantidad"]
         del_dia = {"cantidad": del_dia["cantidad"] + cuotas_dia["cantidad"],
                    "total": del_dia["total"] + cuotas_dia["total"], "ganancia": del_dia["ganancia"] + cuotas_dia["total"]}
         del_mes = {"cantidad": del_mes["cantidad"] + cuotas_mes["cantidad"],
                    "total": del_mes["total"] + cuotas_mes["total"], "ganancia": del_mes["ganancia"] + cuotas_mes["total"]}
+        n["socios"] = gim.resumen_socios(c.id)
+    n["hoy"], n["mes"] = del_dia, del_mes
+    if not n["gimnasio"] and not del_dia["cantidad"]:
+        # A primera hora un "$ 0" no dice nada: mientras hoy no haya ventas, se muestra el último día
+        # con ventas (casi siempre ayer; si ayer estuvo cerrado, el día anterior)
+        ultimo = op.ultimo_dia_con_ventas(c.id, hoy)
+        if ultimo:
+            n["ultimo"] = ("Ayer vendiste" if (hoy - ultimo).days == 1 else f"El {ultimo:%d/%m} vendiste",
+                           pesos(op.resumen_periodo(c.id, ultimo, ultimo)["total"]))
     productos = op.listar_productos(c.id)
     stock_bajo = int((productos["stock"] <= productos["stock_minimo"]).sum())
-    total_hoy += del_dia["total"]
-    total_mes += del_mes["total"]
-    ganancia_mes += del_mes["ganancia"]
 
-    caja = op.caja_abierta(c.id)
-    # Cada comercio en su tarjeta: arriba el nombre con el estado de la caja, como los proyectos en Supabase
-    with columnas[i % len(columnas)].container(border=True, key=f"tarjeta_comercio_{c.id}"):
-        estado = insignia("● Caja abierta", "verde") if caja else insignia("Caja cerrada")
-        st.markdown(f'<div class="tarjeta-titulo"><h3>{html.escape(c.nombre)}</h3>{estado}</div>',
-                    unsafe_allow_html=True)
+    avisos = []
+    if n["gimnasio"]:
+        socios = n["socios"]
+        avisos.append(insignia(f"🏋️ {plural(socios['al_dia'], 'socio al día', 'socios al día')}", "verde"))
+        if socios["vencen_hoy"]:
+            avisos.append(insignia(f"{plural(socios['vencen_hoy'], 'vence', 'vencen')} hoy", "amarilla"))
+        if socios["deben"]:
+            avisos.append(insignia(f"{plural(socios['deben'], 'debe', 'deben')} la cuota", "roja"))
+    if stock_bajo:
+        avisos.append(insignia(f"{plural(stock_bajo, 'producto', 'productos')} con stock bajo", "amarilla"))
+    if aviso := texto_vencimientos(op.avisos_vencimientos(c.id)):
+        avisos.append(insignia(f"🗓️ {aviso}", "roja"))
+    n["avisos"] = avisos
+    return n
+
+
+def titulo(c, n, grande=False):
+    """El nombre del comercio con el estado de la caja al lado, como los proyectos en Supabase."""
+    estado = insignia("● Caja abierta", "verde") if n["caja"] else insignia("Caja cerrada")
+    if grande:  # el del tablero: más grande, con el estado pegado al nombre
+        return f'<div class="tarjeta-titulo tablero-titulo"><h2>{html.escape(c.nombre)}</h2>{estado}</div>'
+    return f'<div class="tarjeta-titulo"><h3>{html.escape(c.nombre)}</h3>{estado}</div>'
+
+
+def tarjeta(c, n, lugar):
+    """Con "Todos": la tarjeta del comercio. Toda la tarjeta es un botón que entra a ese comercio
+    (el botón de verdad está invisible encima de la tarjeta; ver "tarjeta_elegir" en comun.ESTILOS)."""
+    with lugar.container(border=True, key=f"tarjeta_elegir_{c.id}"):
+        st.button(f"Entrar a {c.nombre}", key=f"entrar_{c.id}", on_click=elegir_comercio, args=(c.nombre,))
+        st.markdown(titulo(c, n), unsafe_allow_html=True)
         st.caption(f"{RUBROS.get(c.rubro, c.rubro)} · {c.direccion or ''}")
-        if gimnasio:
-            st.metric("Cobrado hoy", pesos(del_dia["total"]), help="Cuotas y ventas del buffet de hoy.")
-            hoy_txt = (f"{plural(cuotas_dia['cantidad'], 'cuota', 'cuotas')} hoy" if cuotas_dia["cantidad"]
+        if n["gimnasio"]:
+            st.metric("Cobrado hoy", pesos(n["hoy"]["total"]), help="Cuotas y ventas del buffet de hoy.")
+            hoy_txt = (f"{plural(n['cuotas_hoy'], 'cuota', 'cuotas')} hoy" if n["cuotas_hoy"]
                        else "Hoy todavía no hay cuotas")
-            st.caption(f"{hoy_txt} · {pesos(del_mes['total'])} en el mes")
-        elif del_dia["cantidad"]:
-            st.metric("Vendido hoy", pesos(del_dia["total"]))
-            st.caption(f"{plural(del_dia['cantidad'], 'venta', 'ventas')} hoy · {pesos(del_mes['total'])} en el mes")
+            st.caption(f"{hoy_txt} · {pesos(n['mes']['total'])} en el mes")
+        elif n["hoy"]["cantidad"]:
+            st.metric("Vendido hoy", pesos(n["hoy"]["total"]))
+            st.caption(f"{plural(n['hoy']['cantidad'], 'venta', 'ventas')} hoy · {pesos(n['mes']['total'])} en el mes")
         else:
-            # A primera hora un "$ 0" no dice nada: mientras hoy no haya ventas, se muestra el último día
-            # con ventas (casi siempre ayer; si ayer estuvo cerrado, el día anterior)
-            ultimo = op.ultimo_dia_con_ventas(c.id, hoy)
-            if ultimo:
-                titulo = "Ayer vendiste" if (hoy - ultimo).days == 1 else f"El {ultimo:%d/%m} vendiste"
-                st.metric(titulo, pesos(op.resumen_periodo(c.id, ultimo, ultimo)["total"]))
+            if "ultimo" in n:
+                st.metric(*n["ultimo"])
             else:
                 st.metric("Vendido hoy", pesos(0))
-            st.caption(f"Hoy todavía no hay ventas · {pesos(del_mes['total'])} en el mes")
-        avisos = []
-        if gimnasio:
-            socios = gim.resumen_socios(c.id)
-            avisos.append(insignia(f"🏋️ {plural(socios['al_dia'], 'socio al día', 'socios al día')}", "verde"))
-            if socios["vencen_hoy"]:
-                avisos.append(insignia(f"{plural(socios['vencen_hoy'], 'vence', 'vencen')} hoy", "amarilla"))
-            if socios["deben"]:
-                avisos.append(insignia(f"{plural(socios['deben'], 'debe', 'deben')} la cuota", "roja"))
-        if stock_bajo:
-            avisos.append(insignia(f"{plural(stock_bajo, 'producto', 'productos')} con stock bajo", "amarilla"))
-        if aviso := texto_vencimientos(op.avisos_vencimientos(c.id)):
-            avisos.append(insignia(f"🗓️ {aviso}", "roja"))
-        if avisos:
-            st.markdown("".join(avisos), unsafe_allow_html=True)
-        if caja:
-            st.caption(f"Abierta por {caja['responsable']} desde las {caja['abierta']:%H:%M}")
-        if gimnasio:
-            b1, b2 = st.columns(2)
-            if b1.button("Ir al ingreso", key=f"ingreso_{c.id}", on_click=elegir_comercio, args=(c.nombre,)):
-                st.switch_page("paginas/ingreso_dni.py")
-            if b2.button("Ir a la caja", key=f"abrir_{c.id}", on_click=elegir_comercio, args=(c.nombre,)):
-                st.switch_page("paginas/caja.py")
-        elif st.button("Ir a la caja", key=f"abrir_{c.id}", on_click=elegir_comercio, args=(c.nombre,)):
-            st.switch_page("paginas/caja.py")
+            st.caption(f"Hoy todavía no hay ventas · {pesos(n['mes']['total'])} en el mes")
+        if n["avisos"]:
+            st.markdown("".join(n["avisos"]), unsafe_allow_html=True)
+        if n["caja"]:
+            st.caption(f"Abierta por {n['caja']['responsable']} desde las {n['caja']['abierta']:%H:%M}")
+
+
+def tablero(c, n, varios):
+    """Con un comercio elegido: el tablero de ese local, con sus números clave en una fila."""
+    izquierda, derecha = st.columns([3, 1], vertical_alignment="center")
+    izquierda.markdown(titulo(c, n, grande=True), unsafe_allow_html=True)
+    izquierda.caption(f"{RUBROS.get(c.rubro, c.rubro)} · {c.direccion or ''}")
+    if varios:  # para volver a ver todas las tarjetas
+        fila(derecha, a_la_derecha=True).button("← Todos mis comercios", on_click=elegir_comercio, args=(TODOS,))
+    with st.container(key="kpis_inicio"):
+        m1, m2, m3, m4 = st.columns(4)
+        if n["gimnasio"]:
+            m1.metric("Cobrado hoy", pesos(n["hoy"]["total"]), help="Cuotas y ventas del buffet de hoy.")
+            m2.metric("Cobrado este mes", pesos(n["mes"]["total"]))
+            m3.metric("Socios al día", n["socios"]["al_dia"])
+            m4.metric("Deben la cuota", n["socios"]["deben"])
+        else:
+            if n["hoy"]["cantidad"] or "ultimo" not in n:
+                m1.metric("Vendido hoy", pesos(n["hoy"]["total"]))
+            else:
+                m1.metric(*n["ultimo"], help="Hoy todavía no hay ventas: es el último día que vendiste.")
+            m2.metric("Ventas de hoy", n["ventas_hoy"])
+            m3.metric("Vendido este mes", pesos(n["mes"]["total"]))
+            m4.metric("Ganancia del mes", pesos(n["mes"]["ganancia"]),
+                      help="Ganancia bruta: ventas menos lo que costó la mercadería. Todavía no resta los gastos "
+                           "(la ganancia neta está en Reportes).")
+    if n["avisos"]:
+        st.markdown("".join(n["avisos"]), unsafe_allow_html=True)
+    if n["caja"]:
+        st.caption(f"Caja abierta por {n['caja']['responsable']} desde las {n['caja']['abierta']:%H:%M}.")
+    st.caption("Todo lo de este comercio está en la barra de arriba. Los números del mes, con gastos y "
+               "comparaciones, están en Reportes.")
+
+
+elegido = st.session_state.get("comercio")
+if elegido:
+    c = next(fila_c for fila_c in comercios.itertuples() if fila_c.id == elegido["id"])
+    tablero(c, numeros(c), varios=len(comercios) > 1)
+    st.stop()
+
+# Con "Todos": una tarjeta por comercio y, abajo, los totales de todos juntos
+st.subheader("Tus comercios")
+st.caption("Tocá un comercio para trabajar en él: arriba aparecen su Caja, su Stock y lo demás.")
+total_hoy = total_mes = ganancia_mes = 0
+columnas = st.columns(max(min(len(comercios), 3), 2))
+for i, c in enumerate(comercios.itertuples()):
+    n = numeros(c)
+    total_hoy += n["hoy"]["total"]
+    total_mes += n["mes"]["total"]
+    ganancia_mes += n["mes"]["ganancia"]
+    tarjeta(c, n, columnas[i % len(columnas)])
 
 if len(comercios) > 1:
     st.subheader("Todos tus comercios juntos")

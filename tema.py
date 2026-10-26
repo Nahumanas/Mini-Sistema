@@ -30,6 +30,9 @@ PALETAS = {
         "texto-suave": "#555E6B",    # ayudas y títulos de las tarjetas (con buen contraste igual)
         "acento": "#3ECF8E",         # botón principal (Cobrar), casilleros elegidos
         "acento-fuerte": "#1F9D63",  # textos y bordes verdes (más oscuro, para que se lea en blanco)
+        "marca": "#1A6FC2",          # el azul del logo: botones y lo elegido en la pantalla de ingreso
+        "marca-borde": "#155CA3",
+        "marca-fuerte": "#1A6FC2",   # textos y bordes azules
         "boton": "#3ECF8E",          # botón principal (Cobrar, Entrar...)
         "boton-borde": "#2FB57A",
         "boton-texto": "#0B2E1E",
@@ -56,6 +59,9 @@ PALETAS = {
         "texto-suave": "#A3ADBB",
         "acento": "#3ECF8E",
         "acento-fuerte": "#3ECF8E",
+        "marca": "#1A6FC2",
+        "marca-borde": "#4A9BE5",
+        "marca-fuerte": "#6AB4F2",   # más claro, para que se lea sobre el fondo oscuro
         "boton": "#006239",          # en oscuro, Supabase usa un verde profundo con borde verde claro
         "boton-borde": "#3ECF8E",
         "boton-texto": "#FFFFFF",
@@ -109,7 +115,7 @@ def variables_css():
 
 
 def _al_cambiar():
-    nuevo = "oscuro" if st.session_state["switch_tema"] else "claro"
+    nuevo = "claro" if tema_activo() == "oscuro" else "oscuro"
     st.session_state["tema"] = nuevo
     dueno = st.session_state.get("dueno")
     # Lo que elige el jefe queda guardado; lo que elige un empleado, solo mientras está adentro
@@ -123,11 +129,12 @@ def logo_propio_del_tema():
 
 
 def logo():
-    """El logo de arriba a la izquierda. Si hay un logo propio (ver config.logo_propio), usa la imagen
-    del tema activo; si no, un cuadradito verde con una tiendita y el nombre del sistema.
+    """El logo de arriba a la izquierda. Si hay un logo propio (ver config.logo_propio), solo el ícono
+    (la caja, sin el nombre: el logo completo va grande en la pantalla de ingreso); si no, un cuadradito
+    verde con una tiendita y el nombre del sistema.
     Es un dibujo (SVG) hecho acá mismo; va en dos versiones porque el texto cambia de color con el tema."""
     if logo_propio_del_tema():
-        return logo_propio_del_tema()
+        return logo_propio("favicon.png") or logo_propio_del_tema()
     texto = PALETAS[tema_activo()]["texto"]
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="176" height="32" viewBox="0 0 176 32">
   <rect x="0" y="0" width="32" height="32" rx="8" fill="#3ECF8E"/>
@@ -140,9 +147,10 @@ def logo():
 
 
 def switch_tema():
-    """El botón "Modo oscuro" de la barra de la izquierda (lo ven el jefe y los empleados)."""
-    st.session_state["switch_tema"] = tema_activo() == "oscuro"
-    ayuda = ("Cambia los colores del sistema. Queda guardado para la próxima vez y para tus empleados."
-             if st.session_state.get("rol") == "jefe" else
-             "Cambia los colores del sistema mientras estés adentro. Al entrar, se usan los que eligió el jefe.")
-    st.toggle("🌙 Modo oscuro", key="switch_tema", on_change=_al_cambiar, help=ayuda)
+    """El botón del sol y la luna en la barra de la izquierda (lo ven el jefe y los empleados). Sin texto, como
+    en todos lados: con el tema oscuro muestra el sol (pasa a claro); con el claro, la luna (pasa a oscuro)."""
+    oscuro = tema_activo() == "oscuro"
+    ayuda = ("Pasar a modo claro" if oscuro else "Pasar a modo oscuro") + (
+        ". Queda guardado para la próxima vez y para tus empleados." if st.session_state.get("rol") == "jefe" else
+        ", mientras estés adentro. Al entrar, se usan los colores que eligió el jefe.")
+    st.button("☀️" if oscuro else "🌙", key="boton_tema", on_click=_al_cambiar, help=ayuda)

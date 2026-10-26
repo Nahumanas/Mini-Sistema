@@ -2,6 +2,7 @@
 
 import html
 import json
+import re
 from datetime import date
 
 import streamlit as st
@@ -27,6 +28,8 @@ RUBROS = {
     "otro": "🏪 Otro",
 }
 
+# En el selector de comercio del jefe: Inicio muestra todos juntos
+TODOS = "Todos"
 
 # Pantallas que el jefe le puede habilitar al empleado (la Caja la ve siempre)
 PERMISOS_EMPLEADO = {
@@ -77,7 +80,6 @@ ESTILOS = """<style>
 /* ---------- Estructura: fondo, barra de arriba y barra de la izquierda ---------- */
 .stApp, [data-testid="stMain"] { background: var(--fondo) !important; color: var(--texto); }
 .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6, .stApp p, .stApp li, .stApp label { color: var(--texto); }
-[data-testid="stHeader"] { background: var(--lateral) !important; border-bottom: 1px solid var(--borde); }
 [data-testid="stSidebar"] { background: var(--lateral) !important; border-right: 1px solid var(--borde); }
 [data-testid="stSidebarCollapseButton"] button, [data-testid="stExpandSidebarButton"],
 [data-testid="stSidebarCollapsedControl"] button, [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"],
@@ -88,6 +90,43 @@ ESTILOS = """<style>
 [data-testid="stSidebarNavLink"]:hover, [data-testid="stSidebarNavLink"][aria-current="page"] { background: var(--tarjeta-suave) !important; }
 [data-testid="stMainBlockContainer"] { max-width: 1200px; padding-top: 4.5rem; }
 .stApp hr { border-color: var(--borde) !important; }
+
+/* Barra de la izquierda: arriba quién entró y el comercio; abajo de todo (como en Supabase) la configuración,
+   el modo oscuro, Salir y Apagar. El "pie" se empuja al fondo con margin-top: auto */
+[data-testid="stSidebarUserContent"] { display: flex; flex-direction: column; min-height: calc(100vh - 5rem); }
+[data-testid="stSidebarUserContent"] > div:first-child { flex: 1; display: flex; flex-direction: column; }
+[data-testid="stSidebarUserContent"] > div:first-child > [data-testid="stVerticalBlock"] { flex: 1; }
+.st-key-pie_lateral, [data-testid="stLayoutWrapper"]:has(> .st-key-pie_lateral) { margin-top: auto; }
+.st-key-pie_lateral { padding-bottom: 0.5rem; gap: 0.5rem; }
+.st-key-pie_lateral hr { margin: 0.4rem 0 !important; }
+/* El sol o la luna (tema.switch_tema): un botón cuadrado, solo con el dibujo */
+.st-key-boton_tema button { min-width: 2.6rem; padding: 0 0.55rem; }
+.st-key-boton_tema button p { font-size: 1.25rem; line-height: 1; }
+.st-key-pie_lateral [data-testid="stPageLink"] a { padding: 0.25rem 0.5rem; border-radius: 6px; }
+.st-key-pie_lateral [data-testid="stPageLink"] p { font-size: 0.98rem; white-space: nowrap; }
+.st-key-pie_lateral [data-testid="stCaptionContainer"] p { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.st-key-pie_lateral [data-testid="stPageLink"] a[aria-current="page"],
+.st-key-pie_lateral [data-testid="stPageLink"] a:hover { background: var(--tarjeta-suave) !important; }
+
+/* Las migas de pan arriba del título (Inicio / Ferretería Don Tito / Stock): para saber dónde estás */
+.migas { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: 0.95rem; color: var(--texto-suave); }
+.migas span { color: var(--texto-suave); }
+.migas .miga-barra { opacity: 0.6; }
+.migas .miga-actual { color: var(--texto); font-weight: 500; }
+.st-key-botones_encabezado { gap: 0.5rem; }
+/* Reportes, Inicio y Panel del día: los 4 números clave, grandes y claros (que entren enteros);
+   la comparación con el período anterior, más chica */
+.st-key-kpis_reporte [data-testid="stMetricValue"], .st-key-kpis_reporte [data-testid="stMetricValue"] div,
+.st-key-kpis_inicio [data-testid="stMetricValue"], .st-key-kpis_inicio [data-testid="stMetricValue"] div,
+.st-key-kpis_panel [data-testid="stMetricValue"], .st-key-kpis_panel [data-testid="stMetricValue"] div {
+    font-size: clamp(1.45rem, 2.1vw, 2.1rem); font-weight: 600; letter-spacing: -0.02em; color: var(--texto) !important;
+}
+/* Los números de adentro de un desplegable (por ejemplo "Más detalles" en Reportes), un poco más chicos para que entren */
+[data-testid="stExpander"] [data-testid="stMetricValue"], [data-testid="stExpander"] [data-testid="stMetricValue"] div {
+    font-size: clamp(1.3rem, 1.8vw, 1.8rem);
+}
+.st-key-kpis_reporte [data-testid="stMetricDelta"] div,
+.st-key-kpis_panel [data-testid="stMetricDelta"] div { font-size: 0.9rem; white-space: normal; overflow: visible; text-overflow: clip; }
 
 /* Títulos sobrios, como en Supabase: no tan gigantes ni tan gruesos */
 .stApp h1 { font-size: 1.85rem !important; font-weight: 600 !important; letter-spacing: -0.02em; }
@@ -100,19 +139,66 @@ ESTILOS = """<style>
 /* El nombre del comercio en la barra de la izquierda: más chico, para que entre en una línea */
 .stApp [data-testid="stSidebar"] h1 { font-size: 1.35rem !important; }
 
-/* Menú de arriba: letra más grande; la pantalla en la que estás, marcada como pestaña */
-[data-testid="stTopNavLink"] p, [data-testid="stTopNavSection"] p,
-[data-testid="stTopNavLink"] span, [data-testid="stTopNavSection"] span { font-size: 1.05rem; font-weight: 600; color: var(--texto) !important; }
-[data-testid="stTopNavSection"] svg { color: var(--texto-suave); }
-[data-testid="stTopNavLink"][aria-current="page"] { background: var(--tarjeta-suave) !important; border-radius: 8px; }
-[data-testid="stTopNavLink"]:hover, [data-testid="stTopNavSection"]:hover { background: var(--tarjeta-suave) !important; border-radius: 8px; }
-/* La lista que se abre al tocar "Control" o "Día a día" */
-[data-testid="stTopNavPopoverBody"] { background: var(--tarjeta) !important; border: 1px solid var(--borde); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
-[data-testid="stTopNavDropdownLink"] p, [data-testid="stTopNavDropdownLink"] span { color: var(--texto) !important; }
-[data-testid="stTopNavDropdownLink"]:hover, [data-testid="stTopNavDropdownLink"][aria-current="page"] { background: var(--tarjeta-suave) !important; border-radius: 8px; }
+/* ---------- La barra de arriba (menu.py): una sola fila de pestañas, sin menús que se despliegan ---------- */
+/* La barra propia de Streamlit queda invisible (solo se ve el botón para abrir la barra de la izquierda):
+   en su lugar va la nuestra, pegada arriba y de todo el ancho, aunque bajes en la pantalla */
+[data-testid="stHeader"] { background: transparent !important; border-bottom: none !important; pointer-events: none; }
+[data-testid="stHeader"] button, [data-testid="stHeader"] a { pointer-events: auto; }
+[data-testid="stMainBlockContainer"]:has(.st-key-barra_pestanas) { padding-top: 0 !important; }
+/* Lo que va antes de la barra son estilos y scripts invisibles: sin el espacio que deja cada uno */
+[data-testid="stElementContainer"]:has(~ [data-testid="stLayoutWrapper"] > .st-key-barra_pestanas),
+[data-testid="stElementContainer"]:has(~ .st-key-barra_pestanas) { display: none; }
+[data-testid="stLayoutWrapper"]:has(> .st-key-barra_pestanas), .st-key-barra_pestanas { position: sticky; top: 0; z-index: 99; }
+.st-key-barra_pestanas {
+    background: var(--lateral); padding: 0.7rem 0; margin-bottom: 0.4rem;
+    /* el fondo y la línea de abajo siguen hasta los costados de la pantalla (sin hacer scroll de costado) */
+    box-shadow: 0 0 0 100vmax var(--lateral), 0 1px 0 100vmax var(--borde);
+    clip-path: inset(0 -100vmax -1px -100vmax);
+}
+.st-key-pestanas { gap: 0.25rem; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.st-key-pestanas [data-testid="stPageLink"] a {
+    background: transparent !important; border: none !important; border-radius: 8px; padding: 0.4rem 0.8rem !important;
+}
+.st-key-pestanas [data-testid="stPageLink"] a p { font-size: 1.05rem; font-weight: 600; color: var(--texto-suave) !important; white-space: nowrap; }
+.st-key-pestanas [data-testid="stPageLink"] a:hover { background: var(--tarjeta-suave) !important; }
+.st-key-pestanas [data-testid="stPageLink"] a:hover p { color: var(--texto) !important; }
+/* La pestaña en la que estás (aunque estés en una de sus pantallas de adentro, por ejemplo Socios) */
+.st-key-pestana_elegida [data-testid="stPageLink"] a { background: var(--tarjeta-suave) !important; }
+.st-key-pestana_elegida [data-testid="stPageLink"] a p { color: var(--texto) !important; }
+/* La segunda fila (Socios y DNI: Ingreso por DNI, Socios, Cuotas): botoncitos redondeados, el elegido en verde */
+.st-key-subpestanas { gap: 0.5rem; }
+.st-key-subpestanas [data-testid="stPageLink"] a { border-radius: 999px; padding: 0.3rem 0.9rem; }
+.st-key-subpestana_elegida [data-testid="stPageLink"] a {
+    background: color-mix(in srgb, var(--acento) 18%, var(--tarjeta)) !important; border-color: var(--acento) !important;
+}
+.st-key-subpestana_elegida [data-testid="stPageLink"] a p { color: var(--acento-fuerte) !important; font-weight: 600; }
 [data-testid="stPageLink"] a p { color: var(--texto) !important; }
 [data-testid="stMain"] [data-testid="stPageLink"] a { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 6px; padding: 0.45rem 0.8rem; }
 [data-testid="stPageLink"] a:hover { background: var(--tarjeta-suave) !important; border-color: var(--borde-fuerte) !important; }
+
+/* Pestañas (Mis comercios, Clases...): letra más grande; la elegida, con el color del texto y la rayita verde */
+.stApp [data-testid="stTabs"] button[role="tab"] p { font-size: 1.05rem; font-weight: 600; color: var(--texto-suave) !important; }
+.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] p { color: var(--texto) !important; }
+.stApp [data-testid="stTabs"] [data-baseweb="tab-border"] { background: var(--borde) !important; }
+
+/* ---------- Pantalla de ingreso (ingreso.py): el logo grande y, abajo, una tarjeta angosta y centrada ---------- */
+[data-testid="stMainBlockContainer"]:has(.st-key-tarjeta_ingreso) {
+    min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding-top: 2rem; padding-bottom: 2rem;
+}
+[data-testid="stMainBlockContainer"]:has(.st-key-tarjeta_ingreso) > [data-testid="stVerticalBlock"] { justify-content: center; }
+.st-key-logo_ingreso { margin-bottom: 0.5rem; }
+.st-key-tarjeta_ingreso {
+    max-width: 420px; width: 100%; margin: 0 auto; padding: 1.75rem 1.75rem 1.5rem !important; border-radius: 12px !important;
+    /* Adentro de la tarjeta, lo verde pasa a ser el azul del logo (botón Entrar, lo elegido, el borde al escribir) */
+    --boton: var(--marca); --boton-borde: var(--marca-borde); --boton-texto: #FFFFFF;
+    --acento: var(--marca); --acento-fuerte: var(--marca-fuerte); --texto-acento: #FFFFFF;
+}
+[data-testid="stLayoutWrapper"]:has(> .st-key-tarjeta_ingreso) { justify-content: center; }
+.stApp .st-key-tarjeta_ingreso h2 { font-size: 1.45rem !important; padding: 0 0 0.6rem !important; }
+.st-key-tarjeta_ingreso [data-testid="stBaseButton-segmented_controlActive"] {
+    background: color-mix(in srgb, var(--marca) 14%, var(--tarjeta)) !important; border-color: var(--marca) !important;
+}
+.st-key-tarjeta_ingreso [data-testid="stBaseButton-segmented_controlActive"] p { color: var(--marca-fuerte) !important; font-weight: 600; }
 
 /* ---------- Textos ---------- */
 /* Nombres de los casilleros ("Día", "Producto", "Cantidad"...): más grandes y bien legibles */
@@ -121,7 +207,7 @@ ESTILOS = """<style>
 [data-testid="stCaptionContainer"] { opacity: 1 !important; }
 [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { font-size: 0.95rem; color: var(--texto-suave) !important; }
 .stApp a { color: var(--acento-fuerte); }
-.stApp [data-testid="stMarkdownContainer"] code { background: var(--tarjeta-suave) !important; color: var(--texto) !important; border-radius: 6px; }
+.stApp [data-testid="stMarkdownContainer"] code, .stApp [data-testid="stCaptionContainer"] code { background: var(--tarjeta-suave) !important; color: var(--texto) !important; border-radius: 6px; }
 
 /* ---------- Tarjetas ---------- */
 /* Las cajas con borde (st.container(border=True)) y los desplegables: borde finito y esquinas suaves */
@@ -131,10 +217,30 @@ ESTILOS = """<style>
 [data-testid="stVerticalBlockBorderWrapper"]:has(> div > [class*="st-key-tarjeta"]) { background: var(--tarjeta); border-color: var(--borde) !important; border-radius: 8px; }
 .tarjeta-titulo { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
 .tarjeta-titulo h3 { margin: 0 !important; padding: 0 !important; }
-[class*="st-key-tarjeta"] [data-testid="stMetric"] { background: var(--tarjeta-suave); border-color: transparent; }
+.tablero-titulo { justify-content: flex-start; gap: 0.75rem; }
+.stApp .tablero-titulo h2 { font-size: 1.6rem !important; margin: 0 !important; padding: 0 !important; }
+/* Adentro de la tarjeta, el número va "suelto" (sin otra caja de color): es lo más grande y lo más claro,
+   y lo de alrededor ("El 15/10 vendiste", "en el mes") en gris suave */
+[class*="st-key-tarjeta"] [data-testid="stMetric"] { background: transparent; border: none; padding: 0.3rem 0 0.1rem; }
+/* Inicio con "Todos": cada tarjeta es un botón grande que entra a ese comercio. El botón de verdad
+   (para el mouse, el dedo y el teclado) está invisible encima de toda la tarjeta */
+.stApp [class*="st-key-tarjeta_elegir_"] { position: relative; transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease; }
+.stApp [class*="st-key-tarjeta_elegir_"]:hover {
+    border-color: var(--borde-fuerte) !important; box-shadow: 0 6px 18px rgba(16, 24, 40, 0.10); transform: translateY(-2px);
+}
+.stApp [class*="st-key-tarjeta_elegir_"]:has(button:focus-visible) { outline: 2px solid var(--acento); outline-offset: 2px; }
+.stApp [class*="st-key-entrar_"] { position: absolute !important; inset: 0; z-index: 2; margin: 0 !important; width: auto !important; height: auto !important; }
+.stApp [class*="st-key-entrar_"] [data-testid="stButton"], .stApp [class*="st-key-entrar_"] button {
+    width: 100% !important; height: 100% !important; opacity: 0; cursor: pointer;
+}
+[class*="st-key-tarjeta"] [data-testid="stMetricValue"], [class*="st-key-tarjeta"] [data-testid="stMetricValue"] div {
+    font-size: 2.3rem; font-weight: 600; letter-spacing: -0.02em; color: var(--texto) !important;
+}
 [data-testid="stExpander"] details { border: 1px solid var(--borde) !important; border-radius: 8px !important; background: var(--tarjeta); }
 [data-testid="stExpander"] summary, [data-testid="stExpander"] summary p { color: var(--texto) !important; }
-[data-testid="stExpander"] summary:hover { background: var(--tarjeta-suave); }
+/* Abierto o recién tocado, Streamlit lo pinta gris claro (en el tema oscuro queda feo): sin fondo propio */
+[data-testid="stExpander"] summary { background: transparent !important; }
+[data-testid="stExpander"] summary:hover { background: var(--tarjeta-suave) !important; }
 
 /* Cada número grande en su propia tarjeta, como los paneles de Supabase */
 [data-testid="stMetric"] {
@@ -212,7 +318,7 @@ ESTILOS = """<style>
 .stApp [data-testid="stRadioOption"] > div > div:first-child { background: var(--tarjeta) !important; border-color: var(--borde-fuerte) !important; }
 .stApp [data-testid="stRadioOption"][data-selected] > div > div:first-child { background: var(--acento) !important; border-color: var(--acento) !important; }
 .stApp [data-testid="stRadioOption"] > div > div:first-child > div { background: var(--tarjeta) !important; }
-/* El interruptor (Modo oscuro, Solo stock bajo...): gris apagado, verde prendido, la bolita siempre blanca.
+/* El interruptor (Solo stock bajo, Da ticket...): gris apagado, verde prendido, la bolita siempre blanca.
    Ojo: cada versión de Streamlit arma el interruptor distinto. Las nuevas (1.6x) usan data-rac y
    las anteriores data-baseweb="checkbox"; por eso hay reglas para las dos */
 .stApp [data-testid="stCheckbox"] label[data-rac]:has(input[role="switch"]) > div:not([data-testid]) { background: var(--borde-fuerte) !important; }
@@ -255,17 +361,17 @@ ESTILOS = """<style>
 /* Los demás: fondo de tarjeta con borde. También el botón que abre una ventanita (📅 Agregar al calendario)
    y los botones de adentro de esa ventanita, que Streamlit dibuja aparte, fuera de .stApp */
 .stApp [data-testid="stBaseButton-secondary"], .stApp [data-testid="stBaseButton-secondaryFormSubmit"],
-.stApp .stDownloadButton button, .stApp .stLinkButton a, .stApp [data-testid="stBaseButton-tertiary"],
+.stApp .stDownloadButton button:not([kind="primary"]), .stApp .stLinkButton a, .stApp [data-testid="stBaseButton-tertiary"],
 .stApp [data-testid="stPopoverButton"], .stApp [data-testid="stPopover"] button, [data-testid="stPopoverBody"] .stDownloadButton button,
 [data-testid="stPopoverBody"] .stLinkButton a, [data-testid="stPopoverBody"] .stButton button {
     background: var(--tarjeta) !important; border: 1px solid var(--borde) !important; color: var(--texto) !important;
 }
 .stApp [data-testid="stBaseButton-secondary"] p, .stApp [data-testid="stBaseButton-secondaryFormSubmit"] p,
-.stApp .stDownloadButton button p, .stApp .stLinkButton a p, .stApp [data-testid="stPopoverButton"] p,
+.stApp .stDownloadButton button:not([kind="primary"]) p, .stApp .stLinkButton a p, .stApp [data-testid="stPopoverButton"] p,
 .stApp [data-testid="stPopoverButton"] svg, .stApp [data-testid="stPopover"] button p, [data-testid="stPopoverBody"] .stDownloadButton button p,
 [data-testid="stPopoverBody"] .stLinkButton a p, [data-testid="stPopoverBody"] .stButton button p { color: var(--texto) !important; }
 .stApp [data-testid="stBaseButton-secondary"]:hover, .stApp [data-testid="stBaseButton-secondaryFormSubmit"]:hover,
-.stApp .stDownloadButton button:hover, .stApp .stLinkButton a:hover, .stApp [data-testid="stPopoverButton"]:hover,
+.stApp .stDownloadButton button:not([kind="primary"]):hover, .stApp .stLinkButton a:hover, .stApp [data-testid="stPopoverButton"]:hover,
 .stApp [data-testid="stPopover"] button:hover,
 [data-testid="stPopoverBody"] .stDownloadButton button:hover, [data-testid="stPopoverBody"] .stLinkButton a:hover,
 [data-testid="stPopoverBody"] .stButton button:hover { background: var(--tarjeta-suave) !important; border-color: var(--borde-fuerte) !important; }
@@ -289,7 +395,18 @@ ESTILOS = """<style>
     border-color: var(--acento) !important; background: color-mix(in srgb, var(--acento) 14%, var(--tarjeta)) !important;
 }
 
+/* El botón de WhatsApp del calendario (gimnasio_ui.boton_calendario): del ancho del texto, con el logo a la izquierda */
+a.boton-whatsapp {
+    display: inline-flex; align-items: center; gap: 0.5rem; width: fit-content; padding: 0.45rem 0.95rem;
+    border: 1px solid var(--borde); border-radius: 8px; background: var(--tarjeta); color: var(--texto) !important;
+    font-weight: 500; text-decoration: none !important;
+}
+a.boton-whatsapp:hover { background: var(--tarjeta-suave); border-color: var(--borde-fuerte); }
+a.boton-whatsapp span { color: var(--texto) !important; }
+
 /* ---------- Ventanas, avisos flotantes y archivos ---------- */
+/* Detrás de la ventana, la pantalla queda desenfocada (no se mueve nada de lugar) */
+[data-testid="stDialog"] > div:first-child, [data-baseweb="modal"] > div:first-child { backdrop-filter: blur(4px); }
 [data-testid="stDialog"] [role="dialog"] { background: var(--tarjeta) !important; color: var(--texto) !important; border: 1px solid var(--borde); }
 [data-testid="stDialog"] [role="dialog"] h2, [data-testid="stDialog"] [role="dialog"] button[aria-label="Close"] { color: var(--texto) !important; }
 [data-testid="stToast"] { background: var(--tarjeta) !important; color: var(--texto) !important; border: 1px solid var(--borde); }
@@ -366,6 +483,11 @@ ESTILOS = """<style>
    (el nombre arriba; cantidad, precio y la X abajo) en vez de cuatro */
 @media (max-width: 640px) {
     [data-testid="stMainBlockContainer"] { padding-top: 3.5rem; }
+    /* En el celular la barra de Streamlit muestra el logo y el botón del menú: la de pestañas va abajo de ella */
+    [data-testid="stHeader"] { background: var(--lateral) !important; }
+    [data-testid="stMainBlockContainer"]:has(.st-key-barra_pestanas) { padding-top: 3.75rem !important; }
+    [data-testid="stLayoutWrapper"]:has(> .st-key-barra_pestanas), .st-key-barra_pestanas { top: 3.75rem; }
+    .st-key-barra_pestanas { padding: 0.4rem 0; }
     h1 { font-size: 1.8rem !important; }
     [class*="st-key-fila_venta"] [data-testid="stHorizontalBlock"] { flex-wrap: wrap; gap: 0.25rem 0.75rem; }
     [class*="st-key-fila_venta"] [data-testid="stColumn"] { min-width: 0 !important; width: auto !important; flex: 1 1 0; }
@@ -375,6 +497,22 @@ ESTILOS = """<style>
     [class*="st-key-fila_venta"] [data-testid="stCaptionContainer"] p { white-space: normal; }  /* la promo, en 2 renglones si hace falta */
 }
 </style>"""
+
+
+def _tambien_en_ventanas(css):
+    """Streamlit dibuja las ventanitas (st.dialog: producto nuevo, nuevo comercio, cerrar caja...) fuera de .stApp,
+    así que no les llegaban los estilos. Esto repite para ellas cada regla que empieza con ".stApp "."""
+    sin_comentarios = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    extra = []
+    for selectores, cuerpo in re.findall(r"([^{}]+)\{([^{}]*)\}", sin_comentarios):
+        partes = [p.strip() for p in selectores.split(",") if p.strip().startswith(".stApp ")]
+        if partes:
+            dialogo = ", ".join(p.replace(".stApp ", '[data-testid="stDialog"] ', 1) for p in partes)
+            extra.append(f"{dialogo} {{{cuerpo}}}")
+    return css.replace("</style>", "\n".join(extra) + "\n</style>")
+
+
+ESTILOS = _tambien_en_ventanas(ESTILOS)
 
 
 def aplicar_estilos():
@@ -422,21 +560,60 @@ def permisos_de(comercio):
     return [p for p in (comercio.get("permisos_empleado") or "").split(",") if p in PERMISOS_EMPLEADO]
 
 
+def fila(lugar, key=None, a_la_derecha=False):
+    """Un lugar donde los botones van uno al lado del otro. En un Streamlit viejo (sin filas) quedan uno abajo del otro."""
+    try:
+        return lugar.container(horizontal=True, horizontal_alignment="right" if a_la_derecha else "left", key=key)
+    except TypeError:
+        return lugar.container(key=key)
+
+
+def elegir_comercio(nombre):
+    """Cambia el comercio elegido en el menú de la izquierda (sirve como on_click de un botón)."""
+    st.session_state["comercio_nombre"] = nombre
+
+
 def comercio_actual():
-    """Devuelve el comercio elegido en el menú. Si no hay, frena la pantalla."""
+    """Devuelve el comercio elegido en el menú. Si no hay (o el jefe tiene elegido "Todos"), frena la pantalla."""
     comercio = st.session_state.get("comercio")
     if not comercio:
-        st.info("Elegí un comercio en el menú de la izquierda, o creá uno en **Mis comercios**.")
+        dueno = st.session_state.get("dueno")
+        comercios = op.listar_comercios(dueno["id"]) if dueno and es_jefe() else None
+        if comercios is None or comercios.empty:
+            st.info("Elegí un comercio en el menú de la izquierda, o creá uno en **Mis comercios**.")
+        else:
+            # Con "Todos" elegido: esta pantalla es de un solo comercio, así que se elige acá mismo
+            st.subheader("¿De qué comercio?")
+            st.caption("Esta pantalla es de un comercio por vez. También lo podés cambiar en el menú de la izquierda.")
+            with fila(st, key="elegir_comercio"):
+                for c in comercios.itertuples():
+                    st.button(f"{RUBROS.get(c.rubro, '🏪')[:1]} {c.nombre}", key=f"elegir_{c.id}",
+                              on_click=elegir_comercio, args=(c.nombre,))
         st.stop()
     return comercio
 
 
-def encabezado(icono, titulo, comercio=None):
-    """Cabecera de cada pantalla, como en Supabase: arriba en qué comercio estás, el título y una línea abajo."""
+def encabezado(icono, titulo, comercio=None, con_botones=False):
+    """Cabecera de cada pantalla, como en Supabase: arriba las "migas de pan" (Inicio / comercio / pantalla),
+    para saber siempre dónde estás, el título y una línea abajo.
+
+    con_botones=True: devuelve un lugar a la derecha del título para poner los botones principales
+    (por ejemplo "➕ Producto nuevo"), como en los paneles de Supabase."""
     with st.container(key="encabezado"):
+        migas = ["Inicio"]
         if comercio:
-            st.caption(f"{RUBROS.get(comercio['rubro'], '🏪')} · {comercio['nombre']}")
-        st.title(f"{icono} {titulo}")
+            migas.append(f"{RUBROS.get(comercio['rubro'], '🏪')[:1]} {comercio['nombre']}")
+        migas.append(titulo)
+        partes = [f'<span>{html.escape(m)}</span>' for m in migas]
+        partes[-1] = f'<span class="miga-actual">{html.escape(migas[-1])}</span>'
+        barra = '<span class="miga-barra">/</span>'
+        st.markdown(f'<div class="migas">{barra.join(partes)}</div>', unsafe_allow_html=True)
+        if not con_botones:
+            st.title(f"{icono} {titulo}")
+            return None
+        izquierda, derecha = st.columns([1, 1], vertical_alignment="center")
+        izquierda.title(f"{icono} {titulo}")
+        return fila(derecha, key="botones_encabezado", a_la_derecha=True)
 
 
 def insignia(texto, color="gris"):

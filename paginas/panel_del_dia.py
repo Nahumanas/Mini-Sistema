@@ -68,12 +68,13 @@ def mostrar_panel(comercio_id, dia, gimnasio=False):
 
     # Cada número sale en su tarjeta (estilo en comun.ESTILOS). No hace falta pasarle colores:
     # cuando el jefe cambia a modo oscuro, las tarjetas cambian solas porque usan las variables de tema.py
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Vendido", pesos(total), cambio(total, semana_pasada["total"]))
-    m2.metric("Ventas", cantidad, cambio(cantidad, semana_pasada["cantidad"]))
-    m3.metric("Ticket promedio", pesos(promedio))
-    if es_jefe():  # la ganancia la ve solo el jefe
-        m4.metric("Ganancia bruta", pesos(ganancia), help="Lo vendido menos lo que costó esa mercadería.")
+    with st.container(key="kpis_panel"):
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Vendido", pesos(total), cambio(total, semana_pasada["total"]))
+        m2.metric("Ventas", cantidad, cambio(cantidad, semana_pasada["cantidad"]))
+        m3.metric("Ticket promedio", pesos(promedio))
+        if es_jefe():  # la ganancia la ve solo el jefe
+            m4.metric("Ganancia bruta", pesos(ganancia), help="Lo vendido menos lo que costó esa mercadería.")
     st.caption("Se actualiza solo cada 10 segundos. Las flechas comparan con el mismo día de la semana pasada "
                "(si es hoy, hasta la misma hora)." + (" Las ventas son de productos; las cuotas van aparte, abajo."
                                                       if gimnasio else ""))

@@ -10,7 +10,12 @@ import operaciones as op
 from comun import codigo_nuevo, comercio_actual, encabezado, es_jefe, pesos
 
 comercio = comercio_actual()
-encabezado("📋", "Stock", comercio)
+# El jefe tiene a la derecha del título los botones para cargar códigos y productos (se abren en una ventanita)
+botones = encabezado("📋", "Stock", comercio, con_botones=es_jefe())
+if botones:
+    abrir_codigos = botones.button("📷 Códigos de barras",
+                                   help="Cargar con el lector los códigos de barras que les faltan a tus productos.")
+    abrir_nuevo = botones.button("➕ Producto nuevo", type="primary")
 
 productos = op.listar_productos(comercio["id"], solo_activos=False)
 productos["codigo_barras"] = productos["codigo_barras"].fillna("")  # vacío en vez de "nada"
@@ -49,9 +54,10 @@ if not es_jefe():
 if st.session_state.pop("stock_guardado", None):
     st.success("Cambios guardados.")
 
-# --- Filtros ---
-f1, f2 = st.columns([3, 1], vertical_alignment="bottom")
-busqueda = f1.text_input("Buscar", placeholder="Nombre, código, categoría o código de barras")
+# --- Una sola franja arriba de la tabla: el buscador y el filtro de stock bajo ---
+f1, f2 = st.columns([4, 1], vertical_alignment="center")
+busqueda = f1.text_input("Buscar", placeholder="🔍 Buscar por nombre, código, categoría o código de barras",
+                         label_visibility="collapsed")
 solo_bajo = f2.toggle("Solo stock bajo")
 
 vista = productos.copy()
@@ -97,7 +103,9 @@ editado = st.data_editor(
             "Dura (días)", step=1, min_value=1,
             help="Para lo que vence (postres, prepizzas, lácteos): cuántos días dura desde que entra, "
                  "contando exhibición y heladera. Vacío = no vence. Ver la pantalla Vencimientos."),
-        "activo": st.column_config.CheckboxColumn("Activo"),
+        "activo": st.column_config.CheckboxColumn(
+            "Activo", help="Para dar de baja un producto que ya no vendés, destildalo: deja de aparecer en la Caja "
+                           "pero no se pierde su historial."),
         "codigo_barras": st.column_config.TextColumn("Código de barras", max_chars=30),
     },
 )
@@ -140,10 +148,12 @@ if st.button(f"Guardar cambios ({len(cambiados)})", type="primary", disabled=cam
         st.session_state["stock_guardado"] = True
         st.rerun()
 
-st.caption("Para dar de baja un producto que ya no vendés, destildá **Activo**: deja de aparecer en la Caja pero no se pierde su historial.")
+
 
 # --- Códigos de barras con el lector (la forma principal es el Excel de productos) ---
-with st.expander("📷 Cargar códigos de barras con el lector"):
+# Se abren en una ventanita (botones de arriba a la derecha), sin mover la tabla
+@st.dialog("📷 Cargar códigos de barras con el lector", width="large")
+def ventana_codigos():
     st.caption("Lo más rápido es cargarlos todos juntos en el Excel (pantalla **Importar Excel**, columna "
                "*codigo_barras*). Acá podés cargar los que falten: elegí el producto y pasá el lector.")
     sin_codigo = productos[productos["codigo_barras"] == ""].set_index("id")
@@ -172,7 +182,8 @@ with st.expander("📷 Cargar códigos de barras con el lector"):
                     st.rerun()
 
 # --- Producto nuevo ---
-with st.expander("➕ Agregar producto nuevo"):
+@st.dialog("➕ Agregar producto nuevo", width="large")
+def ventana_producto_nuevo():
     proveedores = op.listar_proveedores(comercio["id"]).set_index("id")
     # Sin "Enter para guardar": el lector aprieta Enter al leer el código y guardaría el producto a medias
     with st.form("producto_nuevo", clear_on_submit=True, border=False, enter_to_submit=False):
@@ -191,7 +202,7 @@ with st.expander("➕ Agregar producto nuevo"):
                                          help="Para lo que vence. 0 = no vence.")
         proveedor_id = c9.selectbox(
             "Proveedor (opcional)", proveedores.index, index=None,
-            format_func=lambda i: proveedores.loc[i, "nombre"],
+            format_func=lambda i: proveedores.loc[i, "nombre"], placeholder="Sin proveedor",
         )
         if st.form_submit_button("Crear producto", type="primary"):
             if not nombre.strip() or not codigo.strip():
@@ -210,3 +221,9 @@ with st.expander("➕ Agregar producto nuevo"):
                 st.session_state["version_stock"] += 1
                 st.session_state["stock_guardado"] = True
                 st.rerun()
+
+
+if abrir_codigos:
+    ventana_codigos()
+if abrir_nuevo:
+    ventana_producto_nuevo()

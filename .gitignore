@@ -18,6 +18,3 @@ informe/plan/
 
 # Videos pesados (el GIF sí se sube, para el README)
 informe/videos/*.mp4
-
-# Logo propio de cada instalación (ver config.logo_propio)
-logo_propio/

@@ -29,7 +29,7 @@ El sistema tiene tres partes, una encima de la otra:
 ## 3. Un día de trabajo, paso a paso
 
 1. **Abrir el sistema:** doble clic en `iniciar.bat`. Se abre el navegador.
-2. **Ingresar:** se elige el dueño y el comercio, y se entra como **jefe** (con PIN) o como **empleado** (con su nombre).
+2. **Ingresar:** se elige el dueño y el comercio, y se entra como **jefe** (con PIN) o como **empleado** (con su nombre). El jefe arranca en el Inicio con todos sus comercios y toca la tarjeta del que quiere trabajar.
 3. **Abrir la caja:** se pone quién atiende y el efectivo inicial para dar cambio. Sin caja abierta no se puede cobrar.
 4. **Vender:** se pasa el **lector de código de barras** por cada producto (o se busca en la lista), se elige el medio de pago y se toca **Cobrar**. Las **promos** que armó el jefe se aplican solas (y las "con botón", como jubilados, se tocan si corresponde). Si pagan en efectivo, se puede escribir con cuánto pagan y el sistema muestra el **vuelto**. El stock se descuenta solo y, si el cliente lo pide, sale el **ticket en PDF**.
 5. **Recibir mercadería:** en **Compras** se pasa el lector por lo que llegó, se escribe la cantidad y se guarda. Suma al stock y actualiza el precio de costo. Lo puede hacer también el empleado (sin ver costos), y queda anotado quién la cargó.
@@ -41,9 +41,17 @@ El sistema tiene tres partes, una encima de la otra:
 
 ## 4. Las pantallas
 
+**Cómo se llega a cada una.** Arriba hay una barra de pestañas, sin menús que se despliegan, que cambia según el comercio elegido (lo arma `menu.py`):
+
+- Con **Todos** elegido: Inicio y Reportes.
+- En un comercio que vende productos: Inicio, Caja, Stock (con Vencimientos, si corresponde), Compras, Gastos y Reportes (con el Panel del día).
+- En un gimnasio: Inicio, Caja (con el Stock y las Compras del buffet), Socios y DNI (Ingreso por DNI, Socios y Cuotas), Clases y reservas, Gastos y Reportes.
+
+Si una pestaña junta varias pantallas, abajo aparece una segunda fila para pasar de una a otra. A la izquierda, el jefe cambia de comercio y tiene la **Configuración**: Descuentos, Mis comercios, Importar Excel, Seguridad (y Planes, en los gimnasios). El empleado ve solo las pestañas que el jefe le habilitó; si de una pestaña le queda una sola pantalla, la pestaña lleva su nombre (por ejemplo, Panel del día).
+
 | Pantalla | Qué hace | Quién la ve |
 |---|---|---|
-| 🏠 Inicio | Cada comercio con lo vendido hoy y en el mes y el estado de la caja, más los totales y la ganancia bruta del mes. Botón para ir a la caja. | Jefe |
+| 🏠 Inicio | Con **Todos**: una tarjeta por comercio con lo vendido hoy y en el mes, el estado de la caja y los avisos, más los totales del mes. Tocando la tarjeta se entra a ese comercio. Con un comercio elegido: su tablero con 4 números clave y el botón **← Todos mis comercios**. | Jefe |
 | 💵 Caja | Abrir caja, vender con el lector o la lista, botones − y + para cambiar cantidades, promos aplicadas solas, vuelto, cobrar, ticket, relevo de turno, cerrar caja con arqueo. El jefe ve el historial de cajas, los turnos de cada una y las ajusta. | Jefe y empleado |
 | 📦 Compras | Cargar lo que llega del proveedor: con el lector pide la cantidad. Suma al stock. El empleado no ve costos. | Jefe y empleado (viene habilitado; el jefe lo puede sacar) |
 | 🗓️ Vencimientos | Lo que hay por tanda con su fecha de vencimiento, avisos de vencido / vence hoy / vence mañana, cargar lo que se horneó y retirar lo vencido como pérdida. Solo aparece si el comercio es panadería o tiene productos con "Dura (días)". | Jefe y empleado (viene habilitado; el jefe lo puede sacar) |
@@ -52,7 +60,8 @@ El sistema tiene tres partes, una encima de la otra:
 | 📋 Stock | Productos, precios, cantidades y códigos de barras; avisa qué reponer. El empleado solo mira, sin costos. | Jefe (y empleado si tiene permiso) |
 | 📑 Reportes | Las 5 preguntas (cuánto vendí, gané y gasté, qué se vende más y qué me falta comprar) y el Excel con gráficos. | Jefe |
 | 🎁 Descuentos y promos | Armar las promos (2x1, 3x2, 2da unidad al %, % en productos, % por medio de pago, % en planes del gimnasio), prenderlas y apagarlas, y elegir cómo se combinan. | Jefe |
-| 🏬 Mis comercios | Crear comercios, prender el ticket, el resumen semanal, elegir qué ve el empleado, cargar los **horarios y turnos** del local y cambiar el PIN. | Jefe |
+| 🏬 Mis comercios | En 3 pestañas: **Mis comercios** (crear comercios y, en la tarjeta de cada uno, prender el ticket, el resumen semanal y los avisos), **Mis empleados** (qué ve el empleado y los **horarios y turnos** del local) y **Avisos al celular** (Telegram). | Jefe |
+| 🔐 Seguridad | Cambiar el PIN de jefe. | Jefe |
 | 📥 Importar / exportar Excel | Cargar o actualizar muchos productos de una vez con Excel. | Jefe |
 | 🚪 Ingreso por DNI | Solo gimnasios. El DNI del socio y el cartel verde, amarillo o rojo; cobrar en el momento y dar de alta. | Jefe y empleado (siempre; es la primera pantalla de recepción) |
 | 👥 Socios | Solo gimnasios. Buscador, filtros y la ficha de cada socio (cuota, reservas, historial, datos). | Jefe (y empleado si tiene permiso) |
@@ -63,7 +72,7 @@ El sistema tiene tres partes, una encima de la otra:
 
 ### Modo claro u oscuro
 
-Los colores se cambian con el botón **🌙 Modo oscuro** de la barra de la izquierda, al instante. Lo que elige el jefe queda guardado en la base (en la tabla `duenos`): al volver a entrar sigue igual y sus empleados arrancan con esos colores. El empleado también puede cambiarlos, pero solo mientras está adentro. En la demo en línea no se guarda, porque todos los visitantes usan el mismo dueño.
+Los colores se cambian con el botón del sol o la luna (**☀️ / 🌙**), abajo en la barra de la izquierda, al instante: la luna pasa a modo oscuro y el sol, a modo claro. Lo que elige el jefe queda guardado en la base (en la tabla `duenos`): al volver a entrar sigue igual y sus empleados arrancan con esos colores. El empleado también puede cambiarlos, pero solo mientras está adentro. En la demo en línea no se guarda, porque todos los visitantes usan el mismo dueño.
 
 Cómo funciona: los colores de cada modo están en `tema.py`, como variables de CSS (`--fondo`, `--texto`, `--borde`, `--acento`...). Los estilos de `comun.py` usan solo esas variables, nunca un color fijo. Cambiar de modo es cambiar esas pocas variables, y el navegador repinta todo sin recargar la página. Para cambiar un color del sistema alcanza con tocarlo en `PALETAS`, dentro de `tema.py`.
 
@@ -111,7 +120,7 @@ El empleado puede hacer el relevo, pero los turnos de otros solo los ve el jefe 
 
 ### Horarios y turnos del local
 
-En **Mis comercios**, cada comercio tiene **🕗 Horarios y turnos**: a qué hora abre y cierra, y cuántos turnos hay (por ejemplo, Mañana de 08:00 a 14:00 y Tarde de 14:00 a 21:00). Es opcional y se cambia cuando quieras. Sirve para que:
+En **Mis comercios → 👥 Mis empleados**, cada comercio tiene **🕗 Horarios y turnos**: a qué hora abre y cierra, y cuántos turnos hay (por ejemplo, Mañana de 08:00 a 14:00 y Tarde de 14:00 a 21:00). Es opcional y se cambia cuando quieras. Sirve para que:
 
 - La Caja avise cuando terminó un turno ("Si cambia quien atiende, tocá Relevo de turno").
 - La Caja avise si está abierta fuera del horario del local, para acordarse de cerrarla.
@@ -154,7 +163,7 @@ Solo le llegan al **jefe**: el empleado no ve esta parte.
 
 **Lo que hace el jefe para conectarse (2 toques, una sola vez):**
 
-1. Entra como jefe a **Configuración → Mis comercios** y baja hasta **📲 Avisos al celular**.
+1. Entra como jefe a **Configuración → Mis comercios** y abre la pestaña **📲 Avisos al celular**.
 2. Toca **📲 Conectar con Telegram** (puede elegir qué comercios le avisan; vienen todos marcados).
 3. Toca **Abrir el bot en Telegram** y, en Telegram, toca **Iniciar**. Si en la PC no tiene Telegram, copia el link y lo abre en el celular.
 4. Vuelve al sistema: en unos segundos aparece "Listo, tu celular quedó conectado" y el bot le escribe.
@@ -361,14 +370,16 @@ Todo eso pasa junto: si algo falla, no se guarda nada a medias.
 
 | Archivo | Para qué sirve |
 |---|---|
-| `app.py` | Arranca el sistema, prepara la base y arma el menú según quién entró. |
-| `ingreso.py` | La pantalla para entrar como jefe o empleado. |
+| `app.py` | Arranca el sistema, prepara la base y arma las pantallas según quién entró. |
+| `menu.py` | La barra de pestañas de arriba, que cambia según el comercio (comercio que vende productos o gimnasio). |
+| `ingreso.py` | La pantalla para entrar como jefe o empleado (una tarjeta centrada, con el logo arriba). |
 | `paginas/` | Una pantalla por archivo (caja, compras, stock, etc.). |
 | `operaciones.py` | Todas las lecturas y escrituras en la base. |
 | `base_datos.py` | Define las tablas y las actualiza solas. |
 | `config.py` | Dice dónde está la base y si está en modo demo. |
 | `comun.py` | Lo que comparten las pantallas: formato de pesos, medios de pago, permisos, el lector y los estilos. |
-| `tema.py` | Los colores del modo claro y del oscuro, y el botón para cambiarlos. |
+| `tema.py` | Los colores del modo claro y del oscuro (y el azul del logo), y el botón del sol y la luna para cambiarlos. |
+| `logo_propio/` | El logo: el grande del ingreso (claro y oscuro), el ícono de arriba a la izquierda y de la pestaña del navegador, y el del ticket. Sin esta carpeta vuelve el texto "Mini-Sistema". |
 | `reportes.py` | Arma los Excel de reportes con gráficos. |
 | `ticket.py` | Arma el ticket en PDF (con las promos y lo que ahorró el cliente). |
 | `operaciones_descuentos.py` | Las promos: la cuenta que las aplica (`calcular`), guardarlas, prenderlas y leerlas para los reportes. |

@@ -16,9 +16,9 @@ if hasattr(time, "tzset"):
 # Carpeta donde está este archivo (la carpeta del proyecto)
 CARPETA_PROYECTO = Path(__file__).parent
 
-# Logo propio opcional (no se sube a GitHub, ver .gitignore): si en esta carpeta están
-# logo_claro.png / logo_oscuro.png (arriba a la izquierda y en el ingreso), favicon.png (pestaña del
-# navegador) y ticket.png (arriba del ticket), se usan esos. Si falta alguno, queda lo de siempre.
+# Logo del sistema: si en esta carpeta están logo_claro.png / logo_oscuro.png (en el ingreso),
+# favicon.png (arriba a la izquierda y en la pestaña del navegador) y ticket.png (arriba del ticket),
+# se usan esos. Si falta alguno, queda lo de siempre (el texto "Mini-Sistema").
 CARPETA_LOGO_PROPIO = CARPETA_PROYECTO / "logo_propio"
 
 

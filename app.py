@@ -18,7 +18,7 @@ import streamlit as st
 # Los archivos del sistema, en el orden en que se importan entre sí.
 MODULOS_PROPIOS = ["config", "base_datos", "notificaciones_telegram", "operaciones", "operaciones_descuentos",
                    "operaciones_gimnasio", "tema",
-                   "comun", "calendario", "gimnasio_ui", "ticket", "reportes", "ingreso", "generar_datos_prueba",
+                   "comun", "menu", "calendario", "gimnasio_ui", "ticket", "reportes", "ingreso", "generar_datos_prueba",
                    "demo_panaderia", "demo_gimnasio"]
 
 
@@ -48,7 +48,8 @@ recargar_si_cambiaron()
 import operaciones as op  # noqa: E402 (va después de recargar)
 import reportes
 from ingreso import pantalla_ingreso
-from comun import RUBROS, a_python, aplicar_estilos, correr_script, es_gimnasio, permisos_de
+from comun import RUBROS, TODOS, a_python, aplicar_estilos, correr_script, es_gimnasio, permisos_de
+import menu
 import tema
 from tema import switch_tema
 from config import EN_STREAMLIT_CLOUD, FORMULARIO_RESENAS, MODO_DEMO, PIN_DEMO, PUEDE_APAGARSE, RUTA_BASE, logo_propio
@@ -85,7 +86,7 @@ preparar_base()
 # Le avisa al navegador que la página está en español, para que el traductor de Chrome
 # no la "traduzca" (cambia textos, por ejemplo "Usa tickets" por "Boletos para Estados Unidos",
 # y deja textos viejos en pantalla cuando algo se actualiza).
-correr_script("""
+correr_script("""{
     const raiz = PAGINA.documentElement;
     raiz.lang = "es";
     raiz.setAttribute("translate", "no");
@@ -95,7 +96,7 @@ correr_script("""
         meta.name = "google"; meta.content = "notranslate";
         PAGINA.head.appendChild(meta);
     }
-""")
+}""")
 
 # Colores del tema (claro u oscuro, ver tema.py), letra grande, botones cómodos y sin los detalles de Streamlit
 aplicar_estilos()
@@ -114,8 +115,8 @@ if st.query_params.get("reservar"):
 # El logo arriba a la izquierda, como en los paneles de Supabase
 st.logo(tema.logo(), size="large")
 if tema.logo_propio_del_tema():
-    # Streamlit lo deja muy chiquito (32 px de alto); el logo propio es ancho, así que lo agrandamos un poco
-    st.html("<style>[data-testid='stLogo'] { height: 2.75rem; max-width: 15rem; }</style>")
+    # Con logo propio, arriba a la izquierda va solo el ícono (la caja): un poco más grande que lo que pone Streamlit
+    st.html("<style>[data-testid='stLogo'] { height: 2.5rem; width: 2.5rem; }</style>")
 
 
 @st.cache_resource(show_spinner=False)
@@ -185,25 +186,31 @@ with st.sidebar:
     # El nombre del sistema va en el logo de arriba (st.logo, ver tema.logo)
     if rol == "jefe":
         st.caption(f"🔑 Jefe · **{dueno['nombre']}**")
-        switch_tema()  # modo claro / oscuro (tema.py), arriba para que se encuentre fácil
-        # 2) El jefe elige qué comercio ver (solo los suyos)
+        # 2) El jefe elige qué comercio ver (solo los suyos), o "Todos" para verlos juntos en Inicio
         if comercios.empty:
-            st.session_state["comercio"] = None
+            st.session_state["comercio_nombre"] = None
             st.info("Todavía no tenés comercios. Creá uno en **Mis comercios**.")
         else:
             nombres = comercios["nombre"].tolist()
-            if st.session_state.get("comercio_nombre") not in nombres:
-                st.session_state["comercio_nombre"] = nombres[0]
+            # Con un solo comercio, "Todos" no hace falta: se entra directo a ese
+            opciones = [TODOS] + nombres if len(nombres) > 1 else nombres
+            # Al cambiar de pantalla desde el código (st.switch_page, más abajo), Streamlit borra lo elegido
+            # en los casilleros: por eso el comercio también se guarda aparte, y de ahí se recupera
+            if "comercio_nombre" not in st.session_state:
+                st.session_state["comercio_nombre"] = st.session_state.get("comercio_guardado")
+            if st.session_state.get("comercio_nombre") not in opciones:
+                st.session_state["comercio_nombre"] = opciones[0]
+            rubros = comercios.set_index("nombre")["rubro"]
             st.selectbox(
                 "Comercio",
-                nombres,
+                opciones,
                 key="comercio_nombre",
-                format_func=lambda n: f"{RUBROS.get(comercios.set_index('nombre').loc[n, 'rubro'], '🏪')[:1]} {n}",
+                format_func=lambda n: "🏬 Todos" if n == TODOS else f"{RUBROS.get(rubros[n], '🏪')[:1]} {n}",
             )
+            st.session_state["comercio_guardado"] = st.session_state["comercio_nombre"]
     else:
         # El empleado queda fijo en el comercio con el que entró
         st.caption(f"👤 Empleado · **{st.session_state['nombre']}**")
-        switch_tema()
     fila = comercios[comercios["nombre"] == st.session_state.get("comercio_nombre")]
     st.session_state["comercio"] = a_python(fila.iloc[0]) if not fila.empty else None
     if rol == "empleado":
@@ -213,63 +220,74 @@ with st.sidebar:
         comercio = st.session_state["comercio"]
         st.markdown(f"{RUBROS.get(comercio['rubro'], '🏪')[:1]} **{comercio['nombre']}**")
 
-    st.divider()
-    if st.button("🚪 Salir", width="stretch", help="Vuelve a la pantalla para ingresar."):
-        # Para que al volver a entrar ya estén elegidos el mismo dueño y el mismo comercio
-        st.session_state["ultimo_ingreso"] = ((st.session_state.get("dueno") or {}).get("nombre"),
-                                              st.session_state.get("comercio_nombre"))
-        for clave in ("rol", "nombre", "dueno", "comercio", "comercio_nombre"):
-            st.session_state.pop(clave, None)
-        st.rerun()
+# 3) Las pantallas del sistema. Arriba van en una sola fila de pestañas, que cambia según el comercio
+# elegido: con "Todos", solo Inicio y Reportes; en un gimnasio, sus pantallas (ver menu.py)
+actual = st.session_state.get("comercio")
+# Vencimientos aparece solo donde sirve: en panaderías o si algún producto tiene días de duración
+con_vencimientos = bool(actual) and (actual["rubro"] == "panaderia" or op.usa_vencimientos(actual["id"]))
+gimnasio = es_gimnasio(actual)
+empleado = rol == "empleado"
+pantallas = {
+    "inicio": st.Page("paginas/inicio.py", title="Inicio", icon="🏠", default=not empleado),
+    # El empleado arranca en la Caja; en un gimnasio, la recepción arranca en el Ingreso por DNI
+    "caja": st.Page("paginas/caja.py", title="Caja", icon="💵", default=empleado and not gimnasio),
+    "compras": st.Page("paginas/compras.py", title="Compras", icon="📦"),
+    "gastos": st.Page("paginas/gastos.py", title="Gastos", icon="🧾"),
+    "panel": st.Page("paginas/panel_del_dia.py", title="Panel del día", icon="📊"),
+    "stock": st.Page("paginas/stock.py", title="Stock", icon="📋"),
+    "vencimientos": st.Page("paginas/vencimientos.py", title="Vencimientos", icon="🗓️"),
+    "reportes": st.Page("paginas/reportes.py", title="Reportes", icon="📑"),
+    "ingreso_dni": st.Page("paginas/ingreso_dni.py", title="Ingreso por DNI", icon="🚪", default=empleado and gimnasio),
+    "socios": st.Page("paginas/socios.py", title="Socios", icon="👥"),
+    "cuotas": st.Page("paginas/cuotas.py", title="Cuotas y vencimientos", icon="💳"),
+    "clases": st.Page("paginas/clases.py", title="Clases", icon="📅"),
+}
+# Configuración: (pantalla, nombre corto para que entre en la barra de la izquierda). Va abajo a la izquierda (pie_lateral)
+planes = st.Page("paginas/planes.py", title="Planes y actividades", icon="🏷️")
+de_todos = [(st.Page("paginas/descuentos.py", title="Descuentos y promos", icon="🎁"), "Descuentos"),
+            (st.Page("paginas/mis_comercios.py", title="Mis comercios", icon="🏬"), "Mis comercios"),
+            (st.Page("paginas/importar_excel.py", title="Importar / exportar Excel", icon="📥"), "Importar Excel"),
+            (st.Page("paginas/seguridad.py", title="Seguridad", icon="🔐"), "Seguridad")]
+configuracion = ([(planes, "Planes")] if gimnasio else []) + de_todos
+if empleado:
+    # El empleado ve la Caja (en un gimnasio, también el Ingreso por DNI) y solo lo que el jefe le habilitó
+    # en Mis comercios. Las demás pantallas ni existen para él: tampoco puede entrar escribiendo la dirección.
+    claves = {"panel_del_dia": "panel"}
+    permitidas = [pantallas["caja"], pantallas["ingreso_dni"]] + [
+        pantallas[claves.get(clave, clave)] for clave in permisos_de(actual) if claves.get(clave, clave) in pantallas]
+    pestanas = menu.armar_pestanas(pantallas, actual, gimnasio, con_vencimientos, permitidas)
+    navegacion = st.navigation(menu.pantallas_de(pestanas), position="hidden")
+else:
+    pestanas = menu.armar_pestanas(pantallas, actual, gimnasio, con_vencimientos)
+    # El jefe puede abrir cualquiera, pero si la que está abierta no corresponde al comercio elegido
+    # (por ejemplo, estaba en Socios y eligió un kiosco, o pasó a "Todos" desde la Caja), vuelve al Inicio
+    navegacion = st.navigation(list(pantallas.values()) + [planes] + [pagina for pagina, _ in de_todos],
+                               position="hidden")
+    if navegacion not in menu.pantallas_de(pestanas) + [pagina for pagina, _ in configuracion]:
+        st.switch_page(pantallas["inicio"])
+menu.dibujar_barra(pestanas, navegacion)
+
+
+def salir():
+    # Para que al volver a entrar ya estén elegidos el mismo dueño y el mismo comercio
+    st.session_state["ultimo_ingreso"] = ((st.session_state.get("dueno") or {}).get("nombre"),
+                                          st.session_state.get("comercio_nombre"))
+    for clave in ("rol", "nombre", "dueno", "comercio", "comercio_nombre", "comercio_guardado"):
+        st.session_state.pop(clave, None)
+
+
+# 4) Abajo de todo en la barra de la izquierda, como en Supabase: la configuración (solo el jefe),
+# el modo oscuro, Salir y Apagar. Lo de arriba (comercio) queda solo para elegir qué ver.
+with st.sidebar, st.container(key="pie_lateral"):
+    if rol == "jefe":
+        st.caption("Configuración")
+        for pagina, nombre in configuracion:
+            st.page_link(pagina, label=nombre, width="stretch")
+        st.divider()
+    switch_tema()  # modo claro / oscuro (tema.py)
+    st.button("🚪 Salir", width="stretch", help="Vuelve a la pantalla para ingresar.", on_click=salir)
     boton_resena()
     if PUEDE_APAGARSE and st.button("⏻ Apagar el sistema", width="stretch"):
         confirmar_apagado()
 
-# 3) Las pantallas del sistema, agrupadas como en un ERP
-caja = st.Page("paginas/caja.py", title="Caja", icon="💵")
-compras = st.Page("paginas/compras.py", title="Compras", icon="📦")
-gastos = st.Page("paginas/gastos.py", title="Gastos", icon="🧾")
-panel = st.Page("paginas/panel_del_dia.py", title="Panel del día", icon="📊")
-stock = st.Page("paginas/stock.py", title="Stock", icon="📋")
-vencimientos = st.Page("paginas/vencimientos.py", title="Vencimientos", icon="🗓️")
-# Vencimientos aparece solo donde sirve: en panaderías o si algún producto tiene días de duración
-actual = st.session_state.get("comercio")
-con_vencimientos = bool(actual) and (actual["rubro"] == "panaderia" or op.usa_vencimientos(actual["id"]))
-# Las pantallas del gimnasio aparecen solo si el comercio elegido es un gimnasio
-gimnasio = es_gimnasio(actual)
-ingreso_dni = st.Page("paginas/ingreso_dni.py", title="Ingreso por DNI", icon="🚪")
-socios = st.Page("paginas/socios.py", title="Socios", icon="👥")
-cuotas = st.Page("paginas/cuotas.py", title="Cuotas y vencimientos", icon="💳")
-clases = st.Page("paginas/clases.py", title="Clases", icon="📅")
-if rol == "jefe":
-    paginas = {"": [st.Page("paginas/inicio.py", title="Inicio", icon="🏠", default=True)]}
-    if gimnasio:
-        paginas["Gimnasio"] = [ingreso_dni, socios, cuotas, clases]
-    paginas |= {
-        "Día a día": [caja, compras, gastos] + ([vencimientos] if con_vencimientos else []),
-        "Control": [panel, stock, st.Page("paginas/reportes.py", title="Reportes", icon="📑")],
-        "Configuración": (
-            ([st.Page("paginas/planes.py", title="Planes y actividades", icon="🏷️")] if gimnasio else [])
-            + [st.Page("paginas/descuentos.py", title="Descuentos y promos", icon="🎁"),
-               st.Page("paginas/mis_comercios.py", title="Mis comercios", icon="🏬"),
-               st.Page("paginas/importar_excel.py", title="Importar / exportar Excel", icon="📥")]
-        ),
-    }
-else:
-    # El empleado ve la Caja y solo lo que el jefe le habilitó en Mis comercios.
-    # En un gimnasio, la recepción arranca en el Ingreso por DNI (lo ve siempre, como la Caja).
-    permisos = permisos_de(st.session_state["comercio"])
-    caja = st.Page("paginas/caja.py", title="Caja", icon="💵", default=not gimnasio)
-    habilitadas = {"compras": compras, "gastos": gastos, "panel_del_dia": panel, "stock": stock}
-    if con_vencimientos:
-        habilitadas["vencimientos"] = vencimientos
-    paginas = [caja] + [pagina for clave, pagina in habilitadas.items() if clave in permisos]
-    if gimnasio:
-        # Son muchas pantallas para una sola fila: las del gimnasio van juntas en su menú
-        ingreso_dni = st.Page("paginas/ingreso_dni.py", title="Ingreso por DNI", icon="🚪", default=True)
-        del_gimnasio = {"socios": socios, "cuotas": cuotas, "clases": clases}
-        paginas = {"": [ingreso_dni, caja],
-                   "Gimnasio": [pagina for clave, pagina in del_gimnasio.items() if clave in permisos],
-                   "Día a día": paginas[1:]}
-        paginas = {seccion: lista for seccion, lista in paginas.items() if lista}
-st.navigation(paginas, position="top").run()
+navegacion.run()

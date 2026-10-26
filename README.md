@@ -21,7 +21,7 @@ Proyecto de portfolio hecho por Nahuel, estudiante de Ciencia de Datos (Teclab).
 - **Reportes** por semana, mes o fechas, en pantalla y en Excel con gráficos. El del mes pasado se guarda solo; el semanal se activa en temporada alta.
 - **Panel del día** que se actualiza solo, **stock** con avisos de reposición, **compras**, **gastos**, **ticket en PDF** e **importar/exportar Excel**.
 - **Gimnasio:** si el comercio es del rubro Gimnasio aparecen **Ingreso por DNI** (el socio sale en verde, amarillo o rojo y, si debe, se le cobra ahí mismo), **Socios**, **Cuotas y vencimientos** (con el recordatorio por WhatsApp), **Clases** (la grilla de la semana con cupo, reservas, **lista de espera** automática y el botón **📅 Agregar al calendario**), **Planes y actividades** (por mes o varios meses, libres o con clases por mes, para todas las actividades o solo algunas: crossfit, funcional, pesas libres...) y la **página de reservas del socio**: con un link o un QR, el socio entra con su DNI desde el celular, ve los lugares que quedan, reserva o cancela y lo agrega a su Google Calendar. La cuota entra a la **caja abierta** como una venta, así el arqueo, el relevo de turno y el cierre la incluyen. Ver [El gimnasio](#el-gimnasio).
-- **Modo claro u oscuro:** se cambia con el botón 🌙 de la barra de la izquierda, al instante. Lo que elige el jefe queda guardado y sus empleados arrancan con eso (también pueden cambiarlo mientras están adentro).
+- **Modo claro u oscuro:** se cambia con el botón del sol o la luna (☀️ / 🌙) abajo en la barra de la izquierda, al instante. Lo que elige el jefe queda guardado y sus empleados arrancan con eso (también pueden cambiarlo mientras están adentro).
 
 | Caja | Cierre de caja |
 |---|---|
@@ -57,11 +57,19 @@ Con `iniciar.bat` se abre solo en el navegador. Si lo corrés desde la terminal,
 
 ## Las pantallas (paso 2)
 
-Al abrir el sistema elegís el **dueño** y el **comercio**, y entrás como **jefe** (con tu PIN) o como **empleado**. Arriba está el menú; a la izquierda, el jefe cambia de comercio.
+Al abrir el sistema elegís el **dueño** y el **comercio**, y entrás como **jefe** (con tu PIN) o como **empleado**, en una tarjeta centrada con el logo arriba.
+
+**La barra de arriba** es una sola fila de pestañas, sin menús que se despliegan, y cambia según el comercio elegido (`menu.py`):
+
+- Con **Todos** elegido: Inicio y Reportes (para ver todos los comercios juntos).
+- En un comercio que vende productos: Inicio, Caja, Stock, Compras, Gastos y Reportes.
+- En un gimnasio: Inicio, Caja, Socios y DNI, Clases y reservas, Gastos y Reportes.
+
+Las pestañas que juntan varias pantallas muestran una segunda fila abajo (por ejemplo, Reportes y Panel del día, o Ingreso por DNI, Socios y Cuotas). **A la izquierda**, el jefe cambia de comercio (o toca la tarjeta del comercio en el Inicio) y abajo tiene la **Configuración**: Descuentos, Mis comercios, Importar Excel y Seguridad (y Planes, en los gimnasios). El empleado ve solo las pestañas que el jefe le habilitó.
 
 | Pantalla | Para qué sirve |
 |---|---|
-| 🏠 Inicio | El "launcher": todos tus comercios con lo vendido hoy y en el mes, avisos de stock bajo y un botón para abrir la caja de cada uno. |
+| 🏠 Inicio | El "launcher". Con **Todos**: una tarjeta por comercio con lo vendido hoy y en el mes, si la caja está abierta y los avisos (stock bajo, vencimientos, cuotas). Toda la tarjeta es un botón: al tocarla entrás a ese comercio y la barra de arriba muestra sus pantallas. Con un comercio elegido: su tablero con 4 números clave (vendido hoy, ventas de hoy, vendido en el mes y ganancia; en un gimnasio, cobrado hoy y en el mes, socios al día y los que deben) y el botón **← Todos mis comercios**. |
 | 💵 Caja | Primero se **abre la caja** con el efectivo inicial. Después cargás cada venta en el momento: pasás el **lector de código de barras** por cada producto (cada pasada suma 1) o, si no tiene código, lo buscás en la lista. Para cambiar cuántas unidades lleva, tocás **−** o **+** al lado del número (el total y el vuelto se recalculan solos; el + no pasa el stock y el − no baja de 1, para sacarlo está la X). Elegís el medio de pago y cobrás (descuenta el stock solo). Las **promos** se aplican solas: arriba del total aparecen el subtotal y cada promo con lo que descuenta, y en cada producto el precio sin promo tachado. Las promos "con botón" (por ejemplo, jubilados) aparecen en **🏷️ Promos para elegir** para tocarlas si corresponde. Si pagan en efectivo, escribís con cuánto pagan y el sistema muestra el **vuelto** (si no alcanza, avisa cuánto falta). Si el lector lee un código que no está cargado, el jefe puede crear el producto ahí mismo. Si cambia quien atiende, el que se va toca **🔄 Relevo de turno**: cuenta el efectivo, escribe quién recibe y queda anotado si en su turno faltó o sobró plata, sin cerrar la caja (el que entra arranca con lo contado). Al final del día se **cierra la caja**: contás el efectivo y el sistema muestra cuánto debería haber y si sobra o falta. Una caja cerrada no se puede modificar, pero el jefe (o el empleado al que le dé el permiso "Ajustar cajas cerradas"), en **Cajas anteriores**, le puede hacer un **ajuste**: anular una venta (deja de contar y la mercadería vuelve al stock) o anotar un nuevo conteo del efectivo. Cada ajuste queda anotado con fecha, quién y motivo, y el historial muestra la diferencia antes y después. En **Turnos de una caja** se ve la línea de tiempo del día: quién abrió, cada relevo y el cierre, con lo que dio cada turno. |
 | 🧾 Ticket | En los comercios que usan ticket, al cobrar podés tildar "El cliente pide ticket" y se descarga un PDF de 80 mm listo para imprimir. Es un comprobante interno, no una factura de ARCA. |
 | 📦 Compras | Cargar lo que le comprás a un proveedor. Con el lector: pasás el producto, escribís la cantidad que llegó y Enter. Suma al stock y actualiza el precio de costo. El empleado también puede cargar lo que llega (viene habilitado; el jefe se lo saca en Mis comercios), pero solo pone cantidades, sin ver costos. Cada compra guarda quién la cargó. |
@@ -71,7 +79,8 @@ Al abrir el sistema elegís el **dueño** y el **comercio**, y entrás como **je
 | 📋 Stock | Todos los productos con su estado (✅ OK / ⚠️ Reponer). Podés cambiar precios, cantidades, códigos de barras y cuántos días dura cada producto (**Dura (días)**, vacío = no vence) en la tabla y tocar **Guardar cambios**, o agregar productos nuevos. También podés cargar con el lector los códigos de barras que falten. |
 | 📑 Reportes | Por semana, por mes o por las fechas que elijas: cuánto vendí, cuánto gané, cuánto gasté, qué se vende más y qué me falta comprar. Si se tiró mercadería vencida, aparece como pérdida y se resta de la ganancia neta. Para un comercio o todos juntos, con el botón para **descargar el Excel**. |
 | 🎁 Descuentos y promos | Solo el jefe. Armar promos: **2x1, 3x2 o 2da unidad al %**, **% en un producto, una categoría o todo**, **% por medio de pago** y, en los gimnasios, **% en un plan**. Cada una puede valer solo algunos días de la semana o entre dos fechas, y ser **automática** o **con botón en la Caja**. Se prenden y apagan con un interruptor, se editan y se filtran por tipo. En **⚙️ Cómo se combinan** el jefe elige qué pasa si a un producto le tocan dos promos: va la que más ahorra (viene así) o se suman. La de medio de pago va siempre encima. |
-| 🏬 Mis comercios | Crear un comercio nuevo (sin tocar código), activar o desactivar los tickets de cada uno, prender o apagar el **resumen semanal** (para la temporada), elegir **qué ve el empleado**, cargar los **horarios y turnos** del local (la Caja avisa cuándo termina un turno y si está abierta fuera de horario) y cambiar tu PIN de jefe. |
+| 🏬 Mis comercios | Tres pestañas. **Mis comercios:** una tarjeta por comercio con interruptores para **Da ticket**, **Resumen semanal** (para la temporada) y **Mandar avisos**, y el botón **➕ Nuevo comercio** (sin tocar código). **Mis empleados:** elegir **qué ve el empleado** en cada comercio (se guarda solo al tocar) y cargar los **horarios y turnos** del local (la Caja avisa cuándo termina un turno y si está abierta fuera de horario). **Avisos al celular:** conectar Telegram y elegir los avisos. |
+| 🔐 Seguridad | Cambiar tu PIN de jefe. |
 | 🚪 Ingreso por DNI | Solo en gimnasios. Se escribe el DNI (o se pasa el DNI por el lector) y el socio sale en **verde** (pasa y queda anotada la entrada; si tenía reserva, pasa a "vino"), **amarillo** (al día pero sin reserva: se lo anota en una clase de hoy o se lo deja pasar igual) o **rojo** (debe la cuota o no le quedan clases: se le cobra ahí mismo). Si el DNI no existe, se lo da de alta en el momento. A la derecha, quién entró hoy. |
 | 👥 Socios | Solo en gimnasios. Buscador por nombre o DNI, filtros (al día, vencen pronto, deben, sin clases, de baja) y la ficha de cada socio: cobrarle la cuota, sus reservas (anotarlo, cancelar, agregar al calendario), sus cuotas y entradas, y sus datos. Dar de baja lo hace solo el jefe. |
 | 💳 Cuotas y vencimientos | Solo en gimnasios. Cobrar una cuota, quién vence en los próximos días y quién ya debe, con un botón que abre **WhatsApp con el recordatorio escrito**, y las últimas cuotas con quién cobró y en qué turno. |
@@ -85,7 +94,7 @@ Al abrir el sistema elegís el **dueño** y el **comercio**, y entrás como **je
 |---|---|---|
 | Cómo entra | Con su PIN (la primera vez lo crea, de 4 a 6 números) | Con su nombre |
 | Qué ve | Todo | La Caja y lo que el jefe le habilite en **Mis comercios**: Panel del día (sin la ganancia), Stock (solo mirar, sin costos), Compras (cargar lo que llega, sin costos), Vencimientos (cargar tandas y retirar lo vencido), Gastos o Ajustar cajas cerradas (ve las cajas anteriores y las corrige). En los comercios nuevos vienen habilitados Panel del día, Stock, Compras y Vencimientos. |
-| Comercio | Cambia de comercio en el menú de la izquierda | Queda fijo en el comercio con el que entró |
+| Comercio | Cambia de comercio en la barra de la izquierda o tocando su tarjeta en el Inicio | Queda fijo en el comercio con el que entró |
 | Cajas anteriores | Ve el historial con el arqueo de cada caja, los turnos de cada día y puede ajustarlas | Solo si el jefe le da el permiso "Ajustar cajas cerradas" |
 | Relevo de turno | Sí | Sí (ve solo lo de su turno) |
 | Horarios y turnos del local | Los carga en Mis comercios | No |
@@ -96,7 +105,7 @@ Si escribís mal el PIN 3 veces, hay que esperar 30 segundos. Si te olvidaste el
 
 Por ahora el dueño se elige de una lista. Con la nube (paso 5) se entra con Gmail y contraseña.
 
-**Modo demo.** Con la variable `MODO_DEMO = "1"` (en Streamlit Community Cloud va en los *Secrets* de la app), el PIN del jefe viene puesto en `1234`, la pantalla de ingreso lo muestra y se ocultan el botón para apagar y el cambio de PIN. En Streamlit Community Cloud el modo demo se prende solo, aunque falte ese Secret, y el botón para apagar nunca aparece en internet.
+**Modo demo.** Con la variable `MODO_DEMO = "1"` (en Streamlit Community Cloud va en los *Secrets* de la app), el PIN del jefe viene puesto en `1234`, la pantalla de ingreso lo muestra y se ocultan el botón para apagar y el cambio de PIN (en Seguridad). En Streamlit Community Cloud el modo demo se prende solo, aunque falte ese Secret, y el botón para apagar nunca aparece en internet.
 
 **Reseñas.** Si en los *Secrets* de la app se pone `FORMULARIO_RESENAS = "https://forms.gle/..."` (el link de un formulario de Google), aparece en la barra de la izquierda el botón **💬 Dejá tu reseña**. Las respuestas llegan a la planilla del formulario y no tocan la base de datos.
 
@@ -152,7 +161,7 @@ La base pasa de SQLite a **Supabase** (PostgreSQL en internet) y la página se s
 
 ## Reportes (paso 3)
 
-En **Control → Reportes** elegís el **período** (una semana, un mes o las fechas que quieras) y si querés ver un comercio o todos juntos. La pantalla y el Excel responden 5 preguntas:
+En la pestaña **📑 Reportes** elegís el **período** (una semana, un mes o las fechas que quieras) y si querés ver un comercio o todos juntos. La pantalla y el Excel responden 5 preguntas:
 
 | Pregunta | Qué muestra |
 |---|---|
@@ -175,7 +184,8 @@ En **Control → Reportes** elegís el **período** (una semana, un mes o las fe
 
 | Archivo | Para qué sirve |
 |---|---|
-| `app.py` | Arranca la aplicación y arma el menú. |
+| `app.py` | Arranca la aplicación y arma las pantallas de cada uno (jefe o empleado, comercio o gimnasio). |
+| `menu.py` | La barra de pestañas de arriba, que cambia según el comercio elegido. |
 | `paginas/` | Una pantalla por archivo (caja.py, stock.py, etc.). |
 | `operaciones.py` | Todas las lecturas y escrituras en la base. Las pantallas no escriben SQL: llaman a estas funciones. |
 | `ticket.py` | Arma el ticket en PDF (con las promos y lo que ahorró el cliente). |
@@ -198,7 +208,8 @@ En **Control → Reportes** elegís el **período** (una semana, un mes o las fe
 | `informe/videos/` | Video tutorial completo, versión corta para LinkedIn y el GIF de la caja (los MP4 no se suben a GitHub). |
 | `informe/guia/` | La guía para entender todo el sistema (en .md y en Word). |
 | `comun.py` | Cosas que comparten las pantallas (formato de pesos, medios de pago, los estilos...). |
-| `tema.py` | Los colores del modo claro y del oscuro, y el botón para cambiarlos. |
+| `tema.py` | Los colores del modo claro y del oscuro (y el azul del logo), y el botón del sol y la luna para cambiarlos. |
+| `logo_propio/` | El logo: el grande de la pantalla de ingreso (uno para modo claro y otro para oscuro), el ícono de arriba a la izquierda y de la pestaña del navegador, y el del ticket. Si se borra la carpeta, vuelve el texto "Mini-Sistema". |
 | `config.py` | Dice dónde está la base. En el paso 5 (nube) solo se cambia esta línea. |
 | `base_datos.py` | Define las tablas y cómo se relacionan. |
 | `generar_datos_prueba.py` | Crea los comercios de prueba y simula 6 meses y medio de ventas, compras y gastos. |
