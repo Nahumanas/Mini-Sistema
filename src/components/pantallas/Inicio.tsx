@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, BarChart3, ClipboardList, Package, Receipt, Wallet } from "lucide-react";
+import { ArrowLeft, ArrowRight, BarChart3, ClipboardList, Package, Receipt, Users, Wallet } from "lucide-react";
 import { cambio, conStockBajo, porDia, rango, rankingProductos, resumen, tandasVencidas, ventasEntre } from "@/lib/calculos";
 import { ddmm, diaDeLaSemana, hora, hoy, sumarDias } from "@/lib/fechas";
 import { pesos } from "@/lib/formato";
@@ -30,10 +30,12 @@ export function Inicio() {
   return verTodos && comercios.length > 1 ? <VistaTodos /> : <VistaComercio comercio={activo} />;
 }
 
-function Atajos() {
+function Atajos({ gimnasio = false }: { gimnasio?: boolean }) {
+  // En un gimnasio, Socios va al lado de la Caja
+  const atajos = gimnasio ? [ATAJOS[0], { titulo: "Socios", ruta: "/socios", icono: Users }, ...ATAJOS.slice(1)] : ATAJOS;
   return (
     <nav aria-label="Atajos" className="flex flex-wrap gap-2">
-      {ATAJOS.map(({ titulo, ruta, icono: Icono }) => (
+      {atajos.map(({ titulo, ruta, icono: Icono }) => (
         <Link key={ruta} href={ruta} className="inline-flex items-center gap-2 rounded-md border border-borde bg-superficie px-3.5 py-2 text-[15px] hover:bg-superficie-suave">
           <Icono className="size-4 text-texto-suave" strokeWidth={1.75} />
           {titulo}
@@ -217,7 +219,7 @@ function VistaComercio({ comercio }: { comercio: Comercio }) {
           }
         />
       </div>
-      {sesion?.rol === "jefe" && <Atajos />}
+      {sesion?.rol === "jefe" && <Atajos gimnasio={comercio.rubro === "gimnasio"} />}
 
       <div className="grid gap-4 sm:grid-cols-3">
         {kpis.map((k) => (

@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { Lock } from "lucide-react";
-import { buscarSeccion, puedeVer } from "@/lib/navegacion";
+import { buscarSeccion, esDelRubro, puedeVer } from "@/lib/navegacion";
 import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { Sidebar } from "./Sidebar";
@@ -55,8 +55,8 @@ function ConPermiso({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto mt-10 flex max-w-md flex-col items-center gap-3 text-center text-texto-suave">
       <Lock className="size-6" strokeWidth={1.5} />
-      {seccion.rubro && seccion.rubro !== comercio.rubro ? (
-        <p>Esta pantalla es solo para gimnasios. Elegí el gimnasio en el selector de arriba.</p>
+      {!esDelRubro(seccion, comercio) ? (
+        <p>{comercio.nombre} no usa esta pantalla. Si es de otro comercio, elegilo en el selector de arriba.</p>
       ) : (
         <p>Esta pantalla es para el jefe. Si la necesitás, pedile que te dé permiso en Mis comercios.</p>
       )}

@@ -213,7 +213,9 @@ export const useDatos = create<EstadoDatos>()(
 
         crearComercio: (comercio) => {
           const id = nuevoId();
-          set((s) => ({ comercios: [...s.comercios, { ...comercio, id, permisosEmpleado: ["panel_del_dia", "stock", "compras"], combinarPromos: "mejor" }] }));
+          // En un gimnasio el empleado de recepción también anota socios
+          const permisosEmpleado: Comercio["permisosEmpleado"] = comercio.rubro === "gimnasio" ? ["panel_del_dia", "stock", "socios"] : ["panel_del_dia", "stock", "compras"];
+          set((s) => ({ comercios: [...s.comercios, { ...comercio, id, permisosEmpleado, combinarPromos: "mejor" }] }));
           return id;
         },
 
@@ -265,7 +267,13 @@ export const useDatos = create<EstadoDatos>()(
       };
     },
     // skipHydration: se lee del navegador recién cuando la página cargó (ver components/layout/Marco.tsx)
-    // version 2: se sumaron el gimnasio y sus socios. Los datos de prueba guardados antes se arman de nuevo.
-    { name: "mantenete-datos", version: 2, migrate: () => baseNueva() as EstadoDatos, skipHydration: true },
+    // version 2: se sumaron los socios del gimnasio. Lo que ya estaba guardado se mantiene (por ejemplo un
+    // gimnasio creado a mano) y arranca sin socios. El gimnasio de prueba aparece al reiniciar los datos.
+    {
+      name: "mantenete-datos",
+      version: 2,
+      migrate: (guardado) => ({ ...(guardado as EstadoDatos), socios: (guardado as Partial<EstadoDatos>).socios ?? [] }),
+      skipHydration: true,
+    },
   ),
 );

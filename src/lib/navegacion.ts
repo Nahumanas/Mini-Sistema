@@ -21,7 +21,9 @@ import type { Comercio, Permiso, Rubro } from "./tipos";
 // - soloJefe: el empleado nunca la ve.
 // - permiso: el empleado la ve solo si el jefe se lo dio en Mis comercios.
 // - rubro: aparece solo en los comercios de ese rubro (por ejemplo Socios, solo en gimnasios).
-export type Seccion = { titulo: string; ruta: string; icono: LucideIcon; soloJefe?: boolean; permiso?: Permiso; rubro?: Rubro };
+// - noEn: no aparece en esos rubros (por ejemplo Vencimientos, que un gimnasio no usa).
+// Así cada rubro tiene su propio menú, como en la versión de Streamlit.
+export type Seccion = { titulo: string; ruta: string; icono: LucideIcon; soloJefe?: boolean; permiso?: Permiso; rubro?: Rubro; noEn?: Rubro[] };
 export type Grupo = { titulo: string | null; secciones: Seccion[] };
 
 export const MENU: Grupo[] = [
@@ -32,7 +34,7 @@ export const MENU: Grupo[] = [
       { titulo: "Caja", ruta: "/caja", icono: Wallet },
       { titulo: "Compras", ruta: "/compras", icono: Package, permiso: "compras" },
       { titulo: "Gastos", ruta: "/gastos", icono: Receipt, permiso: "gastos" },
-      { titulo: "Vencimientos", ruta: "/vencimientos", icono: CalendarClock, permiso: "vencimientos" },
+      { titulo: "Vencimientos", ruta: "/vencimientos", icono: CalendarClock, permiso: "vencimientos", noEn: ["gimnasio"] },
     ],
   },
   {
@@ -69,10 +71,16 @@ export function buscarSeccion(ruta: string) {
 /** ¿Puede entrar a esta pantalla? El jefe a todas; el empleado a la Caja y a las que tenga permiso.
  * Las de un rubro (Socios) solo existen en los comercios de ese rubro. */
 export function puedeVer(seccion: Seccion, esJefe: boolean, comercio: Comercio) {
-  if (seccion.rubro && seccion.rubro !== comercio.rubro) return false;
+  if (!esDelRubro(seccion, comercio)) return false;
   if (esJefe) return true;
   if (seccion.soloJefe) return false;
   return !seccion.permiso || comercio.permisosEmpleado.includes(seccion.permiso);
+}
+
+/** ¿Esta pantalla existe en este tipo de comercio? (Socios solo en gimnasios, Vencimientos no en gimnasios) */
+export function esDelRubro(seccion: Seccion, comercio: Comercio) {
+  if (seccion.rubro && seccion.rubro !== comercio.rubro) return false;
+  return !seccion.noEn?.includes(comercio.rubro);
 }
 
 /** Para las migas de pan: el grupo de la pantalla ("Día a día") y su título ("Caja"). */
