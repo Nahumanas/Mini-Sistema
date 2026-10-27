@@ -15,7 +15,9 @@ const PERMISOS: { clave: Permiso; texto: string; soloGimnasio?: boolean }[] = [
   { clave: "compras", texto: "Compras (cargar lo que llega)" },
   { clave: "gastos", texto: "Gastos" },
   { clave: "vencimientos", texto: "Vencimientos (cargar tandas y retirar lo vencido)" },
-  { clave: "socios", texto: "Socios (ver y anotar socios)", soloGimnasio: true },
+  { clave: "socios", texto: "Socios (ver, dar de alta y cobrar desde la ficha)", soloGimnasio: true },
+  { clave: "cuotas", texto: "Cuotas y vencimientos (cobrar cuotas y avisar a los que deben)", soloGimnasio: true },
+  { clave: "clases", texto: "Clases (anotar socios, lista de espera y asistencia)", soloGimnasio: true },
 ];
 
 // Los comercios del dueño: sus datos, sus empleados y qué puede ver cada empleado. Y crear uno nuevo.

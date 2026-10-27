@@ -1,15 +1,23 @@
 import type { MedioDePago } from "./formato";
 import { ahora, hoy, sumarDias } from "./fechas";
+import { ejemploGimnasio } from "./demo-gimnasio";
 import type {
+  Asistencia,
   Caja,
+  Clase,
   Comercio,
   Compra,
+  Cuota,
+  Disciplina,
   Empleado,
   Gasto,
   Lote,
+  Plan,
   Producto,
   Promo,
   Proveedor,
+  ReglasGimnasio,
+  Reserva,
   Retiro,
   Socio,
   Venta,
@@ -34,7 +42,15 @@ export type BaseDemo = {
   retiros: Retiro[];
   promos: Promo[];
   empleados: Empleado[];
+  // Gimnasio
+  disciplinas: Disciplina[];
+  planes: Plan[];
+  clases: Clase[];
+  reglasGimnasio: ReglasGimnasio[];
   socios: Socio[];
+  reservas: Reserva[];
+  cuotas: Cuota[];
+  asistencias: Asistencia[];
 };
 
 /** Un "dado" que siempre tira los mismos números (mulberry32). */
@@ -51,7 +67,7 @@ const COMERCIOS: Comercio[] = [
   { id: 1, nombre: "Ferretería Don Tito", rubro: "ferreteria", direccion: "Calle San Martín 1200", usaTicket: true, permisosEmpleado: ["panel_del_dia", "stock", "compras"], combinarPromos: "mejor" },
   { id: 2, nombre: "Kiosco El Paso", rubro: "kiosco", direccion: "Av. Rivadavia 4500", usaTicket: false, permisosEmpleado: ["panel_del_dia", "stock", "compras", "vencimientos"], combinarPromos: "mejor" },
   { id: 3, nombre: "Tienda Urbana", rubro: "ropa", direccion: "Galería Sol, local 12", usaTicket: true, permisosEmpleado: ["stock"], combinarPromos: "mejor" },
-  { id: 4, nombre: "Gimnasio Fuerza Norte", rubro: "gimnasio", direccion: "Av. Mitre 850", usaTicket: false, permisosEmpleado: ["panel_del_dia", "stock", "socios"], combinarPromos: "mejor" },
+  { id: 4, nombre: "Gimnasio Fuerza Norte", rubro: "gimnasio", direccion: "Av. Mitre 850", usaTicket: false, permisosEmpleado: ["panel_del_dia", "stock", "socios", "cuotas", "clases"], combinarPromos: "mejor" },
 ];
 
 // [código, nombre, categoría, precio, costo, stock, stock mínimo, días que dura]
@@ -104,22 +120,6 @@ const MOVIMIENTO: Record<number, { ventasPorDia: number; medios: [MedioDePago, n
   3: { ventasPorDia: 5, medios: [["credito", 0.4], ["debito", 0.25], ["transferencia", 0.2], ["efectivo", 0.15]] },
   4: { ventasPorDia: 6, medios: [["efectivo", 0.4], ["transferencia", 0.45], ["debito", 0.15]] },
 };
-
-// Socios del gimnasio: [nombre, DNI, teléfono, plan, días que le faltan para vencer (negativo = ya venció; null = nunca pagó)]
-const SOCIOS: [string, string, string, string, number | null][] = [
-  ["Lucía Fernández", "30000000", "11 5123-4401", "Mensual libre", 18],
-  ["Martín Gómez", "33456789", "11 5123-4402", "8 clases por mes", 3],
-  ["Valentina Rodríguez", "38912345", "11 5123-4403", "Mensual libre", 25],
-  ["Joaquín López", "35678123", "11 5123-4404", "Trimestral libre", 61],
-  ["Camila Martínez", "40123456", "11 5123-4405", "12 clases por mes", -4],
-  ["Tomás Díaz", "37890234", "11 5123-4406", "Mensual libre", 9],
-  ["Sofía Romero", "41234567", "11 5123-4407", "8 clases por mes", -12],
-  ["Nicolás Sosa", "34567890", "11 5123-4408", "Mensual libre", 1],
-  ["Florencia Álvarez", "39876543", "11 5123-4409", "Mensual libre", 22],
-  ["Federico Torres", "32109876", "11 5123-4410", "12 clases por mes", 14],
-  ["Agustina Ruiz", "42345678", "11 5123-4411", "Mensual libre", null],
-  ["Matías Benítez", "36789012", "11 5123-4412", "Trimestral libre", -30],
-];
 
 export function crearDatosDemo(): BaseDemo {
   const azar = dado(2026);
@@ -267,18 +267,16 @@ export function crearDatosDemo(): BaseDemo {
     { id: id++, comercioId: 4, nombre: "Diego", activo: true },
   ];
 
-  const socios: Socio[] = SOCIOS.map(([nombre, dni, telefono, plan, faltan], i) => ({
-    id: id++,
-    comercioId: 4,
-    nombre,
-    dni,
-    telefono,
-    email: "",
-    plan,
-    vence: faltan === null ? null : sumarDias(fechaHoy, faltan),
-    alta: sumarDias(fechaHoy, -40 - i * 9),
-    activo: true,
-  }));
+  // El gimnasio: actividades, planes, la grilla, socios con sus cuotas (que entran como ventas) y reservas
+  const gimnasio = ejemploGimnasio({ comercioId: 4, idInicial: id });
+  id = gimnasio.siguienteId;
+  ventas.push(...gimnasio.ventas);
+  // Las cuotas se agregaron al final: se ordena todo por fecha y se numeran de nuevo los tickets de cada comercio
+  ventas.sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const numeracion: Record<number, number> = {};
+  for (const v of ventas) v.numero = numeracion[v.comercioId] = (numeracion[v.comercioId] ?? 0) + 1;
 
-  return { comercios: COMERCIOS, productos, cajas, ventas, proveedores, compras, gastos, lotes, retiros: [], promos, empleados, socios };
+  return { comercios: COMERCIOS, productos, cajas, ventas, proveedores, compras, gastos, lotes, retiros: [], promos, empleados,
+    disciplinas: gimnasio.disciplinas, planes: gimnasio.planes, clases: gimnasio.clases, reglasGimnasio: gimnasio.reglasGimnasio,
+    socios: gimnasio.socios, reservas: gimnasio.reservas, cuotas: gimnasio.cuotas, asistencias: gimnasio.asistencias };
 }

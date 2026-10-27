@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Info, KeyRound, User } from "lucide-react";
 import { DUENO } from "@/lib/datos-demo";
+import { pantallaDeEntrada } from "@/lib/navegacion";
 import { useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useDatosListos } from "./layout/Marco";
@@ -31,8 +32,8 @@ export function Ingreso() {
   const [restante, setRestante] = useState(0); // segundos que faltan para poder probar de nuevo
 
   useEffect(() => {
-    if (listos && sesion) router.replace(sesion.rol === "jefe" ? "/inicio" : "/caja");
-  }, [listos, sesion, router]);
+    if (listos && sesion) router.replace(pantallaDeEntrada(sesion.rol === "jefe", comercios.find((c) => c.id === sesion.comercioId)));
+  }, [listos, sesion, router, comercios]);
 
   // Mientras está bloqueado, la cuenta regresiva baja de a un segundo
   useEffect(() => {
