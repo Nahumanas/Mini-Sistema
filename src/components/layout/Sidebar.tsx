@@ -52,7 +52,7 @@ export function Sidebar() {
 
         <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Menú principal">
           {MENU.map((grupo) => {
-            const visibles = grupo.secciones.filter((s) => puedeVer(s, esJefe, comercio.permisosEmpleado));
+            const visibles = grupo.secciones.filter((s) => puedeVer(s, esJefe, comercio));
             if (!visibles.length) return null;
             return (
               <div key={grupo.titulo ?? "inicio"} className="mb-5 last:mb-0">

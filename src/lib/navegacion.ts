@@ -9,17 +9,19 @@ import {
   Package,
   Receipt,
   Settings,
+  Users,
   Store,
   Tag,
   Wallet,
 } from "lucide-react";
-import type { Permiso } from "./tipos";
+import type { Comercio, Permiso, Rubro } from "./tipos";
 
 // El menú de la izquierda, igual que en Streamlit: Inicio, Día a día, Control y Administración.
 // Para agregar una pantalla al menú alcanza con sumarla acá.
 // - soloJefe: el empleado nunca la ve.
 // - permiso: el empleado la ve solo si el jefe se lo dio en Mis comercios.
-export type Seccion = { titulo: string; ruta: string; icono: LucideIcon; soloJefe?: boolean; permiso?: Permiso };
+// - rubro: aparece solo en los comercios de ese rubro (por ejemplo Socios, solo en gimnasios).
+export type Seccion = { titulo: string; ruta: string; icono: LucideIcon; soloJefe?: boolean; permiso?: Permiso; rubro?: Rubro };
 export type Grupo = { titulo: string | null; secciones: Seccion[] };
 
 export const MENU: Grupo[] = [
@@ -32,6 +34,10 @@ export const MENU: Grupo[] = [
       { titulo: "Gastos", ruta: "/gastos", icono: Receipt, permiso: "gastos" },
       { titulo: "Vencimientos", ruta: "/vencimientos", icono: CalendarClock, permiso: "vencimientos" },
     ],
+  },
+  {
+    titulo: "Gimnasio",
+    secciones: [{ titulo: "Socios", ruta: "/socios", icono: Users, permiso: "socios", rubro: "gimnasio" }],
   },
   {
     titulo: "Control",
@@ -60,11 +66,13 @@ export function buscarSeccion(ruta: string) {
   return SECCIONES.find((s) => s.ruta === ruta);
 }
 
-/** ¿Puede entrar a esta pantalla? El jefe a todas; el empleado a la Caja y a las que tenga permiso. */
-export function puedeVer(seccion: Seccion, esJefe: boolean, permisos: Permiso[]) {
+/** ¿Puede entrar a esta pantalla? El jefe a todas; el empleado a la Caja y a las que tenga permiso.
+ * Las de un rubro (Socios) solo existen en los comercios de ese rubro. */
+export function puedeVer(seccion: Seccion, esJefe: boolean, comercio: Comercio) {
+  if (seccion.rubro && seccion.rubro !== comercio.rubro) return false;
   if (esJefe) return true;
   if (seccion.soloJefe) return false;
-  return !seccion.permiso || permisos.includes(seccion.permiso);
+  return !seccion.permiso || comercio.permisosEmpleado.includes(seccion.permiso);
 }
 
 /** Para las migas de pan: el grupo de la pantalla ("Día a día") y su título ("Caja"). */

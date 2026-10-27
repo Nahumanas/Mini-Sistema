@@ -51,11 +51,15 @@ function ConPermiso({ children }: { children: ReactNode }) {
   const sesion = useSesion((s) => s.sesion);
   const comercio = useComercioActivo();
   const seccion = buscarSeccion(ruta);
-  if (!seccion || puedeVer(seccion, sesion?.rol === "jefe", comercio.permisosEmpleado)) return <>{children}</>;
+  if (!seccion || puedeVer(seccion, sesion?.rol === "jefe", comercio)) return <>{children}</>;
   return (
     <div className="mx-auto mt-10 flex max-w-md flex-col items-center gap-3 text-center text-texto-suave">
       <Lock className="size-6" strokeWidth={1.5} />
-      <p>Esta pantalla es para el jefe. Si la necesitás, pedile que te dé permiso en Mis comercios.</p>
+      {seccion.rubro && seccion.rubro !== comercio.rubro ? (
+        <p>Esta pantalla es solo para gimnasios. Elegí el gimnasio en el selector de arriba.</p>
+      ) : (
+        <p>Esta pantalla es para el jefe. Si la necesitás, pedile que te dé permiso en Mis comercios.</p>
+      )}
     </div>
   );
 }
