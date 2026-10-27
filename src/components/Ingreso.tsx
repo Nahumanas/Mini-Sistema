@@ -22,6 +22,8 @@ export function Ingreso() {
   const { sesion, ingresar, comercioId: ultimoComercio } = useSesion();
   const comercios = useDatos((s) => s.comercios);
   const empleados = useDatos((s) => s.empleados);
+  const pinCorrecto = useDatos((s) => s.pinCorrecto);
+  const pinCambiado = useDatos((s) => s.pin !== null);
 
   const [comercioId, setComercioId] = useState<number | null>(null);
   const [quien, setQuien] = useState<"empleado" | "jefe">("empleado");
@@ -30,6 +32,8 @@ export function Ingreso() {
   const [error, setError] = useState("");
   const [intentos, setIntentos] = useState(0);
   const [restante, setRestante] = useState(0); // segundos que faltan para poder probar de nuevo
+  const [olvido, setOlvido] = useState(false);
+  const reiniciar = useDatos((s) => s.reiniciar);
 
   useEffect(() => {
     if (listos && sesion) router.replace(pantallaDeEntrada(sesion.rol === "jefe", comercios.find((c) => c.id === sesion.comercioId)));
@@ -48,7 +52,7 @@ export function Ingreso() {
   const bloqueado = restante > 0;
   const deEste = empleados.filter((e) => e.comercioId === elegido && e.activo);
 
-  function entrar(e: React.FormEvent) {
+  async function entrar(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     if (quien === "empleado") {
@@ -57,7 +61,7 @@ export function Ingreso() {
       return;
     }
     if (bloqueado) return;
-    if (pin !== DUENO.pinDemo) {
+    if (!(await pinCorrecto(pin))) {
       const nuevos = intentos + 1;
       setIntentos(nuevos);
       setPin("");
@@ -88,7 +92,8 @@ export function Ingreso() {
           <p className="flex gap-2.5 rounded-md border border-borde bg-superficie-suave p-3 text-sm">
             <Info className="mt-0.5 size-4 shrink-0 text-texto-suave" />
             <span>
-              Demo con datos de prueba. Entrá como jefe con el PIN <b>{DUENO.pinDemo}</b>, o como empleado con cualquier nombre.
+              Demo con datos de prueba. Entrá como jefe con el PIN{" "}
+              {pinCambiado ? "que elegiste en Configuración" : <b>{DUENO.pinDemo}</b>}, o como empleado con cualquier nombre.
             </span>
           </p>
 
@@ -128,7 +133,7 @@ export function Ingreso() {
                 id="pin"
                 type="password"
                 inputMode="numeric"
-                maxLength={6}
+                maxLength={8}
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
                 disabled={bloqueado}
@@ -139,6 +144,34 @@ export function Ingreso() {
           )}
 
           {error && <p className="text-sm text-peligro">{bloqueado ? `${error} (${restante} s)` : error}</p>}
+
+          {/* Olvidé mi PIN: en la demo no hay mail para recuperarlo, así que se vuelve a empezar (con Supabase va por mail) */}
+          {quien === "jefe" && pinCambiado && (
+            <div className="text-sm text-texto-suave">
+              {olvido ? (
+                <p className="flex flex-col gap-2 rounded-md border border-borde p-3">
+                  En la demo, para recuperar el PIN hay que volver a empezar: se borran tus cambios y vuelve el PIN {DUENO.pinDemo}.
+                  <span className="flex gap-2">
+                    <Boton variante="fantasma" onClick={() => setOlvido(false)}>Cancelar</Boton>
+                    <Boton
+                      variante="peligro"
+                      onClick={() => {
+                        reiniciar();
+                        setOlvido(false);
+                        setError("");
+                      }}
+                    >
+                      Volver a empezar
+                    </Boton>
+                  </span>
+                </p>
+              ) : (
+                <button type="button" onClick={() => setOlvido(true)} className="underline underline-offset-2 hover:text-texto">
+                  Me olvidé el PIN
+                </button>
+              )}
+            </div>
+          )}
 
           <Boton type="submit" variante="primario" icono={quien === "jefe" ? KeyRound : User} disabled={quien === "jefe" && bloqueado} className="h-11">
             Entrar

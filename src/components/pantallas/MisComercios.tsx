@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Save, UserPlus, X } from "lucide-react";
-import type { Permiso, Rubro } from "@/lib/tipos";
+import { Clock, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
+import { HORARIO_SUGERIDO } from "@/lib/horarios";
+import type { Comercio, Permiso, Rubro, Turno } from "@/lib/tipos";
 import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
@@ -171,6 +172,93 @@ export function MisComercios() {
           </div>
         </Tarjeta>
       </div>
+
+      {/* key: al cambiar de comercio, el formulario arranca con los horarios del otro */}
+      <HorariosYTurnos key={comercio.id} comercio={comercio} />
     </div>
+  );
+}
+
+/**
+ * El horario del local y sus turnos (por ejemplo Mañana de 08:00 a 14:00 y Tarde de 14:00 a 21:00).
+ * Sirven para que la Caja avise cuándo termina un turno (para hacer el relevo) y para que en
+ * Cajas anteriores cada relevo diga a qué turno corresponde.
+ */
+function HorariosYTurnos({ comercio }: { comercio: Comercio }) {
+  const guardarHorarios = useDatos((s) => s.guardarHorarios);
+  const avisar = useInterfaz((s) => s.avisar);
+  const cargado = Boolean(comercio.horaApertura);
+  const base = cargado ? { horaApertura: comercio.horaApertura ?? "", horaCierre: comercio.horaCierre ?? "", turnos: comercio.turnos } : HORARIO_SUGERIDO;
+  const [apertura, setApertura] = useState(base.horaApertura);
+  const [cierre, setCierre] = useState(base.horaCierre);
+  const [turnos, setTurnos] = useState<Turno[]>(base.turnos.map((t) => ({ ...t })));
+  const [error, setError] = useState("");
+
+  const cambiarTurno = (i: number, cambios: Partial<Turno>) => setTurnos(turnos.map((t, j) => (j === i ? { ...t, ...cambios } : t)));
+  const claseHora = `${claseInput} numeros`;
+
+  return (
+    <Tarjeta titulo={<span className="inline-flex items-center gap-2"><Clock className="size-4 text-texto-suave" />Horarios y turnos {cargado ? `· ${comercio.horaApertura} a ${comercio.horaCierre}` : "· sin cargar"}</span>}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError("");
+          try {
+            guardarHorarios(comercio.id, apertura, cierre, turnos);
+            avisar("Listo, guardaste los horarios y turnos.");
+          } catch (err) {
+            setError((err as Error).message);
+          }
+        }}
+        className="flex flex-col gap-4"
+      >
+        <p className="text-sm text-texto-suave">
+          La Caja avisa cuando termina un turno (para hacer el relevo) o si se está cobrando fuera de horario. Si un turno pasa la medianoche (de 20:00 a 02:00), ponelo igual: el sistema lo entiende.
+        </p>
+        <div className="grid max-w-md grid-cols-2 gap-3">
+          <Campo etiqueta="Abre a las">
+            <input id="hora-apertura" type="time" step={900} value={apertura} onChange={(e) => setApertura(e.target.value)} className={claseHora} required />
+          </Campo>
+          <Campo etiqueta="Cierra a las">
+            <input id="hora-cierre" type="time" step={900} value={cierre} onChange={(e) => setCierre(e.target.value)} className={claseHora} required />
+          </Campo>
+        </div>
+
+        <fieldset className="flex flex-col gap-3">
+          <legend className="mb-2 text-sm font-medium">Turnos {turnos.length ? `(${turnos.length})` : "· ninguno: un solo turno todo el día, no hace falta relevo"}</legend>
+          {turnos.map((t, i) => (
+            <div key={i} className="grid grid-cols-[1fr_auto] items-end gap-2 sm:grid-cols-[2fr_1fr_1fr_auto]">
+              <Campo etiqueta="Nombre del turno" className="col-span-2 sm:col-span-1">
+                <input id={`turno-nombre-${i}`} value={t.nombre} onChange={(e) => cambiarTurno(i, { nombre: e.target.value })} className={claseInput} required />
+              </Campo>
+              <Campo etiqueta="Desde">
+                <input id={`turno-desde-${i}`} type="time" step={900} value={t.desde} onChange={(e) => cambiarTurno(i, { desde: e.target.value })} className={claseHora} required />
+              </Campo>
+              <Campo etiqueta="Hasta">
+                <input id={`turno-hasta-${i}`} type="time" step={900} value={t.hasta} onChange={(e) => cambiarTurno(i, { hasta: e.target.value })} className={claseHora} required />
+              </Campo>
+              <Boton variante="fantasma" icono={Trash2} onClick={() => setTurnos(turnos.filter((_, j) => j !== i))} aria-label={`Quitar el turno ${t.nombre}`} />
+            </div>
+          ))}
+          {turnos.length < 4 && (
+            <Boton
+              icono={Plus}
+              className="self-start"
+              onClick={() => {
+                const anterior = turnos.at(-1);
+                setTurnos([...turnos, { nombre: `Turno ${turnos.length + 1}`, desde: anterior?.hasta ?? apertura, hasta: cierre }]);
+              }}
+            >
+              Agregar un turno
+            </Boton>
+          )}
+        </fieldset>
+
+        {error && <p className="text-sm text-peligro">{error}</p>}
+        <Boton type="submit" variante="primario" icono={Save} className="self-end">
+          Guardar horarios
+        </Boton>
+      </form>
+    </Tarjeta>
   );
 }

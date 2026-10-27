@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Lock, LockOpen, Repeat } from "lucide-react";
-import { relevosDe } from "@/lib/caja";
-import { ddmm, hora, hoy } from "@/lib/fechas";
+import { Clock, Lock, LockOpen, Repeat } from "lucide-react";
+import { relevosDe, turnoEnCurso } from "@/lib/caja";
+import { ahora, ddmm, hora, hoy } from "@/lib/fechas";
+import { dentroDelHorario, turnoDeLaHora, turnoEntre } from "@/lib/horarios";
 import { type MedioDePago, pesos } from "@/lib/formato";
 import { calcular } from "@/lib/promos";
 import { useComercioActivo, useSesion } from "@/store/comercio";
@@ -20,7 +21,7 @@ import { TablaCarrito } from "./TablaCarrito";
 export function PointOfSale() {
   const comercio = useComercioActivo();
   const sesion = useSesion((s) => s.sesion);
-  const { cajas, relevos, productos: todos, promos: todasLasPromos } = useDatos();
+  const { cajas, relevos, ventas, productos: todos, promos: todasLasPromos } = useDatos();
   const items = useItemsDe(comercio.id);
   const escaner = useRef<HTMLInputElement>(null);
   const [medio, setMedio] = useState<MedioDePago>("efectivo");
@@ -67,6 +68,17 @@ export function PointOfSale() {
     );
   }
 
+  // Avisos según los horarios que cargó el jefe (en Mis comercios)
+  const momento = ahora();
+  const turnoDeAhora = turnoDeLaHora(comercio.turnos, hora(momento));
+  const turnoDeQuienAtiende = turnoEntre(comercio.turnos, turnoEnCurso(caja, ventas, relevos).desde, momento);
+  const avisoHorario =
+    turnoDeQuienAtiende && turnoDeAhora?.nombre !== turnoDeQuienAtiende.nombre
+      ? `Terminó el turno ${turnoDeQuienAtiende.nombre} (${turnoDeQuienAtiende.desde} a ${turnoDeQuienAtiende.hasta}). Si cambia quien atiende, tocá Relevo de turno.`
+      : !dentroDelHorario(comercio, hora(momento))
+        ? `Estás fuera del horario del local (${comercio.horaApertura} a ${comercio.horaCierre}). Si ya terminó el día, cerrá la caja.`
+        : null;
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -101,6 +113,13 @@ export function PointOfSale() {
           </button>
         </div>
       </div>
+
+      {avisoHorario && (
+        <p className="-mt-1 flex items-start gap-2 rounded-md border border-amber-400/50 bg-amber-400/10 p-3 text-[15px]">
+          <Clock className="mt-0.5 size-4 shrink-0" />
+          {avisoHorario}
+        </p>
+      )}
 
       {promos.some((p) => p.activa) && (
         <p className="-mt-2 text-sm text-texto-suave">

@@ -82,7 +82,7 @@ export function BarraIngreso({ comercioId, productos, inputRef }: Props) {
     } else if (e.key === "Enter") {
       e.preventDefault();
       // Código exacto (lo que manda el lector): se agrega directo con la cantidad que haya
-      const porCodigo = productos.find((p) => p.codigo === texto.trim());
+      const porCodigo = texto.trim() ? productos.find((p) => p.codigo === texto.trim()) : undefined;
       if (porCodigo) agregar(porCodigo);
       else if (elegido) agregar();
       else if (sugerencias[resaltado]) elegir(sugerencias[resaltado]);
