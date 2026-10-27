@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Lock, LockOpen } from "lucide-react";
+import { Lock, LockOpen, Repeat } from "lucide-react";
+import { relevosDe } from "@/lib/caja";
 import { ddmm, hora, hoy } from "@/lib/fechas";
 import { type MedioDePago, pesos } from "@/lib/formato";
 import { calcular } from "@/lib/promos";
@@ -9,7 +10,7 @@ import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useItemsDe } from "@/store/carrito";
 import { useDatos } from "@/store/datos";
 import { Encabezado } from "../ui/base";
-import { AbrirCaja, CerrarCaja } from "./AperturaCierre";
+import { AbrirCaja, CerrarCaja, RelevoTurno } from "./AperturaCierre";
 import { BarraIngreso } from "./BarraIngreso";
 import { PieCobro } from "./PieCobro";
 import { TablaCarrito } from "./TablaCarrito";
@@ -19,17 +20,20 @@ import { TablaCarrito } from "./TablaCarrito";
 export function PointOfSale() {
   const comercio = useComercioActivo();
   const sesion = useSesion((s) => s.sesion);
-  const { cajas, productos: todos, promos: todasLasPromos } = useDatos();
+  const { cajas, relevos, productos: todos, promos: todasLasPromos } = useDatos();
   const items = useItemsDe(comercio.id);
   const escaner = useRef<HTMLInputElement>(null);
   const [medio, setMedio] = useState<MedioDePago>("efectivo");
   const [cerrando, setCerrando] = useState(false);
+  const [relevando, setRelevando] = useState(false);
 
   const caja = cajas.find((c) => c.comercioId === comercio.id && !c.cerrada);
   const productos = useMemo(() => todos.filter((p) => p.comercioId === comercio.id && p.activo), [todos, comercio.id]);
   const promos = useMemo(() => todasLasPromos.filter((p) => p.comercioId === comercio.id), [todasLasPromos, comercio.id]);
   // La cuenta con las promos se rehace con cada cambio: el total que se ve es el que se cobra
   const cuenta = useMemo(() => calcular(promos, items, medio, comercio.combinarPromos), [promos, items, medio, comercio.combinarPromos]);
+
+  const ultimoRelevo = caja ? relevosDe(relevos, caja.id).at(-1) : undefined;
 
   if (!caja) {
     return (
@@ -54,16 +58,40 @@ export function PointOfSale() {
     );
   }
 
+  if (relevando) {
+    return (
+      <div className="mx-auto flex max-w-4xl flex-col gap-6">
+        <Encabezado titulo="Relevo de turno" descripcion="Cambia quien atiende y la caja sigue abierta. La caja se cierra una sola vez, al final del día." />
+        <RelevoTurno caja={caja} alTerminar={() => setRelevando(false)} />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Caja</h1>
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <LockOpen className="size-4 shrink-0 text-primary" strokeWidth={2} />
           <p className="text-sm text-texto-suave">
-            Abierta por <span className="font-medium text-texto">{caja.responsable}</span> a las {hora(caja.abierta)} · inicial{" "}
-            <span className="numeros">{pesos(caja.montoInicial)}</span>
+            {ultimoRelevo ? (
+              <>
+                Atiende <span className="font-medium text-texto">{caja.responsable}</span> desde las {hora(ultimoRelevo.fecha)} · abierta a las {hora(caja.abierta)}
+              </>
+            ) : (
+              <>
+                Abierta por <span className="font-medium text-texto">{caja.responsable}</span> a las {hora(caja.abierta)} · inicial{" "}
+                <span className="numeros">{pesos(caja.montoInicial)}</span>
+              </>
+            )}
           </p>
+          <button
+            onClick={() => setRelevando(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-borde bg-superficie px-3 py-1.5 text-sm hover:bg-superficie-suave"
+          >
+            <Repeat className="size-3.5" />
+            Relevo de turno
+          </button>
           <button
             onClick={() => setCerrando(true)}
             className="inline-flex items-center gap-1.5 rounded-md border border-borde bg-superficie px-3 py-1.5 text-sm hover:bg-superficie-suave"

@@ -5,7 +5,8 @@ import { ahora, hoy } from "@/lib/fechas";
 import type { MedioDePago } from "@/lib/formato";
 import type { Cuenta } from "@/lib/promos";
 import { ejemploGimnasio } from "@/lib/demo-gimnasio";
-import type { Comercio, Compra, Gasto, ItemVenta, Producto, Promo, Retiro, Socio, Venta } from "@/lib/tipos";
+import { turnoEnCurso } from "@/lib/caja";
+import type { Comercio, Compra, Gasto, ItemVenta, Producto, Promo, Relevo, Retiro, Socio, Venta } from "@/lib/tipos";
 import { type AccionesGimnasio, accionesGimnasio } from "./acciones-gimnasio";
 
 // La "base de datos" de prueba, guardada en el navegador (localStorage).
@@ -17,6 +18,9 @@ type Acciones = {
   registrarVenta: (comercioId: number, items: ItemVenta[], medioPago: MedioDePago, cuenta: Cuenta, vendidoPor: string) => Venta;
   abrirCaja: (comercioId: number, responsable: string, montoInicial: number) => void;
   cerrarCaja: (comercioId: number, efectivoContado: number, nota: string) => void;
+  registrarRelevo: (comercioId: number, entra: string, efectivoContado: number, nota: string) => Relevo;
+  anularVenta: (cajaId: number, ventaId: number, hechoPor: string, motivo: string) => void;
+  recontarEfectivo: (cajaId: number, efectivo: number, hechoPor: string, motivo: string) => void;
   registrarCompra: (comercioId: number, proveedorId: number, items: Compra["items"], cargadaPor: string) => void;
   agregarProveedor: (comercioId: number, nombre: string, telefono: string) => number;
   cargarGasto: (gasto: Omit<Gasto, "id">) => void;
@@ -115,6 +119,72 @@ export const useDatos = create<EstadoDatos>()(
               return { ...c, cerrada: ahora(), efectivoEsperado: c.montoInicial + efectivo, efectivoContado, nota };
             }),
           })),
+
+        // Relevo de turno: el que se va cuenta el efectivo y se compara con lo de SU turno (con lo que arrancó
+        // más lo que cobró en efectivo). La caja sigue abierta y desde ahora queda a nombre del que entra.
+        registrarRelevo: (comercioId, entra, efectivoContado, nota) => {
+          const s = get();
+          const caja = s.cajas.find((c) => c.comercioId === comercioId && !c.cerrada);
+          if (!caja) throw new Error("La caja ya está cerrada. Abrí una nueva para seguir cobrando.");
+          const quien = entra.trim().slice(0, 100);
+          if (!quien) throw new Error("Escribí quién recibe la caja.");
+          if (quien.toLowerCase() === caja.responsable.toLowerCase()) throw new Error(`${caja.responsable} ya está atendiendo: el relevo es para cuando entra otra persona.`);
+          if (!(efectivoContado >= 0)) throw new Error("Escribí el efectivo que contaste (puede ser 0).");
+          const actual = turnoEnCurso(caja, s.ventas, s.relevos);
+          const relevo: Relevo = {
+            id: nuevoId(),
+            comercioId,
+            cajaId: caja.id,
+            fecha: ahora(),
+            sale: caja.responsable,
+            entra: quien,
+            esperado: actual.esperado,
+            contado: efectivoContado,
+            diferencia: efectivoContado - actual.esperado,
+            nota: nota.trim().slice(0, 200),
+            ultimaVentaId: actual.ultimaVentaId,
+          };
+          set((x) => ({ relevos: [...x.relevos, relevo], cajas: x.cajas.map((c) => (c.id === caja.id ? { ...c, responsable: quien } : c)) }));
+          return relevo;
+        },
+
+        // Ajustes de una caja cerrada (solo el jefe). La venta no se borra: queda marcada como anulada,
+        // la mercadería vuelve al stock y el ajuste dice quién lo hizo, cuándo y por qué.
+        anularVenta: (cajaId, ventaId, hechoPor, motivo) => {
+          const s = get();
+          const caja = s.cajas.find((c) => c.id === cajaId);
+          if (!caja?.cerrada) throw new Error("La caja sigue abierta: los ajustes son para cajas cerradas.");
+          const venta = s.ventas.find((v) => v.id === ventaId && v.cajaId === cajaId);
+          if (!venta || venta.anulada) throw new Error("Esa venta no está en la caja o ya se anuló.");
+          if (!motivo.trim()) throw new Error("Escribí el motivo: es lo que explica el ajuste más adelante.");
+          const cuando = ahora();
+          set((x) => ({
+            ventas: x.ventas.map((v) => (v.id === ventaId ? { ...v, anulada: cuando } : v)),
+            ajustes: [...x.ajustes, { id: nuevoId(), comercioId: caja.comercioId, cajaId, fecha: cuando, hechoPor, tipo: "anular_venta", ventaId, monto: venta.total, motivo: motivo.trim().slice(0, 200) }],
+          }));
+          // Los productos vuelven al stock (las cuotas del gimnasio no son productos: tienen id negativo)
+          for (const i of venta.items) if (i.productoId > 0) moverStock(i.productoId, i.cantidad);
+          // Si era la cuota de un socio: la cuota queda anulada y el socio vuelve a como estaba
+          const cuota = s.cuotas.find((c) => c.ventaId === ventaId && !c.anulada);
+          if (cuota) {
+            const socio = s.socios.find((x) => x.id === cuota.socioId);
+            set((x) => ({ cuotas: x.cuotas.map((c) => (c.id === cuota.id ? { ...c, anulada: cuando } : c)) }));
+            if (socio) {
+              const clases = Math.max(socio.clasesRestantes - (cuota.clasesCargadas ?? 0), 0);
+              // Si fue la última cuota que pagó, vuelve al vencimiento de antes; si después pagó otra, manda la nueva
+              const cambios: Partial<Socio> = socio.vence === cuota.venceNuevo ? { vence: cuota.venceAntes, clasesRestantes: clases } : { clasesRestantes: clases };
+              set((x) => ({ socios: x.socios.map((so) => (so.id === socio.id ? { ...so, ...cambios } : so)) }));
+            }
+          }
+        },
+
+        recontarEfectivo: (cajaId, efectivo, hechoPor, motivo) => {
+          const caja = get().cajas.find((c) => c.id === cajaId);
+          if (!caja?.cerrada) throw new Error("La caja sigue abierta: los ajustes son para cajas cerradas.");
+          if (!(efectivo >= 0)) throw new Error("Escribí el efectivo que contaste de nuevo.");
+          if (!motivo.trim()) throw new Error("Escribí el motivo: es lo que explica el ajuste más adelante.");
+          set((x) => ({ ajustes: [...x.ajustes, { id: nuevoId(), comercioId: caja.comercioId, cajaId, fecha: ahora(), hechoPor, tipo: "recontar", ventaId: null, monto: efectivo, motivo: motivo.trim().slice(0, 200) }] }));
+        },
 
         registrarCompra: (comercioId, proveedorId, items, cargadaPor) => {
           const id = nuevoId();
@@ -248,9 +318,10 @@ export const useDatos = create<EstadoDatos>()(
     // skipHydration: se lee del navegador recién cuando la página cargó (ver components/layout/Marco.tsx)
     // Cuando cambia la forma de lo guardado, se acomoda lo que el navegador ya tenía (no se borra nada):
     // version 2: se sumaron los socios. version 3: todo el gimnasio (planes, clases, reservas, cuotas...).
+    // version 4: relevos de turno y ajustes de caja.
     {
       name: "mantenete-datos",
-      version: 3,
+      version: 4,
       migrate: (guardado, version) => migrar(guardado as Partial<EstadoDatos>, version),
       skipHydration: true,
     },
@@ -301,6 +372,10 @@ function migrar(g: Partial<EstadoDatos>, version: number): EstadoDatos {
     for (const c of d.comercios ?? []) {
       if (c.rubro === "gimnasio" && c.permisosEmpleado.includes("socios")) c.permisosEmpleado = [...new Set([...c.permisosEmpleado, "cuotas", "clases"] as const)];
     }
+  }
+  if (version < 4) {
+    d.relevos = [];
+    d.ajustes = [];
   }
   return d;
 }

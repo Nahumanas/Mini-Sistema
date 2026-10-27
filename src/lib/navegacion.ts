@@ -7,6 +7,7 @@ import {
   DoorOpen,
   FileSpreadsheet,
   FileText,
+  History,
   Home,
   type LucideIcon,
   Package,
@@ -55,6 +56,7 @@ export const MENU: Grupo[] = [
     titulo: "Control",
     secciones: [
       { titulo: "Panel del día", ruta: "/panel-del-dia", icono: BarChart3, permiso: "panel_del_dia" },
+      { titulo: "Cajas anteriores", ruta: "/cajas", icono: History, soloJefe: true },
       { titulo: "Stock", ruta: "/stock", icono: ClipboardList, permiso: "stock" },
       { titulo: "Reportes", ruta: "/reportes", icono: FileText, soloJefe: true },
     ],

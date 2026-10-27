@@ -5,9 +5,10 @@ import type { Lote, Producto, Venta } from "./tipos";
 // Las cuentas de los reportes (como reportes.py de Streamlit), separadas de las pantallas.
 // Reciben listas y devuelven números: así se pueden probar solas y reusar en Inicio, Panel y Reportes.
 
-/** Las ventas de uno o varios comercios entre dos fechas (incluidas). */
+/** Las ventas de uno o varios comercios entre dos fechas (incluidas). Las anuladas no cuentan. */
 export function ventasEntre(ventas: Venta[], desde: string, hasta: string, comercioIds?: number[]) {
   return ventas.filter((v) => {
+    if (v.anulada) return false;
     const dia = v.fecha.slice(0, 10);
     return dia >= desde && dia <= hasta && (!comercioIds || comercioIds.includes(v.comercioId));
   });

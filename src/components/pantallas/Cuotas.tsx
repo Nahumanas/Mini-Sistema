@@ -9,7 +9,7 @@ import { entraEnFiltro, plural, reglasDe, resumenSocios } from "@/lib/gimnasio";
 import type { Comercio, Socio } from "@/lib/tipos";
 import { useComercioActivo } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
-import { Encabezado, Kpi, Tabla, Tarjeta, Vacio } from "../ui/base";
+import { Chip, Encabezado, Kpi, Tabla, Tarjeta, Vacio } from "../ui/base";
 import { CobrarCuota, ElegirSocio } from "../gimnasio/comun";
 
 // Cuotas y vencimientos, como cuotas.py de Streamlit: cobrar una cuota, quién vence en los próximos días
@@ -23,7 +23,8 @@ export function Cuotas() {
   const suyas = cuotas.filter((c) => c.comercioId === comercio.id).sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id - a.id);
   const deHoy = suyas.filter((c) => c.fecha.slice(0, 10) === hoy());
   const delMes = suyas.filter((c) => c.fecha.slice(0, 7) === hoy().slice(0, 7));
-  const suma = (lista: typeof suyas) => lista.reduce((t, c) => t + c.monto, 0);
+  // Las cuotas anuladas con un ajuste de caja siguen en la lista (tachadas), pero no suman
+  const suma = (lista: typeof suyas) => lista.filter((c) => !c.anulada).reduce((t, c) => t + c.monto, 0);
 
   const planDe = (id: number | null) => planes.find((p) => p.id === id) ?? null;
   const suyos = socios.filter((s) => s.comercioId === comercio.id);
@@ -36,8 +37,8 @@ export function Cuotas() {
       <Encabezado titulo="Cuotas y vencimientos" descripcion="Cobrar cuotas, ver quién vence pronto y quién debe, y mandarles el recordatorio por WhatsApp." />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Kpi titulo="Cuotas de hoy" valor={pesos(suma(deHoy))} detalle={plural(deHoy.length, "cuota", "cuotas")} />
-        <Kpi titulo="Cuotas del mes" valor={pesos(suma(delMes))} detalle={plural(delMes.length, "cuota", "cuotas")} />
+        <Kpi titulo="Cuotas de hoy" valor={pesos(suma(deHoy))} detalle={plural(deHoy.filter((c) => !c.anulada).length, "cuota", "cuotas")} />
+        <Kpi titulo="Cuotas del mes" valor={pesos(suma(delMes))} detalle={plural(delMes.filter((c) => !c.anulada).length, "cuota", "cuotas")} />
         <Kpi titulo="Vencen" valor={String(resumen.vencenPronto)} detalle={`En los próximos ${diasAviso} días`} />
         <Kpi titulo="Deben" valor={String(resumen.deben)} />
       </div>
@@ -86,7 +87,7 @@ export function Cuotas() {
                   </td>
                   <td className="px-4 py-2">{socios.find((s) => s.id === c.socioId)?.nombre}</td>
                   <td className="hidden px-4 py-2 sm:table-cell">{planDe(c.planId)?.nombre}</td>
-                  <td className="numeros px-4 py-2 text-right">{pesos(c.monto)}</td>
+                  <td className="numeros px-4 py-2 text-right">{c.anulada ? <Chip tono="rojo">Anulada</Chip> : pesos(c.monto)}</td>
                   <td className="hidden px-4 py-2 sm:table-cell">{MEDIOS_DE_PAGO[c.medioPago]}</td>
                   <td className="hidden px-4 py-2 sm:table-cell">{ddmm(c.venceNuevo, true)}</td>
                   <td className="hidden px-4 py-2 text-texto-suave sm:table-cell">{c.cobradaPor}</td>

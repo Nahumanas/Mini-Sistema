@@ -64,6 +64,41 @@ export type Venta = {
   total: number;
   medioPago: MedioDePago;
   vendidoPor: string;
+  anulada?: string | null; // vacío = venta válida; con fecha y hora = el jefe la anuló con un ajuste de caja
+};
+
+/**
+ * Un relevo de turno: cambia quien atiende y la caja sigue abierta. El que se va cuenta el efectivo
+ * y queda anotado si faltó o sobró algo EN SU TURNO. El que entra arranca con lo contado.
+ */
+export type Relevo = {
+  id: number;
+  comercioId: number;
+  cajaId: number;
+  fecha: string; // fecha y hora
+  sale: string; // quién entrega la caja
+  entra: string; // quién la recibe
+  esperado: number; // con lo que arrancó el turno + lo que se cobró en efectivo en el turno
+  contado: number;
+  diferencia: number; // contado − esperado
+  nota: string;
+  ultimaVentaId: number; // la última venta del turno que termina (para no mezclar las del mismo minuto)
+};
+
+/**
+ * Una corrección del jefe sobre una caja ya cerrada. La caja no se toca: el ajuste queda anotado
+ * con fecha, quién y por qué, y el arqueo muestra la diferencia antes y después de los ajustes.
+ */
+export type AjusteCaja = {
+  id: number;
+  comercioId: number;
+  cajaId: number;
+  fecha: string;
+  hechoPor: string;
+  tipo: "anular_venta" | "recontar";
+  ventaId: number | null; // la venta anulada (solo en anular_venta)
+  monto: number; // anular_venta: el total de la venta; recontar: el efectivo recontado
+  motivo: string;
 };
 
 export type Proveedor = { id: number; comercioId: number; nombre: string; telefono: string };
@@ -201,6 +236,7 @@ export type Cuota = {
   venceNuevo: string;
   clasesCargadas: number | null;
   clasesDespues: number;
+  anulada?: string | null; // se anuló la venta de la cuota (ajuste de caja): el socio volvió a como estaba
 };
 
 /** Cada vez que alguien pasa el DNI por recepción (pasó o no lo dejaron pasar). */

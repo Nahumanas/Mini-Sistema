@@ -18,11 +18,12 @@ Para volver a los datos del principio: Configuración → Reiniciar datos de pru
 |---|---|
 | Ingresar | Jefe con PIN (demo: 1234) o empleado con su nombre |
 | Inicio | Cómo viene el día en cada comercio y en todos juntos (solo jefe) |
-| Caja | Escanear o buscar, carrito, promos automáticas, vuelto, cobrar; abrir y cerrar caja con arqueo |
+| Caja | Escanear o buscar, carrito, promos automáticas, vuelto, cobrar; abrir y cerrar caja con arqueo; **relevo de turno** (el que se va cuenta el efectivo y queda anotado si faltó o sobró en su turno) |
 | Compras | Cargar lo que llegó del proveedor (suma stock y actualiza el costo) |
 | Gastos | Alquiler, luz, sueldos… por mes y por categoría |
 | Vencimientos | Tandas con fecha de vencimiento, retirar lo vencido, pérdidas |
 | Panel del día | Cobrado, ventas, ticket promedio, ventas por hora, medios de pago |
+| Cajas anteriores | Cada caja con su arqueo y sus turnos. El jefe la corrige con un **ajuste** (anular una venta o recontar el efectivo) que queda anotado con fecha, quién y por qué (solo jefe) |
 | Stock | Buscar, stock bajo, editar precios y stock, crear y dar de baja productos |
 | Reportes | Vendido, ganancia bruta y neta, ranking, qué comprar, descargar a Excel |
 | Descuentos y promos | 2x1 / 3x2, % en productos o categorías, % por medio de pago |
@@ -42,6 +43,8 @@ Para volver a los datos del principio: Configuración → Reiniciar datos de pru
 | ![Caja](capturas/caja-con-promo.png) | ![Stock](capturas/stock.png) |
 | **Reportes (modo oscuro)** | **Panel del día** |
 | ![Reportes](capturas/reportes-oscuro.png) | ![Panel del día](capturas/panel-del-dia.png) |
+| **Relevo de turno** | **Cajas anteriores (con un ajuste)** |
+| ![Relevo de turno](capturas/relevo-de-turno.png) | ![Cajas anteriores](capturas/cajas-anteriores.png) |
 
 | **Gimnasio: Ingreso por DNI** | **Gimnasio: Clases de la semana** |
 | ![Ingreso por DNI](capturas/ingreso-dni.png) | ![Clases](capturas/clases.png) |
@@ -69,6 +72,20 @@ y las pantallas que el jefe le habilitó en Mis comercios).
 Para probar el lector de barras: en la caja escribí un código (por ejemplo `7790001000101`) y apretá Enter.
 Sin código: escribí parte del nombre (`cano`, `canilla`), elegí con las flechas y Enter.
 
+## Seguridad
+
+Lo que ya tiene la web (con los datos de prueba en el navegador):
+
+- Jefe con PIN: 3 intentos mal y hay que esperar 30 segundos. Si nadie usa la compu durante 30 minutos,
+  la sesión del jefe se cierra sola y hay que volver a poner el PIN.
+- Empleado: solo ve la Caja y lo que el jefe le habilitó en Mis comercios; no cambia de sucursal.
+- Una caja cerrada no se cambia: el jefe la corrige con un ajuste que queda anotado (no se borra nada).
+- Protecciones del navegador (en `next.config.ts`): nadie puede meter el sistema adentro de otra página,
+  sin cámara, micrófono ni ubicación.
+
+Lo que llega con Supabase y la API: ingreso con Gmail, RLS (cada dueño ve solo lo suyo), revisar los permisos
+también en el servidor, PIN guardado cifrado, el cifrado de los datos de cada comercio y los avisos de Telegram.
+
 ## Qué hay en cada carpeta
 
 ```
@@ -95,6 +112,7 @@ src/
 │   └── interfaz.ts             Tema, menú del celular y avisos
 └── lib/
     ├── calculos.ts             Las cuentas de los reportes (como reportes.py)
+    ├── caja.ts                 Turnos, relevos y arqueo con ajustes (como operaciones.py)
     ├── promos.ts               La cuenta de las promos (como operaciones_descuentos.py)
     ├── gimnasio.ts             Las reglas del gimnasio: semáforo, vencimientos, grilla, DNI
     ├── calendario.ts           Google Calendar, archivo .ics y links de WhatsApp
@@ -126,6 +144,6 @@ Cada vez que subas un cambio a GitHub, Vercel lo publica solo.
 
 - Ingreso con Supabase (Gmail y contraseña) y permisos jefe/empleado de verdad.
 - La API de FastAPI: cada acción de `store/datos.ts` pasa a llamar a `lib/api.ts`.
-- Ticket en PDF, relevo de turno, ajustes de cajas cerradas y horarios de los comercios.
-- Del gimnasio: reservas desde el celular del socio (link y QR) y anular una cuota cobrada por error (necesitan la API).
+- Ticket en PDF y horarios de los comercios (para que la Caja avise cuándo termina un turno).
+- Del gimnasio: reservas desde el celular del socio (link y QR) (necesita la API). Una cuota cobrada por error se anula en Cajas anteriores.
 - Avisos de Telegram (necesitan la API).
