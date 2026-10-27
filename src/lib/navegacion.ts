@@ -1,7 +1,10 @@
 import {
   BarChart3,
   CalendarClock,
+  CalendarDays,
   ClipboardList,
+  CreditCard,
+  DoorOpen,
   FileSpreadsheet,
   FileText,
   Home,
@@ -12,6 +15,7 @@ import {
   Users,
   Store,
   Tag,
+  Tags,
   Wallet,
 } from "lucide-react";
 import type { Comercio, Permiso, Rubro } from "./tipos";
@@ -39,7 +43,13 @@ export const MENU: Grupo[] = [
   },
   {
     titulo: "Gimnasio",
-    secciones: [{ titulo: "Socios", ruta: "/socios", icono: Users, permiso: "socios", rubro: "gimnasio" }],
+    secciones: [
+      { titulo: "Ingreso por DNI", ruta: "/ingreso-dni", icono: DoorOpen, rubro: "gimnasio" },
+      { titulo: "Socios", ruta: "/socios", icono: Users, permiso: "socios", rubro: "gimnasio" },
+      { titulo: "Cuotas y vencimientos", ruta: "/cuotas", icono: CreditCard, permiso: "cuotas", rubro: "gimnasio" },
+      { titulo: "Clases", ruta: "/clases", icono: CalendarDays, permiso: "clases", rubro: "gimnasio" },
+      { titulo: "Planes y actividades", ruta: "/planes", icono: Tags, soloJefe: true, rubro: "gimnasio" },
+    ],
   },
   {
     titulo: "Control",
@@ -90,4 +100,10 @@ export function migasDe(ruta: string): string[] {
     if (seccion) return grupo.titulo ? [grupo.titulo, seccion.titulo] : [seccion.titulo];
   }
   return ruta === CONFIGURACION.ruta ? [CONFIGURACION.titulo] : [];
+}
+
+/** Adónde va cada uno al entrar: el jefe al Inicio; el empleado a la Caja (en un gimnasio, a la recepción). */
+export function pantallaDeEntrada(esJefe: boolean, comercio: Comercio | undefined) {
+  if (esJefe) return "/inicio";
+  return comercio?.rubro === "gimnasio" ? "/ingreso-dni" : "/caja";
 }

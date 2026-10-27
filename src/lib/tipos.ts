@@ -5,7 +5,7 @@ import type { MedioDePago } from "./formato";
 
 export type Rubro = "kiosco" | "ferreteria" | "ropa" | "almacen" | "panaderia" | "gimnasio" | "otro";
 
-export type Permiso = "panel_del_dia" | "stock" | "compras" | "gastos" | "vencimientos" | "socios";
+export type Permiso = "panel_del_dia" | "stock" | "compras" | "gastos" | "vencimientos" | "socios" | "cuotas" | "clases";
 
 export type Comercio = {
   id: number;
@@ -113,6 +113,10 @@ export type Promo = {
 
 export type Empleado = { id: number; comercioId: number; nombre: string; activo: boolean };
 
+// ---------------------------------------------------------------------------
+// Gimnasio (las mismas tablas que operaciones_gimnasio.py de Streamlit)
+// ---------------------------------------------------------------------------
+
 /** Un socio del gimnasio. El DNI no se repite dentro del mismo gimnasio. */
 export type Socio = {
   id: number;
@@ -121,10 +125,94 @@ export type Socio = {
   dni: string; // solo números: "30123456"
   telefono: string;
   email: string;
-  plan: string; // por ahora un texto ("Mensual libre"); cuando estén los planes en la web, pasa a ser el plan elegido
-  vence: string | null; // hasta qué día tiene la cuota paga (null = todavía no pagó ninguna)
+  nota: string;
+  planId: number | null; // el último plan que pagó (null = nunca pagó)
+  vence: string | null; // hasta qué día tiene la cuota paga
+  clasesRestantes: number; // solo cuenta si el plan es por cantidad de clases
   alta: string; // fecha en que se anotó
-  activo: boolean;
+  activo: boolean; // false = dado de baja (no se borra nada)
+};
+
+/** Una actividad del gimnasio: Crossfit, Funcional, Pesas libres... */
+export type Disciplina = { id: number; comercioId: number; nombre: string; activa: boolean };
+
+export type Plan = {
+  id: number;
+  comercioId: number;
+  nombre: string;
+  precio: number;
+  duracionMeses: number | null; // 1, 2, 3, 6 o 12 meses...
+  duracionDias: number | null; // ...o una cantidad de días (pase de 15 días)
+  cantidadClases: number | null; // clases por mes (null = libre)
+  actividades: number[]; // ids de disciplinas (vacío = todas)
+  activo: boolean; // false = ya no se ofrece (los que lo tienen lo siguen teniendo)
+};
+
+export type ReglasGimnasio = {
+  comercioId: number;
+  horasCancelacion: number; // cancelando con esta anticipación se devuelve la clase
+  clasesSobrantes: "vencen" | "se_acumulan";
+  vencimiento: "dias_plan" | "fin_de_mes";
+  diasAviso: number; // cuántos días antes se avisa que vence
+};
+
+/** Una clase de la grilla: se repite todas las semanas ese día a esa hora. */
+export type Clase = {
+  id: number;
+  comercioId: number;
+  disciplinaId: number;
+  diaSemana: number; // 0 = lunes ... 6 = domingo
+  horaInicio: string; // "19:00"
+  duracionMinutos: number;
+  profesor: string;
+  cupoMaximo: number;
+  activa: boolean;
+};
+
+export type EstadoReserva = "reservado" | "espera" | "vino" | "falto" | "cancelado";
+
+/** Un socio anotado en una clase un día puntual. */
+export type Reserva = {
+  id: number;
+  comercioId: number;
+  claseId: number;
+  socioId: number;
+  fecha: string; // el día de la clase
+  estado: EstadoReserva;
+  creada: string; // fecha y hora (ordena la lista de espera)
+  hechaPor: string;
+  claseDescontada: boolean; // si se le restó una clase de su plan
+  claseDevuelta: boolean; // si canceló y se le devolvió
+};
+
+/** Una cuota cobrada: entra a la caja como una venta (ventaId). */
+export type Cuota = {
+  id: number;
+  comercioId: number;
+  socioId: number;
+  planId: number;
+  ventaId: number;
+  cajaId: number | null;
+  fecha: string; // fecha y hora
+  monto: number;
+  medioPago: MedioDePago;
+  cobradaPor: string;
+  venceAntes: string | null;
+  venceNuevo: string;
+  clasesCargadas: number | null;
+  clasesDespues: number;
+};
+
+/** Cada vez que alguien pasa el DNI por recepción (pasó o no lo dejaron pasar). */
+export type Asistencia = {
+  id: number;
+  comercioId: number;
+  socioId: number;
+  fechaHora: string;
+  resultado: "paso" | "rechazado";
+  motivo: string;
+  reservaId: number | null;
+  registradoPor: string;
 };
 
 export type Sesion = { rol: "jefe" | "empleado"; nombre: string; comercioId: number };

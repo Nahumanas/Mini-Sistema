@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, BarChart3, ClipboardList, Package, Receipt, Users, Wallet } from "lucide-react";
+import { ArrowLeft, ArrowRight, BarChart3, CalendarDays, ClipboardList, CreditCard, DoorOpen, Package, Receipt, Users, Wallet } from "lucide-react";
 import { cambio, conStockBajo, porDia, rango, rankingProductos, resumen, tandasVencidas, ventasEntre } from "@/lib/calculos";
 import { ddmm, diaDeLaSemana, hora, hoy, sumarDias } from "@/lib/fechas";
 import { pesos } from "@/lib/formato";
+import { plural, reglasDe, resumenSocios } from "@/lib/gimnasio";
 import type { Comercio } from "@/lib/tipos";
 import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
@@ -30,9 +31,17 @@ export function Inicio() {
   return verTodos && comercios.length > 1 ? <VistaTodos /> : <VistaComercio comercio={activo} />;
 }
 
+const ATAJOS_GIMNASIO = [
+  { titulo: "Ingreso por DNI", ruta: "/ingreso-dni", icono: DoorOpen },
+  { titulo: "Socios", ruta: "/socios", icono: Users },
+  { titulo: "Cuotas", ruta: "/cuotas", icono: CreditCard },
+  { titulo: "Clases", ruta: "/clases", icono: CalendarDays },
+  { titulo: "Caja", ruta: "/caja", icono: Wallet },
+  { titulo: "Panel del día", ruta: "/panel-del-dia", icono: BarChart3 },
+];
+
 function Atajos({ gimnasio = false }: { gimnasio?: boolean }) {
-  // En un gimnasio, Socios va al lado de la Caja
-  const atajos = gimnasio ? [ATAJOS[0], { titulo: "Socios", ruta: "/socios", icono: Users }, ...ATAJOS.slice(1)] : ATAJOS;
+  const atajos = gimnasio ? ATAJOS_GIMNASIO : ATAJOS;
   return (
     <nav aria-label="Atajos" className="flex flex-wrap gap-2">
       {atajos.map(({ titulo, ruta, icono: Icono }) => (
@@ -63,14 +72,17 @@ function useUltimos30(comercioIds: number[]) {
   return porDia(ventasEntre(ventas, desde, fecha, comercioIds), desde, fecha).map((d) => ({ ...d, dia: ddmm(d.fecha) }));
 }
 
-/** Avisos de un comercio: stock bajo y mercadería vencida. Cada uno lleva a su pantalla. */
+/** Avisos de un comercio: stock bajo y mercadería vencida (y en un gimnasio, cómo están las cuotas).
+ * Cada uno lleva a su pantalla. */
 function Alertas({ comercio }: { comercio: Comercio }) {
   const router = useRouter();
   const elegir = useSesion((s) => s.elegir);
-  const { productos, lotes } = useDatos();
+  const { productos, lotes, socios, planes, reglasGimnasio } = useDatos();
   const bajo = conStockBajo(productos.filter((p) => p.comercioId === comercio.id)).length;
   const vencidas = tandasVencidas(lotes, comercio.id).reduce((s, l) => s + l.cantidad, 0);
-  if (!bajo && !vencidas) return null;
+  const gimnasio = comercio.rubro === "gimnasio" ? resumenSocios(socios, planes, comercio.id, hoy(), reglasDe(reglasGimnasio, comercio.id).diasAviso) : null;
+  const vencenHoy = gimnasio ? socios.filter((s) => s.comercioId === comercio.id && s.activo && s.vence === hoy()).length : 0;
+  if (!bajo && !vencidas && !gimnasio?.activos) return null;
 
   const irA = (ruta: string) => {
     elegir(comercio.id);
@@ -78,6 +90,23 @@ function Alertas({ comercio }: { comercio: Comercio }) {
   };
   return (
     <div className="relative z-10 flex flex-wrap gap-2">
+      {gimnasio && gimnasio.activos > 0 && (
+        <>
+          <button onClick={() => irA("/socios")}>
+            <Chip tono="verde">{plural(gimnasio.alDia, "socio al día", "socios al día")}</Chip>
+          </button>
+          {vencenHoy > 0 && (
+            <button onClick={() => irA("/cuotas")}>
+              <Chip tono="amarillo">{plural(vencenHoy, "vence", "vencen")} hoy</Chip>
+            </button>
+          )}
+          {gimnasio.deben > 0 && (
+            <button onClick={() => irA("/cuotas")}>
+              <Chip tono="rojo">{plural(gimnasio.deben, "debe", "deben")} la cuota</Chip>
+            </button>
+          )}
+        </>
+      )}
       {bajo > 0 && (
         <button onClick={() => irA("/stock")}>
           <Chip tono="amarillo">{bajo} {bajo === 1 ? "producto" : "productos"} con stock bajo</Chip>
@@ -120,7 +149,7 @@ function VistaTodos() {
             const delMes = resumen(ventasEntre(ventas, mes.desde, mes.hasta, [c.id]));
             return (
               // Toda la tarjeta se puede tocar (el botón del título la cubre); los botones de adentro van por encima
-              <article key={c.id} className="relative flex flex-col gap-4 rounded-lg border border-borde bg-superficie p-5 transition-colors hover:border-borde-fuerte hover:bg-superficie-suave/40">
+              <article key={c.id} className="relative flex min-w-0 flex-col gap-4 rounded-lg border border-borde bg-superficie p-5 transition-colors hover:border-borde-fuerte hover:bg-superficie-suave/40">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="truncate text-lg font-semibold">

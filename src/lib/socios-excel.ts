@@ -1,6 +1,5 @@
 import { normalizar } from "./formato";
-import { hoy } from "./fechas";
-import type { Socio } from "./tipos";
+import type { Plan } from "./tipos";
 
 // Leer la lista de socios que el gimnasio ya tiene en Excel (.xlsx o .csv).
 // Cada gimnasio arma su planilla a su manera, así que no se piden nombres fijos de columnas:
@@ -26,7 +25,9 @@ export type Planilla = { encabezado: string[]; filas: Celda[][]; renglones: numb
 /** Qué columna del archivo es cada dato (-1 = el archivo no la tiene). */
 export type Mapa = Record<Campo, number>;
 
-export type FilaSocio = Omit<Socio, "id" | "comercioId" | "alta" | "activo"> & { renglon: number; error?: string };
+/** Un renglón del Excel ya leído. plan: lo que dice el Excel; planId: el plan del gimnasio con ese nombre.
+ * error: no se importa. aviso: se importa, pero con algo para revisar. */
+export type FilaSocio = { renglon: number; nombre: string; dni: string; telefono: string; email: string; plan: string; planId: number | null; vence: string | null; error?: string; aviso?: string };
 
 /** Lee el archivo que subió el jefe y separa los títulos de las columnas de los renglones de socios. */
 export async function leerPlanilla(archivo: File): Promise<Planilla> {
@@ -94,8 +95,9 @@ export function adivinarColumnas(encabezado: string[]): Mapa {
   return mapa;
 }
 
-/** Arma los socios con lo que eligió el jefe y marca los renglones con problemas. */
-export function armarSocios(planilla: Planilla, mapa: Mapa): FilaSocio[] {
+/** Arma los socios con lo que eligió el jefe y marca los renglones con problemas.
+ * El plan se busca por nombre entre los planes del gimnasio (sin mayúsculas ni tildes). */
+export function armarSocios(planilla: Planilla, mapa: Mapa, planes: Plan[]): FilaSocio[] {
   const vistos = new Set<string>();
   return planilla.filas.map((fila, i) => {
     const valor = (campo: Campo) => (mapa[campo] >= 0 ? fila[mapa[campo]] ?? null : null);
@@ -113,8 +115,10 @@ export function armarSocios(planilla: Planilla, mapa: Mapa): FilaSocio[] {
       telefono: texto("telefono"),
       email: texto("email"),
       plan: texto("plan"),
+      planId: planes.find((p) => normalizar(p.nombre) === normalizar(texto("plan")))?.id ?? null,
       vence: vence ?? null,
     };
+    if (socio.plan && !socio.planId) socio.aviso = `No hay un plan «${socio.plan}»: queda sin plan`;
     if (!nombre) socio.error = "Falta el nombre";
     else if (!dni) socio.error = "Falta el DNI";
     else if (dni.length < 6 || dni.length > 9) socio.error = "El DNI no parece válido";
@@ -146,14 +150,4 @@ function armarFecha(anio: number, mes: number, dia: number) {
   const d = new Date(Date.UTC(anio, mes - 1, dia));
   if (d.getUTCMonth() !== mes - 1 || d.getUTCDate() !== dia) return undefined; // 31/02 no existe
   return d.toISOString().slice(0, 10);
-}
-
-/** Cómo está el socio hoy, según hasta cuándo tiene la cuota paga. */
-export function situacion(vence: string | null): { texto: string; tono: "verde" | "amarillo" | "rojo" | "gris" } {
-  if (!vence) return { texto: "Sin cuota", tono: "gris" };
-  const hoyDia = hoy();
-  if (vence < hoyDia) return { texto: "Vencida", tono: "rojo" };
-  const faltan = Math.round((Date.parse(vence) - Date.parse(hoyDia)) / 86400000);
-  if (faltan <= 5) return { texto: faltan === 0 ? "Vence hoy" : `Vence en ${faltan} ${faltan === 1 ? "día" : "días"}`, tono: "amarillo" };
-  return { texto: "Al día", tono: "verde" };
 }

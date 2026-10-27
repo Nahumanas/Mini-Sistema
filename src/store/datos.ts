@@ -4,7 +4,9 @@ import { crearDatosDemo, type BaseDemo } from "@/lib/datos-demo";
 import { ahora, hoy } from "@/lib/fechas";
 import type { MedioDePago } from "@/lib/formato";
 import type { Cuenta } from "@/lib/promos";
+import { ejemploGimnasio } from "@/lib/demo-gimnasio";
 import type { Comercio, Compra, Gasto, ItemVenta, Producto, Promo, Retiro, Socio, Venta } from "@/lib/tipos";
+import { type AccionesGimnasio, accionesGimnasio } from "./acciones-gimnasio";
 
 // La "base de datos" de prueba, guardada en el navegador (localStorage).
 // Todo lo que se carga queda conectado como en el sistema real: una venta baja el stock,
@@ -31,17 +33,15 @@ type Acciones = {
   borrarPromo: (id: number) => void;
   agregarEmpleado: (comercioId: number, nombre: string) => void;
   quitarEmpleado: (id: number) => void;
-  crearSocio: (socio: Omit<Socio, "id" | "alta" | "activo">) => void;
-  importarSocios: (comercioId: number, filas: Omit<Socio, "id" | "comercioId" | "alta" | "activo">[]) => { nuevos: number; actualizados: number };
   reiniciar: () => void;
 };
 
-type EstadoDatos = BaseDemo & { siguienteId: number } & Acciones;
+type EstadoDatos = BaseDemo & { siguienteId: number } & Acciones & AccionesGimnasio;
 
 function baseNueva() {
   const base = crearDatosDemo();
-  const todos = Object.values(base).flat() as { id: number }[];
-  return { ...base, siguienteId: Math.max(...todos.map((x) => x.id)) + 1 };
+  const ids = (Object.values(base).flat() as { id?: number }[]).map((x) => x.id ?? 0);
+  return { ...base, siguienteId: Math.max(...ids) + 1 };
 }
 
 export const useDatos = create<EstadoDatos>()(
@@ -214,7 +214,7 @@ export const useDatos = create<EstadoDatos>()(
         crearComercio: (comercio) => {
           const id = nuevoId();
           // En un gimnasio el empleado de recepción también anota socios
-          const permisosEmpleado: Comercio["permisosEmpleado"] = comercio.rubro === "gimnasio" ? ["panel_del_dia", "stock", "socios"] : ["panel_del_dia", "stock", "compras"];
+          const permisosEmpleado: Comercio["permisosEmpleado"] = comercio.rubro === "gimnasio" ? ["panel_del_dia", "stock", "socios", "cuotas", "clases"] : ["panel_del_dia", "stock", "compras"];
           set((s) => ({ comercios: [...s.comercios, { ...comercio, id, permisosEmpleado, combinarPromos: "mejor" }] }));
           return id;
         },
@@ -239,41 +239,68 @@ export const useDatos = create<EstadoDatos>()(
 
         quitarEmpleado: (id) => set((s) => ({ empleados: s.empleados.filter((e) => e.id !== id) })),
 
-        crearSocio: (socio) => {
-          const id = nuevoId();
-          set((s) => ({ socios: [...s.socios, { ...socio, id, alta: hoy(), activo: true }] }));
-        },
-
-        // Si el DNI ya está en el gimnasio, se actualizan sus datos (sin borrar lo que venga vacío en el Excel).
-        // Si no está, se anota como socio nuevo.
-        importarSocios: (comercioId, filas) => {
-          let nuevos = 0;
-          let actualizados = 0;
-          for (const fila of filas) {
-            const existe = get().socios.find((x) => x.comercioId === comercioId && x.dni === fila.dni);
-            if (existe) {
-              const cambios = Object.fromEntries(Object.entries(fila).filter(([, v]) => v !== "" && v !== null));
-              set((s) => ({ socios: s.socios.map((x) => (x.id === existe.id ? { ...x, ...cambios, activo: true } : x)) }));
-              actualizados++;
-            } else {
-              get().crearSocio({ ...fila, comercioId });
-              nuevos++;
-            }
-          }
-          return { nuevos, actualizados };
-        },
+        // Socios, cuotas, planes, clases y reservas del gimnasio (ver acciones-gimnasio.ts)
+        ...accionesGimnasio(set, get, nuevoId),
 
         reiniciar: () => set(baseNueva()),
       };
     },
     // skipHydration: se lee del navegador recién cuando la página cargó (ver components/layout/Marco.tsx)
-    // version 2: se sumaron los socios del gimnasio. Lo que ya estaba guardado se mantiene (por ejemplo un
-    // gimnasio creado a mano) y arranca sin socios. El gimnasio de prueba aparece al reiniciar los datos.
+    // Cuando cambia la forma de lo guardado, se acomoda lo que el navegador ya tenía (no se borra nada):
+    // version 2: se sumaron los socios. version 3: todo el gimnasio (planes, clases, reservas, cuotas...).
     {
       name: "mantenete-datos",
-      version: 2,
-      migrate: (guardado) => ({ ...(guardado as EstadoDatos), socios: (guardado as Partial<EstadoDatos>).socios ?? [] }),
+      version: 3,
+      migrate: (guardado, version) => migrar(guardado as Partial<EstadoDatos>, version),
       skipHydration: true,
     },
   ),
 );
+
+type SocioViejo = Partial<Socio> & { plan?: string };
+
+function migrar(g: Partial<EstadoDatos>, version: number): EstadoDatos {
+  const d = { ...g } as EstadoDatos;
+  if (version < 3) {
+    d.socios = ((g.socios ?? []) as SocioViejo[]).map((viejo) => {
+      const s: SocioViejo = { telefono: "", email: "", ...viejo, nota: "", planId: null, clasesRestantes: 0 };
+      delete s.plan; // antes el plan era un texto; ahora es uno de los planes del gimnasio (planId)
+      return s as Socio;
+    });
+    d.disciplinas = [];
+    d.planes = [];
+    d.clases = [];
+    d.reglasGimnasio = [];
+    d.reservas = [];
+    d.cuotas = [];
+    d.asistencias = [];
+    // El gimnasio de la demo recibe el ejemplo completo (sus socios de antes se reemplazan por los del ejemplo)
+    const demo = d.comercios?.find((c) => c.nombre === "Gimnasio Fuerza Norte");
+    if (demo) {
+      const ventas = d.ventas ?? [];
+      const ej = ejemploGimnasio({
+        comercioId: demo.id,
+        idInicial: d.siguienteId ?? 1,
+        numeroInicial: Math.max(0, ...ventas.filter((v) => v.comercioId === demo.id).map((v) => v.numero)) + 1,
+      });
+      Object.assign(d, {
+        socios: [...d.socios.filter((s) => s.comercioId !== demo.id), ...ej.socios],
+        disciplinas: ej.disciplinas,
+        planes: ej.planes,
+        clases: ej.clases,
+        reglasGimnasio: ej.reglasGimnasio,
+        reservas: ej.reservas,
+        cuotas: ej.cuotas,
+        asistencias: ej.asistencias,
+        ventas: [...ventas, ...ej.ventas].sort((a, b) => a.fecha.localeCompare(b.fecha)),
+        siguienteId: ej.siguienteId,
+      });
+      demo.permisosEmpleado = [...new Set([...demo.permisosEmpleado, "socios", "cuotas", "clases"] as const)];
+    }
+    // Cuotas y Clases son pantallas nuevas: en los gimnasios donde el empleado ya veía Socios, también las ve
+    for (const c of d.comercios ?? []) {
+      if (c.rubro === "gimnasio" && c.permisosEmpleado.includes("socios")) c.permisosEmpleado = [...new Set([...c.permisosEmpleado, "cuotas", "clases"] as const)];
+    }
+  }
+  return d;
+}
