@@ -9,6 +9,7 @@ import {
   ChevronsUpDown,
   Croissant,
   Dumbbell,
+  LayoutGrid,
   type LucideIcon,
   Menu,
   Shirt,
@@ -80,13 +81,17 @@ export function Topbar() {
 }
 
 function SelectorSucursal() {
-  const { elegir, sesion } = useSesion();
+  const ruta = usePathname();
+  const { elegir, elegirTodos, sesion, verTodos } = useSesion();
   const comercios = useDatos((s) => s.comercios);
   const cajas = useDatos((s) => s.cajas);
   const activo = useComercioActivo();
   const [abierto, setAbierto] = useState(false);
   const caja = useRef<HTMLDivElement>(null);
-  const Icono = ICONO_RUBRO[activo.rubro];
+  // "Todos mis comercios" solo tiene sentido en Inicio (las demás pantallas trabajan sobre una sucursal)
+  const conTodos = ruta === "/inicio" && comercios.length > 1;
+  const todosElegido = conTodos && verTodos;
+  const Icono = todosElegido ? LayoutGrid : ICONO_RUBRO[activo.rubro];
   const cajaAbierta = (id: number) => cajas.some((c) => c.comercioId === id && !c.cerrada);
 
   // Se cierra al tocar afuera o con Escape
@@ -121,7 +126,7 @@ function SelectorSucursal() {
         className="flex max-w-[60vw] items-center gap-2 rounded-md border border-borde bg-superficie px-3 py-1.5 text-[15px] hover:bg-superficie-suave focus-visible:outline-2 focus-visible:outline-primary sm:max-w-none"
       >
         <Icono className="size-4 shrink-0 text-texto-suave" strokeWidth={1.75} />
-        <span className="truncate font-medium">{activo.nombre}</span>
+        <span className="truncate font-medium">{todosElegido ? "Todos mis comercios" : activo.nombre}</span>
         <ChevronsUpDown className="size-4 shrink-0 text-texto-suave" />
       </button>
 
@@ -131,10 +136,25 @@ function SelectorSucursal() {
           aria-label="Elegir sucursal"
           className="absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-lg border border-borde bg-superficie p-1 shadow-lg shadow-black/5"
         >
+          {conTodos && (
+            <li role="option" aria-selected={todosElegido}>
+              <button
+                onClick={() => {
+                  elegirTodos();
+                  setAbierto(false);
+                }}
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-superficie-suave"
+              >
+                <LayoutGrid className="size-4 shrink-0 text-texto-suave" strokeWidth={1.75} />
+                <span className="min-w-0 flex-1 text-[15px]">Todos mis comercios</span>
+                {todosElegido && <Check className="size-4 shrink-0 text-primary" />}
+              </button>
+            </li>
+          )}
           <li className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-texto-suave">Tus comercios</li>
           {comercios.map((c) => {
             const IconoRubro = ICONO_RUBRO[c.rubro];
-            const elegido = c.id === activo.id;
+            const elegido = !todosElegido && c.id === activo.id;
             return (
               <li key={c.id} role="option" aria-selected={elegido}>
                 <button

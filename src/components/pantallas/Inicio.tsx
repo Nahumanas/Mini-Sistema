@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, BarChart3, ClipboardList, Package, Receipt, Wallet } from "lucide-react";
-import { cambio, conStockBajo, porDia, rango, resumen, tandasVencidas, ventasEntre } from "@/lib/calculos";
+import { ArrowLeft, ArrowRight, BarChart3, ClipboardList, Package, Receipt, Wallet } from "lucide-react";
+import { cambio, conStockBajo, porDia, rango, rankingProductos, resumen, tandasVencidas, ventasEntre } from "@/lib/calculos";
 import { ddmm, diaDeLaSemana, hora, hoy, sumarDias } from "@/lib/fechas";
 import { pesos } from "@/lib/formato";
-import { useSesion } from "@/store/comercio";
+import type { Comercio } from "@/lib/tipos";
+import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { ICONO_RUBRO, RUBROS } from "../layout/Topbar";
 import { Chip, Encabezado, Kpi, Tarjeta } from "../ui/base";
@@ -20,43 +21,92 @@ const ATAJOS = [
   { titulo: "Stock", ruta: "/stock", icono: ClipboardList },
 ];
 
-// La pantalla de entrada del jefe: cómo viene el día en cada comercio y en todos juntos.
+// La pantalla de entrada del jefe. Con "Todos mis comercios": una tarjeta por comercio y los números
+// de todos juntos. Con un comercio elegido (arriba a la derecha o tocando su tarjeta): el tablero de ese comercio.
 export function Inicio() {
-  const router = useRouter();
-  const { sesion, elegir } = useSesion();
-  const { comercios, ventas, cajas, productos, lotes } = useDatos();
-  const fecha = hoy();
-  const mes = rango("mes");
+  const verTodos = useSesion((s) => s.verTodos);
+  const comercios = useDatos((s) => s.comercios);
+  const activo = useComercioActivo();
+  return verTodos && comercios.length > 1 ? <VistaTodos /> : <VistaComercio comercio={activo} />;
+}
 
-  const irA = (comercioId: number, ruta: string) => {
-    elegir(comercioId);
-    router.push(ruta);
-  };
+function Atajos() {
+  return (
+    <nav aria-label="Atajos" className="flex flex-wrap gap-2">
+      {ATAJOS.map(({ titulo, ruta, icono: Icono }) => (
+        <Link key={ruta} href={ruta} className="inline-flex items-center gap-2 rounded-md border border-borde bg-superficie px-3.5 py-2 text-[15px] hover:bg-superficie-suave">
+          <Icono className="size-4 text-texto-suave" strokeWidth={1.75} />
+          {titulo}
+        </Link>
+      ))}
+    </nav>
+  );
+}
 
-  const todos = comercios.map((c) => c.id);
-  const ultimos30 = porDia(ventasEntre(ventas, sumarDias(fecha, -29), fecha), sumarDias(fecha, -29), fecha).map((d) => ({ ...d, dia: ddmm(d.fecha) }));
-  const kpis = (["hoy", "semana", "mes"] as const).map((p) => {
+/** Los números de hoy, la semana y el mes de esos comercios, comparados con el período anterior. */
+function useKpis(comercioIds: number[]) {
+  const ventas = useDatos((s) => s.ventas);
+  return (["hoy", "semana", "mes"] as const).map((p) => {
     const r = rango(p);
-    const actual = resumen(ventasEntre(ventas, r.desde, r.hasta, todos));
-    const antes = resumen(ventasEntre(ventas, r.antesDesde, r.antesHasta, todos));
+    const actual = resumen(ventasEntre(ventas, r.desde, r.hasta, comercioIds));
+    const antes = resumen(ventasEntre(ventas, r.antesDesde, r.antesHasta, comercioIds));
     return { nombre: r.nombre, ...actual, cambio: cambio(actual.total, antes.total) };
   });
+}
+
+function useUltimos30(comercioIds: number[]) {
+  const ventas = useDatos((s) => s.ventas);
+  const fecha = hoy();
+  const desde = sumarDias(fecha, -29);
+  return porDia(ventasEntre(ventas, desde, fecha, comercioIds), desde, fecha).map((d) => ({ ...d, dia: ddmm(d.fecha) }));
+}
+
+/** Avisos de un comercio: stock bajo y mercadería vencida. Cada uno lleva a su pantalla. */
+function Alertas({ comercio }: { comercio: Comercio }) {
+  const router = useRouter();
+  const elegir = useSesion((s) => s.elegir);
+  const { productos, lotes } = useDatos();
+  const bajo = conStockBajo(productos.filter((p) => p.comercioId === comercio.id)).length;
+  const vencidas = tandasVencidas(lotes, comercio.id).reduce((s, l) => s + l.cantidad, 0);
+  if (!bajo && !vencidas) return null;
+
+  const irA = (ruta: string) => {
+    elegir(comercio.id);
+    router.push(ruta);
+  };
+  return (
+    <div className="relative z-10 flex flex-wrap gap-2">
+      {bajo > 0 && (
+        <button onClick={() => irA("/stock")}>
+          <Chip tono="amarillo">{bajo} {bajo === 1 ? "producto" : "productos"} con stock bajo</Chip>
+        </button>
+      )}
+      {vencidas > 0 && (
+        <button onClick={() => irA("/vencimientos")}>
+          <Chip tono="rojo">{vencidas} unidades vencidas para retirar</Chip>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function VistaTodos() {
+  const router = useRouter();
+  const { sesion, elegir } = useSesion();
+  const { comercios, ventas, cajas } = useDatos();
+  const fecha = hoy();
+  const mes = rango("mes");
+  const todos = comercios.map((c) => c.id);
+  const kpis = useKpis(todos);
+  const ultimos30 = useUltimos30(todos);
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8">
       <Encabezado
         titulo={`Hola, ${sesion?.nombre.split(" ")[0]}`}
-        descripcion={`Hoy es ${diaDeLaSemana(fecha)} ${ddmm(fecha, true)}. Los números se actualizan con cada venta que cargás.`}
+        descripcion={`Hoy es ${diaDeLaSemana(fecha)} ${ddmm(fecha, true)}. Tocá un comercio para ver su tablero.`}
       />
-
-      <nav aria-label="Atajos" className="flex flex-wrap gap-2">
-        {ATAJOS.map(({ titulo, ruta, icono: Icono }) => (
-          <Link key={ruta} href={ruta} className="inline-flex items-center gap-2 rounded-md border border-borde bg-superficie px-3.5 py-2 text-[15px] hover:bg-superficie-suave">
-            <Icono className="size-4 text-texto-suave" strokeWidth={1.75} />
-            {titulo}
-          </Link>
-        ))}
-      </nav>
+      <Atajos />
 
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">Tus comercios</h2>
@@ -66,13 +116,22 @@ export function Inicio() {
             const caja = cajas.find((x) => x.comercioId === c.id && !x.cerrada);
             const delDia = resumen(ventasEntre(ventas, fecha, fecha, [c.id]));
             const delMes = resumen(ventasEntre(ventas, mes.desde, mes.hasta, [c.id]));
-            const bajo = conStockBajo(productos.filter((p) => p.comercioId === c.id)).length;
-            const vencidas = tandasVencidas(lotes, c.id).reduce((s, l) => s + l.cantidad, 0);
             return (
-              <article key={c.id} className="flex flex-col gap-4 rounded-lg border border-borde bg-superficie p-5">
+              // Toda la tarjeta se puede tocar (el botón del título la cubre); los botones de adentro van por encima
+              <article key={c.id} className="relative flex flex-col gap-4 rounded-lg border border-borde bg-superficie p-5 transition-colors hover:border-borde-fuerte hover:bg-superficie-suave/40">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="truncate text-lg font-semibold">{c.nombre}</h3>
+                    <h3 className="truncate text-lg font-semibold">
+                      <button
+                        onClick={() => {
+                          elegir(c.id);
+                          window.scrollTo({ top: 0 });
+                        }}
+                        className="text-left after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-primary"
+                      >
+                        {c.nombre}
+                      </button>
+                    </h3>
                     <p className="flex items-center gap-1.5 truncate text-sm text-texto-suave">
                       <Icono className="size-3.5 shrink-0" strokeWidth={1.75} />
                       {RUBROS[c.rubro]} · {c.direccion}
@@ -89,24 +148,17 @@ export function Inicio() {
                   </p>
                 </div>
 
-                {(bajo > 0 || vencidas > 0) && (
-                  <div className="flex flex-wrap gap-2">
-                    {bajo > 0 && (
-                      <button onClick={() => irA(c.id, "/stock")}>
-                        <Chip tono="amarillo">{bajo} {bajo === 1 ? "producto" : "productos"} con stock bajo</Chip>
-                      </button>
-                    )}
-                    {vencidas > 0 && (
-                      <button onClick={() => irA(c.id, "/vencimientos")}>
-                        <Chip tono="rojo">{vencidas} unidades vencidas para retirar</Chip>
-                      </button>
-                    )}
-                  </div>
-                )}
+                <Alertas comercio={c} />
 
                 <div className="mt-auto flex items-center justify-between gap-3 border-t border-borde pt-4 text-sm text-texto-suave">
                   <span className="truncate">{caja ? `Abierta por ${caja.responsable} desde las ${hora(caja.abierta)}` : "Todavía no abrió hoy"}</span>
-                  <button onClick={() => irA(c.id, "/caja")} className="inline-flex shrink-0 items-center gap-1 font-medium text-texto hover:text-primary">
+                  <button
+                    onClick={() => {
+                      elegir(c.id);
+                      router.push("/caja");
+                    }}
+                    className="relative z-10 inline-flex shrink-0 items-center gap-1 font-medium text-texto hover:text-primary"
+                  >
                     Ir a la caja <ArrowRight className="size-4" />
                   </button>
                 </div>
@@ -127,6 +179,77 @@ export function Inicio() {
           <GraficoArea datos={ultimos30} x="dia" y="total" />
         </Tarjeta>
       </section>
+    </div>
+  );
+}
+
+function VistaComercio({ comercio }: { comercio: Comercio }) {
+  const router = useRouter();
+  const { sesion, elegirTodos } = useSesion();
+  const { comercios, ventas, cajas } = useDatos();
+  const fecha = hoy();
+  const mes = rango("mes");
+  const kpis = useKpis([comercio.id]);
+  const ultimos30 = useUltimos30([comercio.id]);
+  const masVendidos = rankingProductos(ventasEntre(ventas, mes.desde, mes.hasta, [comercio.id])).slice(0, 5);
+  const caja = cajas.find((x) => x.comercioId === comercio.id && !x.cerrada);
+  const Icono = ICONO_RUBRO[comercio.rubro];
+
+  return (
+    <div className="mx-auto flex max-w-6xl flex-col gap-8">
+      <div className="flex flex-col gap-3">
+        {comercios.length > 1 && (
+          <button onClick={elegirTodos} className="inline-flex w-fit items-center gap-1.5 text-sm text-texto-suave hover:text-texto">
+            <ArrowLeft className="size-4" />
+            Todos mis comercios
+          </button>
+        )}
+        <Encabezado
+          titulo={comercio.nombre}
+          descripcion={
+            <span>
+              <Icono className="mr-1.5 inline size-4 align-[-2px]" strokeWidth={1.75} />
+              {RUBROS[comercio.rubro]} · {comercio.direccion} · {diaDeLaSemana(fecha)} {ddmm(fecha, true)}
+            </span>
+          }
+          acciones={
+            <Chip tono={caja ? "verde" : "gris"}>{caja ? `Caja abierta por ${caja.responsable} desde las ${hora(caja.abierta)}` : "Caja cerrada"}</Chip>
+          }
+        />
+      </div>
+      {sesion?.rol === "jefe" && <Atajos />}
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        {kpis.map((k) => (
+          <Kpi key={k.nombre} titulo={k.nombre} valor={pesos(k.total)} cambio={k.cambio} detalle={`${k.cantidad} ventas`} />
+        ))}
+      </div>
+
+      <Alertas comercio={comercio} />
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Tarjeta titulo="Ventas de los últimos 30 días" className="lg:col-span-2">
+          <GraficoArea datos={ultimos30} x="dia" y="total" />
+        </Tarjeta>
+        <Tarjeta titulo="Lo más vendido del mes">
+          {masVendidos.length ? (
+            <ol className="flex flex-col gap-3">
+              {masVendidos.map((p, i) => (
+                <li key={p.productoId} className="flex items-center gap-3 text-[15px]">
+                  <span className="numeros w-5 shrink-0 text-texto-suave">{i + 1}</span>
+                  <span className="min-w-0 flex-1 truncate">{p.nombre}</span>
+                  <span className="numeros shrink-0 font-medium">{pesos(p.total)}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-texto-suave">Todavía no hay ventas este mes.</p>
+          )}
+          <button onClick={() => router.push("/reportes")} className="mt-5 inline-flex items-center gap-1 text-sm font-medium hover:text-primary">
+            Ver reportes <ArrowRight className="size-4" />
+          </button>
+        </Tarjeta>
+      </div>
     </div>
   );
 }
