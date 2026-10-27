@@ -1,0 +1,43 @@
+import { create } from "zustand";
+
+// Cosas de la pantalla que no son datos del negocio: el tema, el menú en el celular y los avisos.
+export type Tema = "claro" | "oscuro";
+export type Aviso = { id: number; texto: string; tipo: "exito" | "info" | "error" };
+
+type EstadoInterfaz = {
+  tema: Tema;
+  menuAbierto: boolean; // en el celular, la barra lateral se abre con el botón ☰
+  avisos: Aviso[];
+  leerTema: () => void;
+  alternarTema: () => void;
+  abrirMenu: (abierto: boolean) => void;
+  avisar: (texto: string, tipo?: Aviso["tipo"]) => void;
+  cerrarAviso: (id: number) => void;
+};
+
+let proximoAviso = 1;
+
+export const useInterfaz = create<EstadoInterfaz>()((set, get) => ({
+  tema: "claro",
+  menuAbierto: false,
+  avisos: [],
+  // El script de layout.tsx ya puso (o no) la clase "dark": acá solo se lee para que el botón coincida
+  leerTema: () => set({ tema: document.documentElement.classList.contains("dark") ? "oscuro" : "claro" }),
+  alternarTema: () => {
+    const tema: Tema = get().tema === "oscuro" ? "claro" : "oscuro";
+    document.documentElement.classList.toggle("dark", tema === "oscuro");
+    try {
+      localStorage.setItem("mantenete-tema", tema);
+    } catch {
+      // Ventana privada o navegador sin permiso: el tema cambia igual, solo que no queda guardado
+    }
+    set({ tema });
+  },
+  abrirMenu: (menuAbierto) => set({ menuAbierto }),
+  avisar: (texto, tipo = "exito") => {
+    const id = proximoAviso++;
+    set((s) => ({ avisos: [...s.avisos, { id, texto, tipo }] }));
+    setTimeout(() => get().cerrarAviso(id), 5000);
+  },
+  cerrarAviso: (id) => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })),
+}));

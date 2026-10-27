@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+/*
+  Colores de Mantenete, al estilo de los paneles de Supabase.
+
+  Cómo funciona el modo claro/oscuro (sin recargar la página):
+  - Cada color es una variable de CSS (--fondo, --texto, --primary-color...).
+  - El modo oscuro solo cambia esas variables cuando <html> tiene la clase "dark".
+  - Tailwind las usa con nombres cortos: bg-fondo, text-texto, border-borde, bg-primary...
+  Para cambiar los colores del sistema alcanza con tocar estos dos bloques.
+*/
+:root {
+  --fondo: #f9fafb;            /* gray-50: fondo de la página */
+  --superficie: #ffffff;       /* tarjetas, barra lateral, tablas */
+  --superficie-suave: #f3f4f6; /* fila al pasar el mouse, botones secundarios */
+  --borde: #e5e7eb;            /* gray-200 */
+  --borde-fuerte: #d1d5db;
+  --texto: #111827;
+  --texto-suave: #6b7280;
+  --primary-color: #3ecf8e;    /* verde de Supabase: Cobrar, Agregar, lo elegido */
+  --primary-hover: #34b97d;
+  --primary-texto: #0b2e1e;    /* letra arriba del verde */
+  --positivo: #15803d;         /* vuelto */
+  --peligro: #b91c1c;
+}
+
+.dark {
+  --fondo: #0f172a;            /* slate-900 */
+  --superficie: #1e293b;       /* slate-800 */
+  --superficie-suave: #273449;
+  --borde: #334155;            /* slate-700 */
+  --borde-fuerte: #475569;
+  --texto: #e2e8f0;
+  --texto-suave: #94a3b8;
+  --primary-color: #3ecf8e;
+  --primary-hover: #5fdca3;
+  --primary-texto: #052e1c;
+  --positivo: #4ade80;
+  --peligro: #fca5a5;
+  color-scheme: dark;          /* barras de desplazamiento y casilleros del navegador, oscuros */
+}
+
+/* El modo oscuro de Tailwind (dark:...) se activa con la clase "dark", no con la PC */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-fondo: var(--fondo);
+  --color-superficie: var(--superficie);
+  --color-superficie-suave: var(--superficie-suave);
+  --color-borde: var(--borde);
+  --color-borde-fuerte: var(--borde-fuerte);
+  --color-texto: var(--texto);
+  --color-texto-suave: var(--texto-suave);
+  --color-primary: var(--primary-color);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-texto: var(--primary-texto);
+  --color-positivo: var(--positivo);
+  --color-peligro: var(--peligro);
+  --font-sans: var(--font-inter), "Segoe UI", Arial, sans-serif;
+}
+
+/* Letra grande, como en el sistema actual: 17 px en vez de 16 */
+html {
+  font-size: 106.25%;
+}
+
+body {
+  background: var(--fondo);
+  color: var(--texto);
+}
+
+/* Los números de plata quedan alineados en columna */
+.numeros {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Saca las flechitas de los casilleros de números (se usan los botones − y +) */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
