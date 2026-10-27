@@ -1,4 +1,6 @@
-import type { AjusteCaja, Caja, Relevo, Venta } from "./tipos";
+import { ahora } from "./fechas";
+import { turnoEntre } from "./horarios";
+import type { AjusteCaja, Caja, Relevo, Turno, Venta } from "./tipos";
 
 // Las cuentas de la caja (como operaciones.py de Streamlit): los turnos con sus relevos y el arqueo con los ajustes.
 // Reciben listas y devuelven números, igual que calculos.ts.
@@ -47,22 +49,27 @@ export function turnoEnCurso(caja: Caja, ventas: Venta[], relevos: Relevo[]) {
 
 export type EventoCaja =
   | { tipo: "apertura"; hora: string; quien: string; efectivo: number }
-  | { tipo: "relevo" | "cierre" | "en_curso"; hora: string; inicio: string; quien: string; entra?: string; cantidad: number; total: number; esperado: number; contado?: number; diferencia?: number; nota?: string };
+  | { tipo: "relevo" | "cierre" | "en_curso"; hora: string; inicio: string; quien: string; entra?: string; turno?: string; cantidad: number; total: number; esperado: number; contado?: number; diferencia?: number; nota?: string };
 
-/** La línea de tiempo de una caja: quién abrió, cada relevo de turno y el cierre (o el turno que sigue). */
-export function lineaDeTiempo(caja: Caja, ventas: Venta[], relevos: Relevo[]): EventoCaja[] {
+/**
+ * La línea de tiempo de una caja: quién abrió, cada relevo de turno y el cierre (o el turno que sigue).
+ * turnos: los del local (Mis comercios), para decir a qué turno corresponde cada tramo.
+ */
+export function lineaDeTiempo(caja: Caja, ventas: Venta[], relevos: Relevo[], turnos: Turno[] = []): EventoCaja[] {
+  const turnoDe = (desde: string, hasta: string) => turnoEntre(turnos, desde, hasta)?.nombre;
   const lista = relevosDe(relevos, caja.id);
   const eventos: EventoCaja[] = [{ tipo: "apertura", hora: caja.abierta, quien: lista[0]?.sale ?? caja.responsable, efectivo: caja.montoInicial }];
   let anterior: Relevo | null = null;
   let inicial = caja.montoInicial;
   for (const r of lista) {
     const tramo = ventasDelTramo(ventas, caja.id, anterior, r);
-    eventos.push({ tipo: "relevo", hora: r.fecha, inicio: anterior?.fecha ?? caja.abierta, quien: r.sale, entra: r.entra, cantidad: tramo.cantidad, total: tramo.total, esperado: inicial + tramo.efectivo, contado: r.contado, diferencia: r.diferencia, nota: r.nota });
+    const inicio = anterior?.fecha ?? caja.abierta;
+    eventos.push({ tipo: "relevo", hora: r.fecha, inicio, quien: r.sale, entra: r.entra, turno: r.turno ?? turnoDe(inicio, r.fecha), cantidad: tramo.cantidad, total: tramo.total, esperado: inicial + tramo.efectivo, contado: r.contado, diferencia: r.diferencia, nota: r.nota });
     anterior = r;
     inicial = r.contado;
   }
   const actual = turnoEnCurso(caja, ventas, relevos);
-  const ultimo = { inicio: actual.desde, quien: caja.responsable, cantidad: actual.cantidad, total: actual.total, esperado: actual.esperado };
+  const ultimo = { inicio: actual.desde, quien: caja.responsable, turno: turnoDe(actual.desde, caja.cerrada ?? ahora()), cantidad: actual.cantidad, total: actual.total, esperado: actual.esperado };
   if (caja.cerrada && caja.efectivoContado != null) {
     eventos.push({ tipo: "cierre", hora: caja.cerrada, ...ultimo, contado: caja.efectivoContado, diferencia: caja.efectivoContado - actual.esperado, nota: caja.nota });
   } else {

@@ -15,7 +15,14 @@ export type Comercio = {
   usaTicket: boolean;
   permisosEmpleado: Permiso[];
   combinarPromos: "mejor" | "sumar";
+  // Horario del local y sus turnos (los carga el jefe en Mis comercios). null = todavía no los cargó.
+  horaApertura: string | null; // "08:00"
+  horaCierre: string | null;
+  turnos: Turno[];
 };
+
+/** Un turno del local: "Mañana" de 08:00 a 14:00. Si termina antes de lo que empieza, pasa la medianoche. */
+export type Turno = { nombre: string; desde: string; hasta: string };
 
 export type Producto = {
   id: number;
@@ -64,6 +71,7 @@ export type Venta = {
   total: number;
   medioPago: MedioDePago;
   vendidoPor: string;
+  promos?: { nombre: string; monto: number }[]; // las promos que se aplicaron y cuánto descontó cada una
   anulada?: string | null; // vacío = venta válida; con fecha y hora = el jefe la anuló con un ajuste de caja
 };
 
@@ -83,6 +91,7 @@ export type Relevo = {
   diferencia: number; // contado − esperado
   nota: string;
   ultimaVentaId: number; // la última venta del turno que termina (para no mezclar las del mismo minuto)
+  turno?: string | null; // el turno que termina ("Mañana"), si el local tiene turnos cargados
 };
 
 /**

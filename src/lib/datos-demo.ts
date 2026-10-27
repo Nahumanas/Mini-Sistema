@@ -1,6 +1,7 @@
 import type { MedioDePago } from "./formato";
 import { ahora, hoy, sumarDias } from "./fechas";
 import { ejemploGimnasio } from "./demo-gimnasio";
+import { HORARIO_SUGERIDO } from "./horarios";
 import type {
   AjusteCaja,
   Asistencia,
@@ -67,11 +68,13 @@ function dado(semilla: number) {
   };
 }
 
+const SIN_HORARIO = { horaApertura: null, horaCierre: null, turnos: [] };
+
 const COMERCIOS: Comercio[] = [
-  { id: 1, nombre: "Ferretería Don Tito", rubro: "ferreteria", direccion: "Calle San Martín 1200", usaTicket: true, permisosEmpleado: ["panel_del_dia", "stock", "compras"], combinarPromos: "mejor" },
-  { id: 2, nombre: "Kiosco El Paso", rubro: "kiosco", direccion: "Av. Rivadavia 4500", usaTicket: false, permisosEmpleado: ["panel_del_dia", "stock", "compras", "vencimientos"], combinarPromos: "mejor" },
-  { id: 3, nombre: "Tienda Urbana", rubro: "ropa", direccion: "Galería Sol, local 12", usaTicket: true, permisosEmpleado: ["stock"], combinarPromos: "mejor" },
-  { id: 4, nombre: "Gimnasio Fuerza Norte", rubro: "gimnasio", direccion: "Av. Mitre 850", usaTicket: false, permisosEmpleado: ["panel_del_dia", "stock", "socios", "cuotas", "clases"], combinarPromos: "mejor" },
+  { id: 1, nombre: "Ferretería Don Tito", rubro: "ferreteria", direccion: "Calle San Martín 1200", usaTicket: true, permisosEmpleado: ["panel_del_dia", "stock", "compras"], combinarPromos: "mejor", ...SIN_HORARIO },
+  { id: 2, nombre: "Kiosco El Paso", rubro: "kiosco", direccion: "Av. Rivadavia 4500", usaTicket: false, permisosEmpleado: ["panel_del_dia", "stock", "compras", "vencimientos"], combinarPromos: "mejor", ...HORARIO_SUGERIDO },
+  { id: 3, nombre: "Tienda Urbana", rubro: "ropa", direccion: "Galería Sol, local 12", usaTicket: true, permisosEmpleado: ["stock"], combinarPromos: "mejor", ...SIN_HORARIO },
+  { id: 4, nombre: "Gimnasio Fuerza Norte", rubro: "gimnasio", direccion: "Av. Mitre 850", usaTicket: false, permisosEmpleado: ["panel_del_dia", "stock", "socios", "cuotas", "clases"], combinarPromos: "mejor", ...SIN_HORARIO },
 ];
 
 // [código, nombre, categoría, precio, costo, stock, stock mínimo, días que dura]
@@ -314,7 +317,7 @@ export function crearDatosDemo(): BaseDemo {
       const fecha = `${caja.abierta.slice(0, 10)}T14:00`;
       const manana = suyas.filter((v) => v.fecha <= fecha);
       const esperado = caja.montoInicial + efectivoDe(manana);
-      relevos.push({ id: idCaja++, comercioId: 2, cajaId: caja.id, fecha, sale: "Juan", entra: "Martina", esperado, contado: esperado, diferencia: 0, nota: "", ultimaVentaId: Math.max(0, ...manana.map((v) => v.id)) });
+      relevos.push({ id: idCaja++, comercioId: 2, cajaId: caja.id, fecha, sale: "Juan", entra: "Martina", esperado, contado: esperado, diferencia: 0, nota: "", ultimaVentaId: Math.max(0, ...manana.map((v) => v.id)), turno: "Mañana" });
     }
   }
 

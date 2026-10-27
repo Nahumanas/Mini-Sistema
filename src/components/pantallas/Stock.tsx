@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ClipboardList, Pencil, Plus, Search, X } from "lucide-react";
+import { Check, ClipboardList, Pencil, Plus, ScanBarcode, Search, X } from "lucide-react";
 import { normalizar, pesos } from "@/lib/formato";
 import type { Producto } from "@/lib/tipos";
 import { useComercioActivo, useEsJefe } from "@/store/comercio";
@@ -17,12 +17,13 @@ const VACIO = { codigo: "", nombre: "", categoria: "", precioVenta: "", costo: "
 export function Stock() {
   const comercio = useComercioActivo();
   const esJefe = useEsJefe();
-  const { productos: todos, actualizarProducto, crearProducto } = useDatos();
+  const { productos: todos, actualizarProducto, crearProducto, asignarCodigo } = useDatos();
   const avisar = useInterfaz((s) => s.avisar);
   const [buscar, setBuscar] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("todos");
-  const [editando, setEditando] = useState<{ id: number; precioVenta: string; stock: string; stockMinimo: string } | null>(null);
+  const [editando, setEditando] = useState<{ id: number; codigo: string; precioVenta: string; stock: string; stockMinimo: string } | null>(null);
   const [nuevo, setNuevo] = useState<typeof VACIO | null>(null);
+  const [cargandoCodigos, setCargandoCodigos] = useState(false);
 
   const productos = useMemo(() => todos.filter((p) => p.comercioId === comercio.id), [todos, comercio.id]);
   const bajos = productos.filter((p) => p.activo && p.stock <= p.stockMinimo).length;
@@ -34,6 +35,11 @@ export function Stock() {
 
   function guardarEdicion() {
     if (!editando) return;
+    try {
+      asignarCodigo(editando.id, editando.codigo);
+    } catch (err) {
+      return avisar((err as Error).message, "error");
+    }
     actualizarProducto(editando.id, { precioVenta: Number(editando.precioVenta), stock: Number(editando.stock), stockMinimo: Number(editando.stockMinimo) });
     setEditando(null);
     avisar("Cambios guardados.");
@@ -42,7 +48,7 @@ export function Stock() {
   function crear(e: React.FormEvent) {
     e.preventDefault();
     if (!nuevo) return;
-    if (productos.some((p) => p.codigo === nuevo.codigo.trim())) return avisar(`Ya hay un producto con el código ${nuevo.codigo}.`, "error");
+    if (nuevo.codigo.trim() && productos.some((p) => p.codigo === nuevo.codigo.trim())) return avisar(`Ya hay un producto con el código ${nuevo.codigo}.`, "error");
     crearProducto({
       comercioId: comercio.id,
       codigo: nuevo.codigo.trim(),
@@ -69,13 +75,23 @@ export function Stock() {
       <Encabezado
         titulo="Stock"
         descripcion={esJefe ? `${productos.filter((p) => p.activo).length} productos activos · mercadería a costo: ${pesos(valorStock)}` : "Si algo no coincide con lo que hay en el local, avisale al jefe."}
-        acciones={esJefe && !nuevo && <Boton variante="primario" icono={Plus} onClick={() => setNuevo({ ...VACIO })}>Nuevo producto</Boton>}
+        acciones={
+          esJefe && (
+            <div className="flex flex-wrap gap-2">
+              {!cargandoCodigos && <Boton icono={ScanBarcode} onClick={() => setCargandoCodigos(true)}>Códigos con el lector</Boton>}
+              {!nuevo && <Boton variante="primario" icono={Plus} onClick={() => setNuevo({ ...VACIO })}>Nuevo producto</Boton>}
+            </div>
+          )
+        }
       />
+
+      {cargandoCodigos && <CodigosConLector productos={productos.filter((p) => p.activo)} alCerrar={() => setCargandoCodigos(false)} />}
 
       {nuevo && (
         <Tarjeta titulo="Nuevo producto" acciones={<Boton variante="fantasma" icono={X} onClick={() => setNuevo(null)} aria-label="Cerrar" />}>
-          <form onSubmit={crear} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {campoNuevo("codigo", "Código de barras", "text", true)}
+          {/* El lector aprieta Enter al leer el código: en el campo del código no guarda el producto a medias */}
+          <form onSubmit={crear} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLElement).id === "nuevo-codigo" && e.preventDefault()} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {campoNuevo("codigo", "Código de barras", "text", false, "Pasá el lector o dejalo vacío")}
             {campoNuevo("nombre", "Nombre", "text", true)}
             {campoNuevo("categoria", "Categoría", "text", false, "Sirve para las promos (ej.: Bebidas)")}
             {campoNuevo("precioVenta", "Precio de venta ($)", "number", true)}
@@ -134,7 +150,19 @@ export function Stock() {
             );
             return (
               <tr key={p.id} className={p.activo ? "" : "opacity-60"}>
-                <td className="hidden px-4 py-2.5 text-sm text-texto-suave sm:table-cell">{p.codigo}</td>
+                <td className="hidden px-4 py-2.5 text-sm text-texto-suave sm:table-cell">
+                  {enEdicion ? (
+                    <input
+                      aria-label="Código de barras"
+                      value={editando?.codigo ?? ""}
+                      onChange={(e) => editando && setEditando({ ...editando, codigo: e.target.value })}
+                      placeholder="sin código"
+                      className="numeros h-8 w-36 rounded border border-borde-fuerte bg-superficie px-2 outline-none focus:border-primary"
+                    />
+                  ) : (
+                    p.codigo || <span className="italic">sin código</span>
+                  )}
+                </td>
                 <td className="px-4 py-2.5">
                   {p.nombre}
                   <span className="block text-sm text-texto-suave">
@@ -162,7 +190,7 @@ export function Stock() {
                     ) : (
                       <>
                         <button
-                          onClick={() => setEditando({ id: p.id, precioVenta: String(p.precioVenta), stock: String(p.stock), stockMinimo: String(p.stockMinimo) })}
+                          onClick={() => setEditando({ id: p.id, codigo: p.codigo, precioVenta: String(p.precioVenta), stock: String(p.stock), stockMinimo: String(p.stockMinimo) })}
                           className="rounded-md p-1.5 text-texto-suave hover:bg-superficie-suave hover:text-texto"
                           aria-label={`Editar ${p.nombre}`}
                         >
@@ -183,5 +211,71 @@ export function Stock() {
         <Vacio icono={ClipboardList}>{buscar ? `No hay productos con "${buscar}".` : "No hay productos en esta lista."}</Vacio>
       )}
     </div>
+  );
+}
+
+/**
+ * Cargar códigos de barras con el lector (como en Streamlit): se elige el producto y se pasa el lector.
+ * El lector "tipea" el código y aprieta Enter: con eso se guarda y pasa al siguiente sin código.
+ * Lo más rápido para muchos productos sigue siendo el Excel (columna codigo).
+ */
+function CodigosConLector({ productos, alCerrar }: { productos: Producto[]; alCerrar: () => void }) {
+  const asignarCodigo = useDatos((s) => s.asignarCodigo);
+  const avisar = useInterfaz((s) => s.avisar);
+  const sinCodigo = productos.filter((p) => !p.codigo);
+  const [productoId, setProductoId] = useState(String(sinCodigo[0]?.id ?? ""));
+  const [codigo, setCodigo] = useState("");
+  const [error, setError] = useState("");
+  // Primero los que no tienen código; después todos (para cambiar uno que está mal)
+  const opciones = [...sinCodigo, ...productos.filter((p) => p.codigo)];
+
+  return (
+    <Tarjeta titulo="Cargar códigos de barras con el lector" acciones={<Boton variante="fantasma" icono={X} onClick={alCerrar} aria-label="Cerrar" />}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError("");
+          const producto = productos.find((p) => p.id === Number(productoId));
+          if (!producto || !codigo.trim()) return setError("Elegí el producto y pasá el lector.");
+          try {
+            asignarCodigo(producto.id, codigo);
+          } catch (err) {
+            return setError((err as Error).message);
+          }
+          avisar(`Código guardado para ${producto.nombre}.`);
+          setCodigo("");
+          // Sigue con el próximo que no tiene código
+          const siguiente = sinCodigo.find((p) => p.id !== producto.id);
+          if (siguiente) setProductoId(String(siguiente.id));
+        }}
+        className="flex flex-col gap-4"
+      >
+        <p className="text-sm text-texto-suave">
+          {sinCodigo.length ? `Hay ${sinCodigo.length === 1 ? "1 producto" : `${sinCodigo.length} productos`} sin código.` : "Todos los productos tienen código."} Elegí el producto
+          y pasá el lector: se guarda solo. Para cargar muchos juntos, usá el Excel (columna codigo).
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Campo etiqueta="Producto">
+            <select id="producto-codigo" value={productoId} onChange={(e) => setProductoId(e.target.value)} className={claseInput} required>
+              <option value="" disabled>
+                Elegí el producto
+              </option>
+              {opciones.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre} {p.codigo ? `· ${p.codigo}` : "· sin código"}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          <Campo etiqueta="Código de barras">
+            <input id="codigo-lector" value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="Pasá el lector por el producto" className={`${claseInput} numeros`} autoComplete="off" autoFocus />
+          </Campo>
+        </div>
+        {error && <p className="text-sm text-peligro">{error}</p>}
+        <Boton type="submit" variante="primario" icono={ScanBarcode} className="self-end">
+          Guardar código
+        </Boton>
+      </form>
+    </Tarjeta>
   );
 }

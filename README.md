@@ -16,25 +16,25 @@ Para volver a los datos del principio: Configuración → Reiniciar datos de pru
 
 | Pantalla | Qué hace |
 |---|---|
-| Ingresar | Jefe con PIN (demo: 1234) o empleado con su nombre |
+| Ingresar | Jefe con PIN (demo: 1234, se cambia en Configuración) o empleado con su nombre |
 | Inicio | Cómo viene el día en cada comercio y en todos juntos (solo jefe) |
-| Caja | Escanear o buscar, carrito, promos automáticas, vuelto, cobrar; abrir y cerrar caja con arqueo; **relevo de turno** (el que se va cuenta el efectivo y queda anotado si faltó o sobró en su turno) |
+| Caja | Escanear o buscar, carrito, promos automáticas, vuelto, cobrar; **ticket en PDF** (80 mm) si el comercio da ticket; abrir y cerrar caja con arqueo; **relevo de turno** (el que se va cuenta el efectivo y queda anotado si faltó o sobró en su turno); avisa cuando termina un turno o si se cobra fuera de horario |
 | Compras | Cargar lo que llegó del proveedor (suma stock y actualiza el costo) |
 | Gastos | Alquiler, luz, sueldos… por mes y por categoría |
 | Vencimientos | Tandas con fecha de vencimiento, retirar lo vencido, pérdidas |
 | Panel del día | Cobrado, ventas, ticket promedio, ventas por hora, medios de pago |
 | Cajas anteriores | Cada caja con su arqueo y sus turnos. El jefe la corrige con un **ajuste** (anular una venta o recontar el efectivo) que queda anotado con fecha, quién y por qué (solo jefe) |
-| Stock | Buscar, stock bajo, editar precios y stock, crear y dar de baja productos |
-| Reportes | Vendido, ganancia bruta y neta, ranking, qué comprar, descargar a Excel |
+| Stock | Buscar, stock bajo, editar precios, stock y código de barras, crear y dar de baja productos; **cargar códigos con el lector** |
+| Reportes | Por mes, semana o fechas elegidas (también los que ya pasaron), de un comercio o de todos: vendido, ganancia bruta y neta, ranking, qué comprar, **más detalles** (gastos por tipo, lo que menos vende, cuánto descontó cada promo, gimnasio) y **Excel .xlsx** con resumen, gráficos y una hoja por tema |
 | Descuentos y promos | 2x1 / 3x2, % en productos o categorías, % por medio de pago |
-| Mis comercios | Datos de cada sucursal, empleados y qué puede ver cada empleado |
+| Mis comercios | Datos de cada sucursal, empleados, qué puede ver cada empleado y **horarios y turnos** del local |
 | Importar / exportar Excel | Bajar productos, ventas y gastos; subir una lista de productos |
 | Ingreso por DNI (gimnasio) | Se escribe o se escanea el DNI: verde (pasa), amarillo (al día, sin reserva: anotarlo en una clase de hoy) o rojo (debe o sin clases: se cobra ahí mismo). Anota cada entrada |
 | Socios (gimnasio) | Filtros (al día, vencen pronto, deben, sin clases, dados de baja) y la **ficha** de cada socio: cobrar la cuota, sus reservas, historial y datos. **Importar socios** desde el Excel que el gimnasio ya tiene (.xlsx o .csv) con vista previa |
 | Cuotas y vencimientos (gimnasio) | Cobrar una cuota (entra a la caja abierta), quién vence pronto y quién debe, con el recordatorio por WhatsApp ya escrito |
 | Clases (gimnasio) | La grilla de la semana con los lugares libres, anotar socios, lista de espera, cancelar con la regla de horas, Vino/Faltó y "Agregar al calendario" (Google, iPhone o WhatsApp). El jefe arma la grilla |
 | Planes y actividades (gimnasio) | Planes por meses o días, libres o por clases, para todas o algunas actividades; las reglas del gimnasio y un ejemplo para arrancar de cero |
-| Configuración | Tema, PIN, avisos de Telegram, reiniciar los datos de prueba |
+| Configuración | Tema, **cambiar el PIN** (se guarda solo su huella), avisos de Telegram, reiniciar los datos de prueba |
 
 ## Capturas
 
@@ -76,6 +76,8 @@ Sin código: escribí parte del nombre (`cano`, `canilla`), elegí con las flech
 
 Lo que ya tiene la web (con los datos de prueba en el navegador):
 
+- PIN de jefe propio (de 4 a 8 números, no muy fácil): se guarda una huella SHA-256 con sal, nunca el PIN.
+  En la demo, "Me olvidé el PIN" vuelve a los datos de prueba (con Supabase va a ser por mail).
 - Jefe con PIN: 3 intentos mal y hay que esperar 30 segundos. Si nadie usa la compu durante 30 minutos,
   la sesión del jefe se cierra sola y hay que volver a poner el PIN.
 - Empleado: solo ve la Caja y lo que el jefe le habilitó en Mis comercios; no cambia de sucursal.
@@ -84,7 +86,7 @@ Lo que ya tiene la web (con los datos de prueba en el navegador):
   sin cámara, micrófono ni ubicación.
 
 Lo que llega con Supabase y la API: ingreso con Gmail, RLS (cada dueño ve solo lo suyo), revisar los permisos
-también en el servidor, PIN guardado cifrado, el cifrado de los datos de cada comercio y los avisos de Telegram.
+también en el servidor, PIN guardado en la base, el cifrado de los datos de cada comercio y los avisos de Telegram.
 
 ## Qué hay en cada carpeta
 
@@ -113,6 +115,11 @@ src/
 └── lib/
     ├── calculos.ts             Las cuentas de los reportes (como reportes.py)
     ├── caja.ts                 Turnos, relevos y arqueo con ajustes (como operaciones.py)
+    ├── horarios.ts             Horario del local y turnos (para los avisos de la Caja)
+    ├── reporte.ts              Períodos (mes, semana, fechas) y todos los números de Reportes
+    ├── reporte-excel.ts        El Excel .xlsx con gráficos (como generar_reporte de reportes.py)
+    ├── ticket.ts               El ticket en PDF de 80 mm (como ticket.py)
+    ├── pin.ts                  La huella del PIN de jefe
     ├── promos.ts               La cuenta de las promos (como operaciones_descuentos.py)
     ├── gimnasio.ts             Las reglas del gimnasio: semáforo, vencimientos, grilla, DNI
     ├── calendario.ts           Google Calendar, archivo .ics y links de WhatsApp
@@ -144,6 +151,5 @@ Cada vez que subas un cambio a GitHub, Vercel lo publica solo.
 
 - Ingreso con Supabase (Gmail y contraseña) y permisos jefe/empleado de verdad.
 - La API de FastAPI: cada acción de `store/datos.ts` pasa a llamar a `lib/api.ts`.
-- Ticket en PDF y horarios de los comercios (para que la Caja avise cuándo termina un turno).
 - Del gimnasio: reservas desde el celular del socio (link y QR) (necesita la API). Una cuota cobrada por error se anula en Cajas anteriores.
 - Avisos de Telegram (necesitan la API).

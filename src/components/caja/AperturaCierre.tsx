@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Lock, LockOpen, Repeat } from "lucide-react";
 import { turnoEnCurso } from "@/lib/caja";
-import { hora } from "@/lib/fechas";
+import { ahora, hora } from "@/lib/fechas";
+import { turnoEntre } from "@/lib/horarios";
 import { MEDIOS_DE_PAGO, type MedioDePago, pesos } from "@/lib/formato";
 import type { Caja } from "@/lib/tipos";
 import { useSesion } from "@/store/comercio";
@@ -155,7 +156,7 @@ export function CerrarCaja({ caja, alTerminar }: { caja: Caja; alTerminar: () =>
  * y queda anotado si faltó o sobró algo en SU turno. El que entra arranca con lo contado.
  */
 export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () => void }) {
-  const { ventas, relevos, empleados, registrarRelevo } = useDatos();
+  const { ventas, relevos, empleados, comercios, registrarRelevo } = useDatos();
   const { sesion, ingresar } = useSesion();
   const avisar = useInterfaz((s) => s.avisar);
   const [entra, setEntra] = useState("");
@@ -165,6 +166,9 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
 
   const turno = turnoEnCurso(caja, ventas, relevos);
   const diferencia = contado === "" ? null : Number(contado) - turno.esperado;
+  // Si el local tiene turnos, se propone el que corresponde a lo que atendió (se puede cambiar)
+  const turnos = comercios.find((c) => c.id === caja.comercioId)?.turnos ?? [];
+  const [nombreTurno, setNombreTurno] = useState(() => turnoEntre(turnos, turno.desde, ahora())?.nombre ?? "");
   const otros = empleados.filter((e) => e.comercioId === caja.comercioId && e.activo && e.nombre !== caja.responsable);
 
   return (
@@ -198,7 +202,7 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
             e.preventDefault();
             setError("");
             try {
-              const r = registrarRelevo(caja.comercioId, entra, Number(contado), nota);
+              const r = registrarRelevo(caja.comercioId, entra, Number(contado), nota, nombreTurno || null);
               // En esta compu ahora atiende el que entró: las ventas siguientes quedan a su nombre
               if (sesion?.rol === "empleado") ingresar({ ...sesion, nombre: r.entra });
               avisar(
@@ -214,6 +218,18 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
           className="flex flex-col gap-4"
         >
           <p className="text-sm text-texto-suave">La caja sigue abierta. Contá el efectivo del cajón antes de entregarla: con eso arranca el que entra.</p>
+          {turnos.length > 0 && (
+            <Campo etiqueta="Turno que termina">
+              <select id="turno-relevo" value={nombreTurno} onChange={(e) => setNombreTurno(e.target.value)} className={claseInput}>
+                {turnos.map((t) => (
+                  <option key={t.nombre} value={t.nombre}>
+                    {t.nombre} ({t.desde} a {t.hasta})
+                  </option>
+                ))}
+                <option value="">Otro / fuera de turno</option>
+              </select>
+            </Campo>
+          )}
           <Campo etiqueta="¿Quién recibe la caja?" ayuda={otros.length ? `Empleados de este comercio: ${otros.map((e) => e.nombre).join(", ")}` : undefined}>
             <input id="entra" list="empleados-relevo" value={entra} onChange={(e) => setEntra(e.target.value)} placeholder="Ej.: Martina" className={claseInput} autoComplete="off" required autoFocus />
             <datalist id="empleados-relevo">

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Banknote, CreditCard, QrCode, WalletCards } from "lucide-react";
+import { Banknote, CreditCard, Printer, QrCode, WalletCards } from "lucide-react";
 import { MEDIOS_DE_PAGO, type MedioDePago, pesos } from "@/lib/formato";
 import type { Cuenta } from "@/lib/promos";
+import { descargarTicket } from "@/lib/ticket";
+import type { Venta } from "@/lib/tipos";
 import { useCarrito, useItemsDe } from "@/store/carrito";
 import { useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
@@ -19,9 +21,12 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
   const items = useItemsDe(comercioId);
   const vaciar = useCarrito((s) => s.vaciar);
   const registrarVenta = useDatos((s) => s.registrarVenta);
+  const comercio = useDatos((s) => s.comercios.find((c) => c.id === comercioId));
   const sesion = useSesion((s) => s.sesion);
   const avisar = useInterfaz((s) => s.avisar);
   const [pagaCon, setPagaCon] = useState("");
+  const [conTicket, setConTicket] = useState(false);
+  const [ultima, setUltima] = useState<Venta | null>(null); // para volver a bajar el ticket de la última venta
 
   const total = cuenta.total;
   // "Paga con" es opcional: si se completa, el sistema calcula el vuelto (así no se da de más ni de menos)
@@ -39,7 +44,15 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
     );
     vaciar(comercioId);
     setPagaCon("");
+    setUltima(venta);
+    if (conTicket && comercio) bajarTicket(venta);
+    setConTicket(false);
     alCobrar();
+  }
+
+  function bajarTicket(venta: Venta) {
+    if (!comercio) return;
+    descargarTicket(comercio, venta).catch(() => avisar("No se pudo armar el ticket. Probá de nuevo.", "error"));
   }
 
   return (
@@ -90,6 +103,24 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
               </p>
             )}
             {falta > 0 && <p className="numeros text-peligro">Falta {pesos(falta)}: con eso no alcanza.</p>}
+          </div>
+        )}
+
+        {/* Solo en los comercios que dan ticket (se activa en Mis comercios) */}
+        {comercio?.usaTicket && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[15px]">
+            {!vacio && (
+              <label className="flex items-center gap-2">
+                <input id="con-ticket" type="checkbox" checked={conTicket} onChange={(e) => setConTicket(e.target.checked)} className="size-4 accent-[var(--primary-color)]" />
+                El cliente pide ticket
+              </label>
+            )}
+            {ultima && (
+              <button type="button" onClick={() => bajarTicket(ultima)} className="inline-flex items-center gap-1.5 text-sm text-texto-suave underline-offset-2 hover:text-texto hover:underline">
+                <Printer className="size-3.5" />
+                Ticket de la venta N° {ultima.numero}
+              </button>
+            )}
           </div>
         )}
       </div>

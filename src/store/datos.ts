@@ -1,12 +1,14 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { crearDatosDemo, type BaseDemo } from "@/lib/datos-demo";
+import { crearDatosDemo, DUENO, type BaseDemo } from "@/lib/datos-demo";
 import { ahora, hoy } from "@/lib/fechas";
 import type { MedioDePago } from "@/lib/formato";
 import type { Cuenta } from "@/lib/promos";
 import { ejemploGimnasio } from "@/lib/demo-gimnasio";
 import { turnoEnCurso } from "@/lib/caja";
-import type { Comercio, Compra, Gasto, ItemVenta, Producto, Promo, Relevo, Retiro, Socio, Venta } from "@/lib/tipos";
+import { validarHorarios } from "@/lib/horarios";
+import { huellaDelPin, validarPinNuevo } from "@/lib/pin";
+import type { Comercio, Compra, Gasto, ItemVenta, Producto, Promo, Relevo, Retiro, Socio, Turno, Venta } from "@/lib/tipos";
 import { type AccionesGimnasio, accionesGimnasio } from "./acciones-gimnasio";
 
 // La "base de datos" de prueba, guardada en el navegador (localStorage).
@@ -18,7 +20,7 @@ type Acciones = {
   registrarVenta: (comercioId: number, items: ItemVenta[], medioPago: MedioDePago, cuenta: Cuenta, vendidoPor: string) => Venta;
   abrirCaja: (comercioId: number, responsable: string, montoInicial: number) => void;
   cerrarCaja: (comercioId: number, efectivoContado: number, nota: string) => void;
-  registrarRelevo: (comercioId: number, entra: string, efectivoContado: number, nota: string) => Relevo;
+  registrarRelevo: (comercioId: number, entra: string, efectivoContado: number, nota: string, turno?: string | null) => Relevo;
   anularVenta: (cajaId: number, ventaId: number, hechoPor: string, motivo: string) => void;
   recontarEfectivo: (cajaId: number, efectivo: number, hechoPor: string, motivo: string) => void;
   registrarCompra: (comercioId: number, proveedorId: number, items: Compra["items"], cargadaPor: string) => void;
@@ -31,8 +33,12 @@ type Acciones = {
   crearProducto: (producto: Omit<Producto, "id" | "activo">) => void;
   actualizarProducto: (id: number, cambios: Partial<Producto>) => void;
   importarProductos: (comercioId: number, filas: Omit<Producto, "id" | "comercioId" | "activo" | "diasDuracion">[]) => { nuevos: number; actualizados: number };
-  crearComercio: (comercio: Omit<Comercio, "id" | "permisosEmpleado" | "combinarPromos">) => number;
+  crearComercio: (comercio: Omit<Comercio, "id" | "permisosEmpleado" | "combinarPromos" | "horaApertura" | "horaCierre" | "turnos">) => number;
   actualizarComercio: (id: number, cambios: Partial<Comercio>) => void;
+  guardarHorarios: (comercioId: number, apertura: string, cierre: string, turnos: Turno[]) => void;
+  asignarCodigo: (productoId: number, codigo: string) => void;
+  pinCorrecto: (pin: string) => Promise<boolean>;
+  cambiarPin: (actual: string, nuevo: string, repetido: string) => Promise<void>;
   guardarPromo: (promo: Omit<Promo, "id"> & { id?: number }) => void;
   borrarPromo: (id: number) => void;
   agregarEmpleado: (comercioId: number, nombre: string) => void;
@@ -40,12 +46,15 @@ type Acciones = {
   reiniciar: () => void;
 };
 
-type EstadoDatos = BaseDemo & { siguienteId: number } & Acciones & AccionesGimnasio;
+// pin: la "huella" del PIN de jefe (nunca el PIN tal cual). null = el PIN de la demo (1234), que todavía no se cambió.
+type Seguridad = { pin: { sal: string; huella: string } | null };
+
+type EstadoDatos = BaseDemo & { siguienteId: number } & Seguridad & Acciones & AccionesGimnasio;
 
 function baseNueva() {
   const base = crearDatosDemo();
   const ids = (Object.values(base).flat() as { id?: number }[]).map((x) => x.id ?? 0);
-  return { ...base, siguienteId: Math.max(...ids) + 1 };
+  return { ...base, siguienteId: Math.max(...ids) + 1, pin: null };
 }
 
 export const useDatos = create<EstadoDatos>()(
@@ -95,6 +104,7 @@ export const useDatos = create<EstadoDatos>()(
             total: cuenta.total,
             medioPago,
             vendidoPor,
+            promos: cuenta.aplicadas.filter((a) => a.monto > 0),
           };
           set((x) => ({ ventas: [...x.ventas, venta] }));
           for (const i of items) {
@@ -122,7 +132,7 @@ export const useDatos = create<EstadoDatos>()(
 
         // Relevo de turno: el que se va cuenta el efectivo y se compara con lo de SU turno (con lo que arrancó
         // más lo que cobró en efectivo). La caja sigue abierta y desde ahora queda a nombre del que entra.
-        registrarRelevo: (comercioId, entra, efectivoContado, nota) => {
+        registrarRelevo: (comercioId, entra, efectivoContado, nota, turno = null) => {
           const s = get();
           const caja = s.cajas.find((c) => c.comercioId === comercioId && !c.cerrada);
           if (!caja) throw new Error("La caja ya está cerrada. Abrí una nueva para seguir cobrando.");
@@ -143,6 +153,7 @@ export const useDatos = create<EstadoDatos>()(
             diferencia: efectivoContado - actual.esperado,
             nota: nota.trim().slice(0, 200),
             ultimaVentaId: actual.ultimaVentaId,
+            turno,
           };
           set((x) => ({ relevos: [...x.relevos, relevo], cajas: x.cajas.map((c) => (c.id === caja.id ? { ...c, responsable: quien } : c)) }));
           return relevo;
@@ -285,11 +296,39 @@ export const useDatos = create<EstadoDatos>()(
           const id = nuevoId();
           // En un gimnasio el empleado de recepción también anota socios
           const permisosEmpleado: Comercio["permisosEmpleado"] = comercio.rubro === "gimnasio" ? ["panel_del_dia", "stock", "socios", "cuotas", "clases"] : ["panel_del_dia", "stock", "compras"];
-          set((s) => ({ comercios: [...s.comercios, { ...comercio, id, permisosEmpleado, combinarPromos: "mejor" }] }));
+          set((s) => ({ comercios: [...s.comercios, { ...comercio, id, permisosEmpleado, combinarPromos: "mejor", horaApertura: null, horaCierre: null, turnos: [] }] }));
           return id;
         },
 
         actualizarComercio: (id, cambios) => set((s) => ({ comercios: s.comercios.map((c) => (c.id === id ? { ...c, ...cambios } : c)) })),
+
+        // Horario del local y turnos (solo el jefe, desde Mis comercios). Tira un error si algo no cierra.
+        guardarHorarios: (comercioId, apertura, cierre, turnos) => get().actualizarComercio(comercioId, validarHorarios(apertura, cierre, turnos)),
+
+        // Ponerle (o cambiarle) el código de barras a un producto. Vacío = sin código.
+        asignarCodigo: (productoId, codigo) => {
+          const producto = get().productos.find((p) => p.id === productoId);
+          if (!producto) throw new Error("Elegí el producto.");
+          const limpio = codigo.trim().replace(/\.0+$/, "").slice(0, 50);
+          const otro = limpio && get().productos.find((p) => p.comercioId === producto.comercioId && p.id !== productoId && p.codigo === limpio);
+          if (otro) throw new Error(`Ese código ya es de ${otro.nombre}.`);
+          get().actualizarProducto(productoId, { codigo: limpio });
+        },
+
+        // El PIN no se guarda tal cual: se guarda una "huella" que no se puede dar vuelta (como en Streamlit).
+        // Con Supabase esto va a la base del dueño; mientras tanto queda en este navegador.
+        pinCorrecto: async (pin) => {
+          const guardado = get().pin;
+          if (!guardado) return pin === DUENO.pinDemo;
+          return (await huellaDelPin(pin, guardado.sal)) === guardado.huella;
+        },
+
+        cambiarPin: async (actual, nuevo, repetido) => {
+          if (!(await get().pinCorrecto(actual))) throw new Error("El PIN actual no es correcto.");
+          validarPinNuevo(nuevo, repetido);
+          const sal = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+          set({ pin: { sal, huella: await huellaDelPin(nuevo, sal) } });
+        },
 
         guardarPromo: (promo) => {
           if (promo.id) {
@@ -318,10 +357,10 @@ export const useDatos = create<EstadoDatos>()(
     // skipHydration: se lee del navegador recién cuando la página cargó (ver components/layout/Marco.tsx)
     // Cuando cambia la forma de lo guardado, se acomoda lo que el navegador ya tenía (no se borra nada):
     // version 2: se sumaron los socios. version 3: todo el gimnasio (planes, clases, reservas, cuotas...).
-    // version 4: relevos de turno y ajustes de caja.
+    // version 4: relevos de turno y ajustes de caja. version 5: horarios y turnos del local, PIN propio.
     {
       name: "mantenete-datos",
-      version: 4,
+      version: 5,
       migrate: (guardado, version) => migrar(guardado as Partial<EstadoDatos>, version),
       skipHydration: true,
     },
@@ -376,6 +415,11 @@ function migrar(g: Partial<EstadoDatos>, version: number): EstadoDatos {
   if (version < 4) {
     d.relevos = [];
     d.ajustes = [];
+  }
+  if (version < 5) {
+    // Los comercios arrancan sin horario cargado (la Caja no avisa nada hasta que el jefe lo cargue)
+    d.comercios = (d.comercios ?? []).map((c) => ({ ...c, horaApertura: c.horaApertura ?? null, horaCierre: c.horaCierre ?? null, turnos: c.turnos ?? [] }));
+    d.pin = null;
   }
   return d;
 }

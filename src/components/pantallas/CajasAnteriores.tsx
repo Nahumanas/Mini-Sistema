@@ -75,8 +75,9 @@ function Diferencia({ valor }: { valor: number }) {
 }
 
 function DetalleCaja({ caja }: { caja: Caja }) {
-  const { ventas, relevos, ajustes } = useDatos();
-  const eventos = lineaDeTiempo(caja, ventas, relevos);
+  const { ventas, relevos, ajustes, comercios } = useDatos();
+  const turnos = comercios.find((c) => c.id === caja.comercioId)?.turnos ?? [];
+  const eventos = lineaDeTiempo(caja, ventas, relevos, turnos);
   const arqueo = caja.cerrada ? arqueoAjustado(caja, ventas, ajustes) : null;
 
   return (
@@ -156,17 +157,17 @@ function Evento({ evento: e }: { evento: EventoCaja }) {
             <p>
               {e.tipo === "relevo" && (
                 <>
-                  Relevo a las {hora(e.hora)}: <b>{e.quien}</b> le entregó a <b>{e.entra}</b>.
+                  Relevo a las {hora(e.hora)}: <b>{e.quien}</b> le entregó a <b>{e.entra}</b>.{e.turno && <> Terminó el turno {e.turno}.</>}
                 </>
               )}
               {e.tipo === "cierre" && (
                 <>
-                  <b>{e.quien}</b> cerró la caja a las {hora(e.hora)}.
+                  <b>{e.quien}</b> cerró la caja a las {hora(e.hora)}.{e.turno && <> Turno {e.turno}.</>}
                 </>
               )}
               {e.tipo === "en_curso" && (
                 <>
-                  <b>{e.quien}</b> está atendiendo desde las {hora(e.inicio)}.
+                  <b>{e.quien}</b> está atendiendo desde las {hora(e.inicio)}.{e.turno && <> Turno {e.turno}.</>}
                 </>
               )}
             </p>
