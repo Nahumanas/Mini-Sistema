@@ -4,8 +4,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 import { buscarSeccion, esDelRubro, puedeVer } from "@/lib/navegacion";
-import { useComercioActivo, useSesion } from "@/store/comercio";
+import { MINUTOS_SIN_USO_JEFE, sesionVencida, useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
+import { useInterfaz } from "@/store/interfaz";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
@@ -28,6 +29,7 @@ export function Marco({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (listos && !sesion) router.replace("/ingresar");
   }, [listos, sesion, router]);
+  useCierrePorInactividad(listos);
 
   if (!listos || !sesion) {
     return <div className="h-full bg-fondo" aria-busy />;
@@ -62,4 +64,40 @@ function ConPermiso({ children }: { children: ReactNode }) {
       )}
     </div>
   );
+}
+
+/**
+ * Cierra la sesión del jefe si pasaron MINUTOS_SIN_USO_JEFE sin tocar nada (también si cerró la pestaña
+ * y volvió más tarde). Cada clic o tecla cuenta como uso. Para volver a entrar hay que poner el PIN.
+ */
+function useCierrePorInactividad(listos: boolean) {
+  const esJefe = useSesion((s) => s.sesion?.rol === "jefe");
+  const avisar = useInterfaz((s) => s.avisar);
+
+  useEffect(() => {
+    if (!listos || !esJefe) return;
+    const revisar = () => {
+      const { sesion, ultimoUso, salir } = useSesion.getState();
+      if (!sesionVencida(sesion, ultimoUso)) return false;
+      salir();
+      avisar(`Por seguridad se cerró la sesión de jefe después de ${MINUTOS_SIN_USO_JEFE} minutos sin uso. Entrá de nuevo con tu PIN.`, "info");
+      return true;
+    };
+    if (revisar()) return;
+    useSesion.getState().marcarUso();
+    let ultimaMarca = Date.now();
+    const usar = () => {
+      // Se anota como mucho una vez cada 20 segundos (no hace falta guardar cada tecla)
+      if (Date.now() - ultimaMarca < 20_000) return;
+      ultimaMarca = Date.now();
+      if (!revisar()) useSesion.getState().marcarUso();
+    };
+    const eventos = ["pointerdown", "keydown"] as const;
+    eventos.forEach((e) => window.addEventListener(e, usar));
+    const reloj = setInterval(revisar, 30_000);
+    return () => {
+      eventos.forEach((e) => window.removeEventListener(e, usar));
+      clearInterval(reloj);
+    };
+  }, [listos, esJefe, avisar]);
 }

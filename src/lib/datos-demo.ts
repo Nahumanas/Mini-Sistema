@@ -2,6 +2,7 @@ import type { MedioDePago } from "./formato";
 import { ahora, hoy, sumarDias } from "./fechas";
 import { ejemploGimnasio } from "./demo-gimnasio";
 import type {
+  AjusteCaja,
   Asistencia,
   Caja,
   Clase,
@@ -17,6 +18,7 @@ import type {
   Promo,
   Proveedor,
   ReglasGimnasio,
+  Relevo,
   Reserva,
   Retiro,
   Socio,
@@ -34,6 +36,8 @@ export type BaseDemo = {
   comercios: Comercio[];
   productos: Producto[];
   cajas: Caja[];
+  relevos: Relevo[];
+  ajustes: AjusteCaja[];
   ventas: Venta[];
   proveedores: Proveedor[];
   compras: Compra[];
@@ -155,8 +159,22 @@ export function crearDatosDemo(): BaseDemo {
     { id: 1, comercioId: 1, responsable: "Carlos Pérez", abierta: `${fechaHoy}T07:30`, montoInicial: 20000, cerrada: null, efectivoEsperado: null, efectivoContado: null, nota: "" },
     { id: 2, comercioId: 2, responsable: "Juan", abierta: `${fechaHoy}T07:00`, montoInicial: 10000, cerrada: null, efectivoEsperado: null, efectivoContado: null, nota: "" },
     { id: 4, comercioId: 4, responsable: "Diego", abierta: `${fechaHoy}T07:00`, montoInicial: 10000, cerrada: null, efectivoEsperado: null, efectivoContado: null, nota: "" },
-    { id: 3, comercioId: 3, responsable: "Sofía", abierta: `${sumarDias(fechaHoy, -1)}T10:00`, montoInicial: 15000, cerrada: `${sumarDias(fechaHoy, -1)}T20:05`, efectivoEsperado: 63400, efectivoContado: 63400, nota: "" },
   ];
+
+  // Las cajas de los últimos 6 días, ya cerradas (para ver en "Cajas anteriores"). El arqueo se calcula
+  // más abajo, cuando ya están las ventas. En el kiosco hay dos turnos: Juan a la mañana y Martina a la tarde.
+  const DIAS_CON_CAJA = 6;
+  const QUIEN: Record<number, string> = { 1: "Laura", 2: "Juan", 3: "Sofía", 4: "Diego" };
+  const cajasPasadas = new Map<string, Caja>();
+  let idCaja = 100;
+  for (const comercio of COMERCIOS) {
+    for (let d = -DIAS_CON_CAJA; d <= -1; d++) {
+      const fecha = sumarDias(fechaHoy, d);
+      const caja: Caja = { id: idCaja++, comercioId: comercio.id, responsable: comercio.id === 2 ? "Martina" : QUIEN[comercio.id], abierta: `${fecha}T07:30`, montoInicial: comercio.id === 2 ? 10000 : 15000, cerrada: `${fecha}T21:05`, efectivoEsperado: null, efectivoContado: null, nota: "" };
+      cajas.push(caja);
+      cajasPasadas.set(`${comercio.id}|${fecha}`, caja);
+    }
+  }
 
   const ventas: Venta[] = [];
   const numeros: Record<number, number> = {};
@@ -273,10 +291,37 @@ export function crearDatosDemo(): BaseDemo {
   ventas.push(...gimnasio.ventas);
   // Las cuotas se agregaron al final: se ordena todo por fecha y se numeran de nuevo los tickets de cada comercio
   ventas.sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+  // Las ventas de los días anteriores entran en la caja de su día; después se hace el arqueo de cada caja
+  for (const v of ventas) {
+    const caja = v.cajaId == null ? cajasPasadas.get(`${v.comercioId}|${v.fecha.slice(0, 10)}`) : undefined;
+    if (caja) {
+      v.cajaId = caja.id;
+      v.vendidoPor = caja.comercioId === 2 && v.fecha.slice(11) <= "14:00" ? "Juan" : caja.responsable;
+    }
+  }
+  const relevos: Relevo[] = [];
+  const efectivoDe = (lista: Venta[]) => lista.filter((v) => v.medioPago === "efectivo").reduce((t, v) => t + v.total, 0);
+  let vuelta = 0;
+  for (const caja of cajasPasadas.values()) {
+    const suyas = ventas.filter((v) => v.cajaId === caja.id);
+    caja.efectivoEsperado = caja.montoInicial + efectivoDe(suyas);
+    // Casi siempre da justo; de vez en cuando faltan unos pesos (en el kiosco, en el turno de la tarde)
+    const falta = vuelta++ % 5 === 3 ? 500 : 0;
+    caja.efectivoContado = caja.efectivoEsperado - falta;
+    if (falta) caja.nota = "Faltó plata: revisar el vuelto";
+    if (caja.comercioId === 2) {
+      const fecha = `${caja.abierta.slice(0, 10)}T14:00`;
+      const manana = suyas.filter((v) => v.fecha <= fecha);
+      const esperado = caja.montoInicial + efectivoDe(manana);
+      relevos.push({ id: idCaja++, comercioId: 2, cajaId: caja.id, fecha, sale: "Juan", entra: "Martina", esperado, contado: esperado, diferencia: 0, nota: "", ultimaVentaId: Math.max(0, ...manana.map((v) => v.id)) });
+    }
+  }
+
   const numeracion: Record<number, number> = {};
   for (const v of ventas) v.numero = numeracion[v.comercioId] = (numeracion[v.comercioId] ?? 0) + 1;
 
-  return { comercios: COMERCIOS, productos, cajas, ventas, proveedores, compras, gastos, lotes, retiros: [], promos, empleados,
+  return { comercios: COMERCIOS, productos, cajas, relevos, ajustes: [], ventas, proveedores, compras, gastos, lotes, retiros: [], promos, empleados,
     disciplinas: gimnasio.disciplinas, planes: gimnasio.planes, clases: gimnasio.clases, reglasGimnasio: gimnasio.reglasGimnasio,
     socios: gimnasio.socios, reservas: gimnasio.reservas, cuotas: gimnasio.cuotas, asistencias: gimnasio.asistencias };
 }

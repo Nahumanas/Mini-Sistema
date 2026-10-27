@@ -227,7 +227,7 @@ function HistorialDelSocio({ socioId }: { socioId: number }) {
               <tr key={c.id}>
                 <td className="px-4 py-2">{ddmm(c.fecha, true)}</td>
                 <td className="hidden px-4 py-2 sm:table-cell">{planes.find((p) => p.id === c.planId)?.nombre}</td>
-                <td className="px-4 py-2 text-right">{pesos(c.monto)}</td>
+                <td className="px-4 py-2 text-right">{c.anulada ? <Chip tono="rojo">Anulada</Chip> : pesos(c.monto)}</td>
                 <td className="hidden px-4 py-2 sm:table-cell">{MEDIOS_DE_PAGO[c.medioPago]}</td>
                 <td className="px-4 py-2">{ddmm(c.venceNuevo, true)}</td>
                 <td className="hidden px-4 py-2 text-texto-suave sm:table-cell">{c.cobradaPor}</td>
