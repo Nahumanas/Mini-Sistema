@@ -9,7 +9,7 @@ La lógica (ventas, stock, caja) va a quedar en una API con **FastAPI** en Railw
 
 ![Inicio](capturas/inicio.png)
 
-Ya están **todas las pantallas** de la versión de Streamlit (menos las del gimnasio), funcionando con
+Ya están **todas las pantallas** de la versión de Streamlit (del gimnasio, por ahora solo Socios), funcionando con
 **datos de prueba** que se guardan en el navegador: lo que cobrás, comprás o cargás queda guardado
 y se conecta entre pantallas (una venta baja el stock, una compra lo sube, etc.).
 Para volver a los datos del principio: Configuración → Reiniciar datos de prueba.
@@ -28,6 +28,7 @@ Para volver a los datos del principio: Configuración → Reiniciar datos de pru
 | Descuentos y promos | 2x1 / 3x2, % en productos o categorías, % por medio de pago |
 | Mis comercios | Datos de cada sucursal, empleados y qué puede ver cada empleado |
 | Importar / exportar Excel | Bajar productos, ventas y gastos; subir una lista de productos |
+| Socios (solo gimnasios) | Lista de socios con su cuota (al día, vence pronto, vencida), anotar uno nuevo e **importar socios** desde el Excel que el gimnasio ya tiene (.xlsx o .csv): adivina qué columna es cada dato, se puede corregir, y muestra una vista previa con los errores antes de guardar |
 | Configuración | Tema, PIN, avisos de Telegram, reiniciar los datos de prueba |
 
 ## Capturas
@@ -37,6 +38,10 @@ Para volver a los datos del principio: Configuración → Reiniciar datos de pru
 | ![Caja](capturas/caja-con-promo.png) | ![Stock](capturas/stock.png) |
 | **Reportes (modo oscuro)** | **Panel del día** |
 | ![Reportes](capturas/reportes-oscuro.png) | ![Panel del día](capturas/panel-del-dia.png) |
+
+**Importar socios del gimnasio**
+
+![Importar socios](capturas/importar-socios.png)
 
 ## Cómo correrlo en tu PC
 
@@ -109,5 +114,5 @@ Cada vez que subas un cambio a GitHub, Vercel lo publica solo.
 - Ingreso con Supabase (Gmail y contraseña) y permisos jefe/empleado de verdad.
 - La API de FastAPI: cada acción de `store/datos.ts` pasa a llamar a `lib/api.ts`.
 - Ticket en PDF, relevo de turno, ajustes de cajas cerradas y horarios de los comercios.
-- Las pantallas del gimnasio (socios, cuotas, clases, ingreso por DNI).
+- El resto del gimnasio: planes, cobrar cuotas, clases e ingreso por DNI (Socios ya está).
 - Avisos de Telegram (necesitan la API).

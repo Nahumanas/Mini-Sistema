@@ -5,7 +5,7 @@ import type { MedioDePago } from "./formato";
 
 export type Rubro = "kiosco" | "ferreteria" | "ropa" | "almacen" | "panaderia" | "gimnasio" | "otro";
 
-export type Permiso = "panel_del_dia" | "stock" | "compras" | "gastos" | "vencimientos";
+export type Permiso = "panel_del_dia" | "stock" | "compras" | "gastos" | "vencimientos" | "socios";
 
 export type Comercio = {
   id: number;
@@ -112,5 +112,19 @@ export type Promo = {
 };
 
 export type Empleado = { id: number; comercioId: number; nombre: string; activo: boolean };
+
+/** Un socio del gimnasio. El DNI no se repite dentro del mismo gimnasio. */
+export type Socio = {
+  id: number;
+  comercioId: number;
+  nombre: string;
+  dni: string; // solo números: "30123456"
+  telefono: string;
+  email: string;
+  plan: string; // por ahora un texto ("Mensual libre"); cuando estén los planes en la web, pasa a ser el plan elegido
+  vence: string | null; // hasta qué día tiene la cuota paga (null = todavía no pagó ninguna)
+  alta: string; // fecha en que se anotó
+  activo: boolean;
+};
 
 export type Sesion = { rol: "jefe" | "empleado"; nombre: string; comercioId: number };

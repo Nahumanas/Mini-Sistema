@@ -4,7 +4,7 @@ import { crearDatosDemo, type BaseDemo } from "@/lib/datos-demo";
 import { ahora, hoy } from "@/lib/fechas";
 import type { MedioDePago } from "@/lib/formato";
 import type { Cuenta } from "@/lib/promos";
-import type { Comercio, Compra, Gasto, ItemVenta, Producto, Promo, Retiro, Venta } from "@/lib/tipos";
+import type { Comercio, Compra, Gasto, ItemVenta, Producto, Promo, Retiro, Socio, Venta } from "@/lib/tipos";
 
 // La "base de datos" de prueba, guardada en el navegador (localStorage).
 // Todo lo que se carga queda conectado como en el sistema real: una venta baja el stock,
@@ -31,6 +31,8 @@ type Acciones = {
   borrarPromo: (id: number) => void;
   agregarEmpleado: (comercioId: number, nombre: string) => void;
   quitarEmpleado: (id: number) => void;
+  crearSocio: (socio: Omit<Socio, "id" | "alta" | "activo">) => void;
+  importarSocios: (comercioId: number, filas: Omit<Socio, "id" | "comercioId" | "alta" | "activo">[]) => { nuevos: number; actualizados: number };
   reiniciar: () => void;
 };
 
@@ -211,7 +213,9 @@ export const useDatos = create<EstadoDatos>()(
 
         crearComercio: (comercio) => {
           const id = nuevoId();
-          set((s) => ({ comercios: [...s.comercios, { ...comercio, id, permisosEmpleado: ["panel_del_dia", "stock", "compras"], combinarPromos: "mejor" }] }));
+          // En un gimnasio el empleado de recepción también anota socios
+          const permisosEmpleado: Comercio["permisosEmpleado"] = comercio.rubro === "gimnasio" ? ["panel_del_dia", "stock", "socios"] : ["panel_del_dia", "stock", "compras"];
+          set((s) => ({ comercios: [...s.comercios, { ...comercio, id, permisosEmpleado, combinarPromos: "mejor" }] }));
           return id;
         },
 
@@ -235,10 +239,41 @@ export const useDatos = create<EstadoDatos>()(
 
         quitarEmpleado: (id) => set((s) => ({ empleados: s.empleados.filter((e) => e.id !== id) })),
 
+        crearSocio: (socio) => {
+          const id = nuevoId();
+          set((s) => ({ socios: [...s.socios, { ...socio, id, alta: hoy(), activo: true }] }));
+        },
+
+        // Si el DNI ya está en el gimnasio, se actualizan sus datos (sin borrar lo que venga vacío en el Excel).
+        // Si no está, se anota como socio nuevo.
+        importarSocios: (comercioId, filas) => {
+          let nuevos = 0;
+          let actualizados = 0;
+          for (const fila of filas) {
+            const existe = get().socios.find((x) => x.comercioId === comercioId && x.dni === fila.dni);
+            if (existe) {
+              const cambios = Object.fromEntries(Object.entries(fila).filter(([, v]) => v !== "" && v !== null));
+              set((s) => ({ socios: s.socios.map((x) => (x.id === existe.id ? { ...x, ...cambios, activo: true } : x)) }));
+              actualizados++;
+            } else {
+              get().crearSocio({ ...fila, comercioId });
+              nuevos++;
+            }
+          }
+          return { nuevos, actualizados };
+        },
+
         reiniciar: () => set(baseNueva()),
       };
     },
     // skipHydration: se lee del navegador recién cuando la página cargó (ver components/layout/Marco.tsx)
-    { name: "mantenete-datos", version: 1, skipHydration: true },
+    // version 2: se sumaron los socios del gimnasio. Lo que ya estaba guardado se mantiene (por ejemplo un
+    // gimnasio creado a mano) y arranca sin socios. El gimnasio de prueba aparece al reiniciar los datos.
+    {
+      name: "mantenete-datos",
+      version: 2,
+      migrate: (guardado) => ({ ...(guardado as EstadoDatos), socios: (guardado as Partial<EstadoDatos>).socios ?? [] }),
+      skipHydration: true,
+    },
   ),
 );

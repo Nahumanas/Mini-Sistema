@@ -7,10 +7,13 @@ export type Aviso = { id: number; texto: string; tipo: "exito" | "info" | "error
 type EstadoInterfaz = {
   tema: Tema;
   menuAbierto: boolean; // en el celular, la barra lateral se abre con el botón ☰
+  menuAchicado: boolean; // en la compu, la barra lateral se achica a solo íconos para dejar más lugar
   avisos: Aviso[];
   leerTema: () => void;
   alternarTema: () => void;
   abrirMenu: (abierto: boolean) => void;
+  leerMenu: () => void;
+  achicarMenu: () => void;
   avisar: (texto: string, tipo?: Aviso["tipo"]) => void;
   cerrarAviso: (id: number) => void;
 };
@@ -20,6 +23,7 @@ let proximoAviso = 1;
 export const useInterfaz = create<EstadoInterfaz>()((set, get) => ({
   tema: "claro",
   menuAbierto: false,
+  menuAchicado: false,
   avisos: [],
   // El script de layout.tsx ya puso (o no) la clase "dark": acá solo se lee para que el botón coincida
   leerTema: () => set({ tema: document.documentElement.classList.contains("dark") ? "oscuro" : "claro" }),
@@ -34,6 +38,22 @@ export const useInterfaz = create<EstadoInterfaz>()((set, get) => ({
     set({ tema });
   },
   abrirMenu: (menuAbierto) => set({ menuAbierto }),
+  leerMenu: () => {
+    try {
+      set({ menuAchicado: localStorage.getItem("mantenete-menu") === "achicado" });
+    } catch {
+      // Sin permiso para leer: queda abierto
+    }
+  },
+  achicarMenu: () => {
+    const menuAchicado = !get().menuAchicado;
+    try {
+      localStorage.setItem("mantenete-menu", menuAchicado ? "achicado" : "abierto");
+    } catch {
+      // Ventana privada: se achica igual, solo que no queda guardado
+    }
+    set({ menuAchicado });
+  },
   avisar: (texto, tipo = "exito") => {
     const id = proximoAviso++;
     set((s) => ({ avisos: [...s.avisos, { id, texto, tipo }] }));

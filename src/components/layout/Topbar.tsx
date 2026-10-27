@@ -12,6 +12,8 @@ import {
   LayoutGrid,
   type LucideIcon,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Shirt,
   ShoppingBasket,
   Store,
@@ -46,7 +48,7 @@ export const RUBROS: Record<Rubro, string> = {
 // La barra de arriba: solo las migas de pan (dónde estoy) y el selector de sucursal.
 export function Topbar() {
   const ruta = usePathname();
-  const abrirMenu = useInterfaz((s) => s.abrirMenu);
+  const { abrirMenu, achicarMenu, menuAchicado } = useInterfaz();
   const migas = migasDe(ruta);
 
   return (
@@ -57,6 +59,14 @@ export function Topbar() {
         aria-label="Abrir menú"
       >
         <Menu className="size-5" />
+      </button>
+      <button
+        onClick={achicarMenu}
+        className="-ml-1 hidden rounded-md p-1.5 text-texto-suave hover:bg-superficie-suave hover:text-texto lg:inline-flex"
+        aria-label={menuAchicado ? "Agrandar el menú" : "Achicar el menú"}
+        title={menuAchicado ? "Agrandar el menú" : "Achicar el menú"}
+      >
+        {menuAchicado ? <PanelLeftOpen className="size-5" /> : <PanelLeftClose className="size-5" />}
       </button>
 
       <nav aria-label="Migas de pan" className="min-w-0 flex-1">

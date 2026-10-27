@@ -11,6 +11,7 @@ import type {
   Promo,
   Proveedor,
   Retiro,
+  Socio,
   Venta,
 } from "./tipos";
 
@@ -33,6 +34,7 @@ export type BaseDemo = {
   retiros: Retiro[];
   promos: Promo[];
   empleados: Empleado[];
+  socios: Socio[];
 };
 
 /** Un "dado" que siempre tira los mismos números (mulberry32). */
@@ -49,6 +51,7 @@ const COMERCIOS: Comercio[] = [
   { id: 1, nombre: "Ferretería Don Tito", rubro: "ferreteria", direccion: "Calle San Martín 1200", usaTicket: true, permisosEmpleado: ["panel_del_dia", "stock", "compras"], combinarPromos: "mejor" },
   { id: 2, nombre: "Kiosco El Paso", rubro: "kiosco", direccion: "Av. Rivadavia 4500", usaTicket: false, permisosEmpleado: ["panel_del_dia", "stock", "compras", "vencimientos"], combinarPromos: "mejor" },
   { id: 3, nombre: "Tienda Urbana", rubro: "ropa", direccion: "Galería Sol, local 12", usaTicket: true, permisosEmpleado: ["stock"], combinarPromos: "mejor" },
+  { id: 4, nombre: "Gimnasio Fuerza Norte", rubro: "gimnasio", direccion: "Av. Mitre 850", usaTicket: false, permisosEmpleado: ["panel_del_dia", "stock", "socios"], combinarPromos: "mejor" },
 ];
 
 // [código, nombre, categoría, precio, costo, stock, stock mínimo, días que dura]
@@ -86,6 +89,12 @@ const CATALOGO: Record<number, Fila[]> = {
     ["7795555000305", "Medias (pack x3)", "Accesorios", 6500, 3100, 25, 10, null],
     ["7795555000306", "Gorra negra", "Accesorios", 11900, 5900, 1, 3, null],
   ],
+  4: [
+    ["7790895001208", "Agua mineral 500 ml", "Bebidas", 1200, 560, 40, 24, null],
+    ["7790895001215", "Bebida isotónica 500 ml", "Bebidas", 2400, 1300, 18, 12, null],
+    ["7790895001222", "Barra proteica", "Suplementos", 2900, 1600, 15, 10, null],
+    ["7790895001239", "Proteína en polvo 1 kg", "Suplementos", 38500, 24000, 4, 2, null],
+  ],
 };
 
 // Cuántas ventas por día (más o menos) y qué medios de pago usa la gente en cada comercio
@@ -93,7 +102,24 @@ const MOVIMIENTO: Record<number, { ventasPorDia: number; medios: [MedioDePago, n
   1: { ventasPorDia: 9, medios: [["efectivo", 0.4], ["debito", 0.3], ["credito", 0.15], ["transferencia", 0.15]] },
   2: { ventasPorDia: 32, medios: [["efectivo", 0.55], ["transferencia", 0.3], ["debito", 0.15]] },
   3: { ventasPorDia: 5, medios: [["credito", 0.4], ["debito", 0.25], ["transferencia", 0.2], ["efectivo", 0.15]] },
+  4: { ventasPorDia: 6, medios: [["efectivo", 0.4], ["transferencia", 0.45], ["debito", 0.15]] },
 };
+
+// Socios del gimnasio: [nombre, DNI, teléfono, plan, días que le faltan para vencer (negativo = ya venció; null = nunca pagó)]
+const SOCIOS: [string, string, string, string, number | null][] = [
+  ["Lucía Fernández", "30000000", "11 5123-4401", "Mensual libre", 18],
+  ["Martín Gómez", "33456789", "11 5123-4402", "8 clases por mes", 3],
+  ["Valentina Rodríguez", "38912345", "11 5123-4403", "Mensual libre", 25],
+  ["Joaquín López", "35678123", "11 5123-4404", "Trimestral libre", 61],
+  ["Camila Martínez", "40123456", "11 5123-4405", "12 clases por mes", -4],
+  ["Tomás Díaz", "37890234", "11 5123-4406", "Mensual libre", 9],
+  ["Sofía Romero", "41234567", "11 5123-4407", "8 clases por mes", -12],
+  ["Nicolás Sosa", "34567890", "11 5123-4408", "Mensual libre", 1],
+  ["Florencia Álvarez", "39876543", "11 5123-4409", "Mensual libre", 22],
+  ["Federico Torres", "32109876", "11 5123-4410", "12 clases por mes", 14],
+  ["Agustina Ruiz", "42345678", "11 5123-4411", "Mensual libre", null],
+  ["Matías Benítez", "36789012", "11 5123-4412", "Trimestral libre", -30],
+];
 
 export function crearDatosDemo(): BaseDemo {
   const azar = dado(2026);
@@ -124,10 +150,11 @@ export function crearDatosDemo(): BaseDemo {
     })),
   );
 
-  // Hoy: la ferretería y el kiosco tienen la caja abierta; la tienda de ropa todavía no abrió
+  // Hoy: la ferretería, el kiosco y el gimnasio tienen la caja abierta; la tienda de ropa todavía no abrió
   const cajas: Caja[] = [
     { id: 1, comercioId: 1, responsable: "Carlos Pérez", abierta: `${fechaHoy}T07:30`, montoInicial: 20000, cerrada: null, efectivoEsperado: null, efectivoContado: null, nota: "" },
     { id: 2, comercioId: 2, responsable: "Juan", abierta: `${fechaHoy}T07:00`, montoInicial: 10000, cerrada: null, efectivoEsperado: null, efectivoContado: null, nota: "" },
+    { id: 4, comercioId: 4, responsable: "Diego", abierta: `${fechaHoy}T07:00`, montoInicial: 10000, cerrada: null, efectivoEsperado: null, efectivoContado: null, nota: "" },
     { id: 3, comercioId: 3, responsable: "Sofía", abierta: `${sumarDias(fechaHoy, -1)}T10:00`, montoInicial: 15000, cerrada: `${sumarDias(fechaHoy, -1)}T20:05`, efectivoEsperado: 63400, efectivoContado: 63400, nota: "" },
   ];
 
@@ -173,6 +200,7 @@ export function crearDatosDemo(): BaseDemo {
     { id: id++, comercioId: 2, nombre: "Golosinas Mayorista Oeste", telefono: "11 4635-2211" },
     { id: id++, comercioId: 2, nombre: "Lácteos La Granja", telefono: "11 5021-7744" },
     { id: id++, comercioId: 3, nombre: "Textil Once", telefono: "11 4961-3030" },
+    { id: id++, comercioId: 4, nombre: "Bebidas del Norte", telefono: "11 4790-5566" },
   ];
 
   const compras: Compra[] = [];
@@ -201,6 +229,7 @@ export function crearDatosDemo(): BaseDemo {
     1: [["Alquiler", 480000], ["Luz", 62000], ["Internet", 21000], ["Sueldos", 650000], ["Impuestos", 95000]],
     2: [["Alquiler", 310000], ["Luz", 88000], ["Internet", 18000], ["Sueldos", 590000]],
     3: [["Alquiler", 420000], ["Luz", 41000], ["Internet", 18000], ["Sueldos", 540000], ["Mantenimiento", 35000]],
+    4: [["Alquiler", 650000], ["Luz", 120000], ["Internet", 21000], ["Sueldos", 900000], ["Mantenimiento", 60000]],
   };
   const gastos: Gasto[] = [];
   for (const mes of [sumarDias(`${fechaHoy.slice(0, 7)}-01`, -1).slice(0, 7), fechaHoy.slice(0, 7)]) {
@@ -235,7 +264,21 @@ export function crearDatosDemo(): BaseDemo {
     { id: id++, comercioId: 2, nombre: "Juan", activo: true },
     { id: id++, comercioId: 2, nombre: "Martina", activo: true },
     { id: id++, comercioId: 3, nombre: "Sofía", activo: true },
+    { id: id++, comercioId: 4, nombre: "Diego", activo: true },
   ];
 
-  return { comercios: COMERCIOS, productos, cajas, ventas, proveedores, compras, gastos, lotes, retiros: [], promos, empleados };
+  const socios: Socio[] = SOCIOS.map(([nombre, dni, telefono, plan, faltan], i) => ({
+    id: id++,
+    comercioId: 4,
+    nombre,
+    dni,
+    telefono,
+    email: "",
+    plan,
+    vence: faltan === null ? null : sumarDias(fechaHoy, faltan),
+    alta: sumarDias(fechaHoy, -40 - i * 9),
+    activo: true,
+  }));
+
+  return { comercios: COMERCIOS, productos, cajas, ventas, proveedores, compras, gastos, lotes, retiros: [], promos, empleados, socios };
 }

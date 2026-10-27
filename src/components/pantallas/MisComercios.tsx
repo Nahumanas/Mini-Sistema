@@ -9,12 +9,13 @@ import { useInterfaz } from "@/store/interfaz";
 import { RUBROS } from "../layout/Topbar";
 import { Boton, Campo, claseInput, Encabezado, Segmentado, Tarjeta } from "../ui/base";
 
-const PERMISOS: { clave: Permiso; texto: string }[] = [
+const PERMISOS: { clave: Permiso; texto: string; soloGimnasio?: boolean }[] = [
   { clave: "panel_del_dia", texto: "Panel del día (lo cobrado hoy)" },
   { clave: "stock", texto: "Stock (solo mirar)" },
   { clave: "compras", texto: "Compras (cargar lo que llega)" },
   { clave: "gastos", texto: "Gastos" },
   { clave: "vencimientos", texto: "Vencimientos (cargar tandas y retirar lo vencido)" },
+  { clave: "socios", texto: "Socios (ver y anotar socios)", soloGimnasio: true },
 ];
 
 // Los comercios del dueño: sus datos, sus empleados y qué puede ver cada empleado. Y crear uno nuevo.
@@ -158,7 +159,7 @@ export function MisComercios() {
             <hr className="border-borde" />
             <fieldset className="flex flex-col gap-2.5">
               <legend className="mb-2 text-sm font-medium">Qué pueden ver los empleados (además de la Caja)</legend>
-              {PERMISOS.map((p) => (
+              {PERMISOS.filter((p) => !p.soloGimnasio || comercio.rubro === "gimnasio").map((p) => (
                 <label key={p.clave} className="flex items-center gap-2.5 text-[15px]">
                   <input type="checkbox" checked={comercio.permisosEmpleado.includes(p.clave)} onChange={() => cambiarPermiso(p.clave)} className="size-4 accent-[var(--primary-color)]" />
                   {p.texto}
