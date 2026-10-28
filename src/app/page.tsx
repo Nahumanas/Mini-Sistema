@@ -1,6 +1,12 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { Landing } from "@/components/landing/Landing";
 
-// La entrada lleva a Inicio. Si nadie ingresó todavía, el marco de adentro manda a /ingresar.
+// La entrada muestra la página de presentación. El botón "Probar Demo Gratis" lleva a /ingresar.
+export const metadata: Metadata = {
+  title: { absolute: "Mantenete · Caja, stock y ganancias de tu comercio" },
+  description: "Mantené el control total de tu mercado, stock y ganancias en una sola pantalla, sin instalar nada. Probá la demo gratis.",
+};
+
 export default function Home() {
-  redirect("/inicio");
+  return <Landing />;
 }
