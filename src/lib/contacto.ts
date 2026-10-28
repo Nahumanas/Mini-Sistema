@@ -12,9 +12,6 @@ export const CONTACTO = {
   linkedin: "",
 };
 
-export const PRECIO_MENSUAL = 19900;
-export const PRECIO_CON_FACTURA = 29900;
-
 // Arma el link de WhatsApp con un mensaje ya escrito. Sin número, devuelve null.
 export function linkWhatsapp(mensaje: string): string | null {
   if (!CONTACTO.whatsapp) return null;

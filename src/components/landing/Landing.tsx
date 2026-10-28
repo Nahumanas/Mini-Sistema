@@ -20,7 +20,7 @@ import {
   Store,
   Users,
 } from "lucide-react";
-import { CONTACTO, PRECIO_CON_FACTURA, PRECIO_MENSUAL, linkWhatsapp } from "@/lib/contacto";
+import { CONTACTO, linkWhatsapp } from "@/lib/contacto";
 import { MenuCelular } from "./MenuCelular";
 import { FormularioContacto } from "./FormularioContacto";
 
@@ -32,8 +32,6 @@ const LINKS_MENU = [
   { href: "#planes", texto: "Planes" },
   { href: "#contacto", texto: "Contacto" },
 ];
-
-const formatoPesos = (n: number) => "$" + n.toLocaleString("es-AR");
 
 function Logo({ claro = false }: { claro?: boolean }) {
   return (
@@ -232,63 +230,41 @@ function Caracteristicas() {
 const INCLUYE = ["Caja con lector de código de barras", "Stock, compras, gastos y vencimientos", "Reportes de ganancias y Excel", "Empleados con permisos y relevos", "Sucursales sin costo extra"];
 
 function Planes() {
-  const whatsappAlta = linkWhatsapp("Hola, quiero dar de alta mi comercio en Mantenete.");
+  const whatsappCotizacion = linkWhatsapp("Hola, quiero pedir una cotización de Mantenete para mi comercio.");
   return (
     <section id="planes" className="scroll-mt-16 border-y border-[#DCE6F0] bg-[#F3F7FB]">
       <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-24">
         <div className="mx-auto max-w-2xl text-center">
           <Etiqueta>Planes</Etiqueta>
-          <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-[#0F2340] sm:text-4xl">Un precio claro, sin sorpresas</h2>
+          <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-[#0F2340] sm:text-4xl">Un solo plan, todo incluido</h2>
           <p className="mt-4 text-lg text-[#475569]">Abono mensual, sin tope de ventas. Las sucursales no se cobran aparte.</p>
         </div>
-        <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-2">
-          <div className="relative rounded-2xl border-2 border-[#1C7BD6] bg-white p-7">
-            <span className="absolute -top-3 left-7 rounded-full bg-[#1C7BD6] px-3 py-0.5 text-xs font-semibold text-white">Disponible</span>
-            <h3 className="text-xl font-bold text-[#0F2340]">Plan Mantenete</h3>
-            <p className="mt-1 text-[#475569]">Todo lo necesario para operar la caja, controlar el stock y ver tus ganancias.</p>
-            <p className="mt-6 flex items-end gap-1.5">
-              <span className="text-4xl font-extrabold tracking-tight text-[#0F2340]">{formatoPesos(PRECIO_MENSUAL)}</span>
-              <span className="pb-1 text-[#475569]">/ mes</span>
-            </p>
-            <ul className="mt-6 space-y-2.5">
-              {INCLUYE.map((t) => (
-                <li key={t} className="flex gap-2.5 text-[#0F2340]">
-                  <Check className="mt-0.5 size-5 flex-none text-[#1C7BD6]" />
-                  {t}
-                </li>
-              ))}
-            </ul>
+        <div className="mx-auto mt-12 max-w-3xl rounded-2xl border-2 border-[#1C7BD6] bg-white p-7 sm:p-9">
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="max-w-md">
+              <h3 className="text-2xl font-bold text-[#0F2340]">Plan Mantenete</h3>
+              <p className="mt-1.5 text-[#475569]">Todo lo necesario para operar la caja, controlar el stock y ver tus ganancias.</p>
+            </div>
             <a
-              href={whatsappAlta ?? "#contacto"}
-              target={whatsappAlta ? "_blank" : undefined}
+              href={whatsappCotizacion ?? "#contacto"}
+              target={whatsappCotizacion ? "_blank" : undefined}
               rel="noopener noreferrer"
-              className="mt-7 flex h-11 items-center justify-center rounded-lg bg-[#1C7BD6] font-semibold text-white hover:bg-[#1767b4]"
+              className="inline-flex h-12 items-center justify-center rounded-lg bg-[#1C7BD6] px-6 font-semibold text-white hover:bg-[#1767b4]"
             >
-              Quiero dar de alta mi comercio
+              Pedir cotización
             </a>
           </div>
-          <div className="rounded-2xl border border-[#DCE6F0] bg-white p-7">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-xl font-bold text-[#0F2340]">Con factura electrónica</h3>
-              <Proximamente />
-            </div>
-            <p className="mt-1 text-[#475569]">El mismo plan, más la emisión de facturas de ARCA desde la caja.</p>
-            <p className="mt-6 flex items-end gap-1.5">
-              <span className="text-sm text-[#475569]">aprox.</span>
-              <span className="text-4xl font-extrabold tracking-tight text-[#0F2340]">{formatoPesos(PRECIO_CON_FACTURA)}</span>
-              <span className="pb-1 text-[#475569]">/ mes</span>
-            </p>
-            <ul className="mt-6 space-y-2.5">
-              {["Todo lo del Plan Mantenete", "Factura electrónica ARCA"].map((t) => (
-                <li key={t} className="flex gap-2.5 text-[#0F2340]">
-                  <Check className="mt-0.5 size-5 flex-none text-[#2A9FDA]" />
-                  {t}
-                </li>
-              ))}
-            </ul>
-            <a href="#contacto" className="mt-7 flex h-11 items-center justify-center rounded-lg border border-[#DCE6F0] font-semibold text-[#0F2340] hover:bg-[#F3F7FB]">
-              Avisame cuando esté
-            </a>
+          <ul className="mt-8 grid gap-x-8 gap-y-3 sm:grid-cols-2">
+            {INCLUYE.map((t) => (
+              <li key={t} className="flex gap-2.5 text-[#0F2340]">
+                <Check className="mt-0.5 size-5 flex-none text-[#1C7BD6]" />
+                {t}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-8 flex flex-wrap items-center gap-2 border-t border-[#DCE6F0] pt-5 text-[#475569]">
+            <span>Factura electrónica ARCA desde la caja</span>
+            <Proximamente />
           </div>
         </div>
         <p className="mt-8 text-center text-[#475569]">Incluye actualizaciones automáticas, hosting en la nube y soporte.</p>
