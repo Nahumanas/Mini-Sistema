@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="160 155 704 704" width="1024" height="1024">
+<defs><linearGradient id="cuerpo" x1="278" y1="0" x2="746" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1C7BD6"/><stop offset="0.5" stop-color="#2A9FDA"/><stop offset="0.5" stop-color="#2FB6DD"/><stop offset="1" stop-color="#43DDE3"/></linearGradient><linearGradient id="solapa_der" x1="512" y1="0" x2="829" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#2BB3DC"/><stop offset="1" stop-color="#3CCFE0"/></linearGradient></defs>
+  <path d="M278.0,516.0 Q278,516 278.0,516.0 L477.6,609.8 Q512,626 546.4,609.8 L746.0,516.0 Q746,516 746.0,516.0 L746.0,674.0 Q746,712 711.6,728.2 L546.4,805.8 Q512,822 477.6,805.8 L312.4,728.2 Q278,712 278.0,674.0 Z" fill="url(#cuerpo)" stroke="#0F2340" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M278,516 L512,626 L746,516 L746,546 L512,656 L278,546 Z" fill="#2A72AE" stroke="none"/>
+  <path d="M278,546 L512,656 L746,546" fill="none" stroke="#0F2340" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M278.0,516.0 Q278,516 278.0,516.0 L477.6,609.8 Q512,626 546.4,609.8 L746.0,516.0 Q746,516 746.0,516.0 L746.0,674.0 Q746,712 711.6,728.2 L546.4,805.8 Q512,822 477.6,805.8 L312.4,728.2 Q278,712 278.0,674.0 Z" fill="none" stroke="#0F2340" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M278.0,352.0 Q278,352 278.0,352.0 L512.0,462.0 Q512,462 512.0,462.0 L746.0,352.0 Q746,352 746.0,352.0 L746.0,454.0 Q746,492 711.6,508.2 L546.4,585.8 Q512,602 477.6,585.8 L312.4,508.2 Q278,492 278.0,454.0 Z" fill="url(#cuerpo)" stroke="#0F2340" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M512,462 L512,588" fill="none" stroke="#0F2340" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M275,352 L195,292 L432,190 L512,250 Z" fill="#28A7DB" stroke="#0F2340" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M512,250 L592,190 L829,292 L749,352 Z" fill="#28A7DB" stroke="#0F2340" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M275,352 L512,250 L512,462 Z" fill="#0F2340" stroke="#0F2340" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M512,250 L749,352 L512,462 Z" fill="#2373A6" stroke="#0F2340" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M275,352 L512,462 L432,522 L195,412 Z" fill="#28A7DB" stroke="#0F2340" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M512,462 L749,352 L829,412 L592,522 Z" fill="url(#solapa_der)" stroke="#0F2340" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>
