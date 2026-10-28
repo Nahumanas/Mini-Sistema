@@ -10,6 +10,45 @@ const MARGEN = 5;
 
 /** Arma el PDF del ticket y lo descarga (se abre con doble clic o se manda a la impresora de tickets). */
 export async function descargarTicket(comercio: Pick<Comercio, "nombre" | "direccion">, venta: Venta) {
+  const pdf = await armarTicket(comercio, venta);
+  // Se descarga con un link propio (como descargar.ts) para que el archivo salga con su nombre
+  const url = URL.createObjectURL(pdf.output("blob"));
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.download = `ticket ${venta.numero} - ${comercio.nombre}.pdf`;
+  enlace.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * Ticket de prueba (Configuración → Probar mis aparatos): se abre en una pestaña nueva con el
+ * cuadro de imprimir ya abierto, así se ve enseguida si la ticketera está bien instalada.
+ * La pestaña se abre ANTES de armar el PDF porque, si no, el navegador la toma como ventana emergente y la bloquea.
+ */
+export async function imprimirTicketDePrueba(comercio: Pick<Comercio, "nombre" | "direccion">) {
+  const pestana = window.open("", "_blank");
+  const venta: Venta = {
+    id: 0,
+    numero: 0,
+    comercioId: 0,
+    cajaId: null,
+    fecha: new Date().toISOString(),
+    items: [{ productoId: 0, nombre: "PRUEBA DE IMPRESORA", cantidad: 1, precioUnitario: 0 }],
+    subtotal: 0,
+    descuento: 0,
+    total: 0,
+    medioPago: "efectivo",
+    vendidoPor: "",
+  };
+  const pdf = await armarTicket(comercio, venta);
+  pdf.autoPrint();
+  const url = URL.createObjectURL(pdf.output("blob"));
+  if (pestana) pestana.location.href = url;
+  else window.location.href = url; // si igual la bloqueó, se abre en esta misma pestaña
+  return Boolean(pestana);
+}
+
+async function armarTicket(comercio: Pick<Comercio, "nombre" | "direccion">, venta: Venta) {
   // jsPDF se carga recién acá: así no pesa en la página mientras nadie pide ticket
   const { jsPDF } = await import("jspdf");
   const promos = (venta.promos ?? []).filter((p) => p.monto > 0);
@@ -86,12 +125,5 @@ export async function descargarTicket(comercio: Pick<Comercio, "nombre" | "direc
   y += 4;
   pdf.setFont("helvetica", "italic").setFontSize(7);
   pdf.text("Comprobante no válido como factura", centro, y, { align: "center" });
-
-  // Se descarga con un link propio (como descargar.ts) para que el archivo salga con su nombre
-  const url = URL.createObjectURL(pdf.output("blob"));
-  const enlace = document.createElement("a");
-  enlace.href = url;
-  enlace.download = `ticket ${venta.numero} - ${comercio.nombre}.pdf`;
-  enlace.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return pdf;
 }

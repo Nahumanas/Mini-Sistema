@@ -7,10 +7,11 @@ import { useCarrito } from "@/store/carrito";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { Boton, Campo, claseInput, Encabezado, Tarjeta } from "../ui/base";
+import { ProbarAparatos } from "./ProbarAparatos";
 
 const AVISOS = ["Apertura de caja", "Cierre de caja (con el arqueo)", "Relevo de turno", "Producto con stock bajo"];
 
-// Ajustes del jefe: apariencia, PIN, avisos al celular y volver a empezar con los datos de prueba.
+// Ajustes del jefe: apariencia, probar la pistola y la ticketera, PIN, avisos al celular y volver a empezar con los datos de prueba.
 export function Configuracion() {
   const { tema, alternarTema, avisar } = useInterfaz();
   const reiniciar = useDatos((s) => s.reiniciar);
@@ -33,6 +34,8 @@ export function Configuracion() {
           </div>
         </div>
       </Tarjeta>
+
+      <ProbarAparatos />
 
       <CambiarPin />
 
