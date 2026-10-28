@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   Globe,
   Lock,
+  LogIn,
   Mail,
   MessageCircle,
   Package,
@@ -20,6 +21,7 @@ import {
   Users,
 } from "lucide-react";
 import { EQUIPO, linkWhatsapp, whatsappLegible, type Persona } from "@/lib/contacto";
+import { LINK_INGRESAR } from "@/lib/direcciones";
 import { MenuCelular } from "./MenuCelular";
 import { FormularioContacto } from "./FormularioContacto";
 
@@ -55,6 +57,19 @@ function BotonDemo({ grande = false }: { grande?: boolean }) {
   );
 }
 
+// Para los que ya son clientes: lleva al sistema (otra dirección), no a la demo.
+function BotonIngresar() {
+  return (
+    <a
+      href={LINK_INGRESAR}
+      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#DCE6F0] px-4 text-[15px] font-semibold text-[#0F2340] transition-colors hover:bg-[#F3F7FB]"
+    >
+      <LogIn className="size-4" />
+      Ingresar
+    </a>
+  );
+}
+
 function Etiqueta({ children }: { children: React.ReactNode }) {
   return <p className="text-sm font-semibold tracking-[0.18em] text-[#1C7BD6] uppercase">{children}</p>;
 }
@@ -76,7 +91,10 @@ function Encabezado() {
               {l.texto}
             </a>
           ))}
-          <BotonDemo />
+          <div className="flex items-center gap-3">
+            <BotonIngresar />
+            <BotonDemo />
+          </div>
         </nav>
         <MenuCelular links={LINKS_MENU} />
       </div>
