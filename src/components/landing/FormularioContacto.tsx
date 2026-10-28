@@ -2,23 +2,19 @@
 
 import { useState } from "react";
 import { Send } from "lucide-react";
-import { CONTACTO, linkWhatsapp } from "@/lib/contacto";
+import { linkWhatsapp } from "@/lib/contacto";
 
 // Formulario de consulta rápida. Todavía no hay servidor que guarde los mensajes:
-// arma el mensaje y lo abre en WhatsApp (o en el mail, si no hay WhatsApp cargado).
+// arma el mensaje y lo abre en el WhatsApp del contacto principal.
 export function FormularioContacto() {
   const [nombre, setNombre] = useState("");
   const [rubro, setRubro] = useState("");
   const [mensaje, setMensaje] = useState("");
-  const [sinDatos, setSinDatos] = useState(false);
 
   const enviar = (e: React.FormEvent) => {
     e.preventDefault();
     const texto = `Hola, soy ${nombre.trim()}${rubro.trim() ? ` (${rubro.trim()})` : ""}. ${mensaje.trim()}`;
-    const whatsapp = linkWhatsapp(texto);
-    if (whatsapp) window.open(whatsapp, "_blank", "noopener,noreferrer");
-    else if (CONTACTO.mail) window.location.href = `mailto:${CONTACTO.mail}?subject=${encodeURIComponent("Consulta sobre Mantenete")}&body=${encodeURIComponent(texto)}`;
-    else setSinDatos(true);
+    window.open(linkWhatsapp(texto), "_blank", "noopener,noreferrer");
   };
 
   const campo = "h-11 w-full rounded-lg border border-white/15 bg-white/[0.06] px-3.5 text-white outline-none placeholder:text-[#8FA3BF] focus:border-[#43DDE3]";
@@ -50,9 +46,9 @@ export function FormularioContacto() {
       </div>
       <button type="submit" className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-white font-semibold text-[#0F2340] hover:bg-[#E6F4FB]">
         <Send className="size-4" />
-        Enviar consulta
+        Enviar por WhatsApp
       </button>
-      {sinDatos && <p className="mt-3 text-sm text-[#43DDE3]">Muy pronto vas a poder escribirnos desde acá. Mientras tanto, probá la demo gratis.</p>}
+      <p className="mt-3 text-center text-sm text-[#8FA3BF]">Se abre WhatsApp con tu consulta lista para enviar.</p>
     </form>
   );
 }

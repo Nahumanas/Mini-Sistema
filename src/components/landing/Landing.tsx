@@ -3,7 +3,6 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowRight,
-  AtSign,
   CalendarClock,
   Check,
   Dumbbell,
@@ -20,7 +19,7 @@ import {
   Store,
   Users,
 } from "lucide-react";
-import { CONTACTO, linkWhatsapp } from "@/lib/contacto";
+import { EQUIPO, linkWhatsapp, whatsappLegible, type Persona } from "@/lib/contacto";
 import { MenuCelular } from "./MenuCelular";
 import { FormularioContacto } from "./FormularioContacto";
 
@@ -246,8 +245,8 @@ function Planes() {
               <p className="mt-1.5 text-[#475569]">Todo lo necesario para operar la caja, controlar el stock y ver tus ganancias.</p>
             </div>
             <a
-              href={whatsappCotizacion ?? "#contacto"}
-              target={whatsappCotizacion ? "_blank" : undefined}
+              href={whatsappCotizacion}
+              target="_blank"
               rel="noopener noreferrer"
               className="inline-flex h-12 items-center justify-center rounded-lg bg-[#1C7BD6] px-6 font-semibold text-white hover:bg-[#1767b4]"
             >
@@ -275,22 +274,25 @@ function Planes() {
 
 // ---------- 5. Contacto y cierre ----------
 
-function DatoDeContacto({ icono: Icono, titulo, valor, href }: { icono: LucideIcon; titulo: string; valor: string; href?: string }) {
-  const contenido = (
-    <>
-      <Icono className="size-5 flex-none text-[#43DDE3]" />
-      <span>
-        <span className="block text-sm text-[#B9C7DA]">{titulo}</span>
-        <span className="font-semibold">{valor}</span>
-      </span>
-    </>
-  );
-  return href ? (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 hover:text-[#43DDE3]">
-      {contenido}
+function DatoDeContacto({ icono: Icono, valor, href }: { icono: LucideIcon; valor: string; href: string }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="flex min-w-0 items-center gap-2.5 text-[15px] hover:text-[#43DDE3]">
+      <Icono className="size-4.5 flex-none text-[#43DDE3]" />
+      <span className="break-all">{valor}</span>
     </a>
-  ) : (
-    <div className="flex items-center gap-3 opacity-70">{contenido}</div>
+  );
+}
+
+function TarjetaPersona({ persona }: { persona: Persona }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.04] p-5">
+      <p className="text-lg font-bold">{persona.nombre}</p>
+      <div className="mt-3 space-y-2.5">
+        <DatoDeContacto icono={MessageCircle} valor={whatsappLegible(persona.whatsapp)} href={linkWhatsapp("Hola, quiero saber más sobre Mantenete.", persona)} />
+        <DatoDeContacto icono={Mail} valor={persona.mail} href={`mailto:${persona.mail}`} />
+        {persona.linkedin && <DatoDeContacto icono={Globe} valor="LinkedIn" href={persona.linkedin} />}
+      </div>
+    </div>
   );
 }
 
@@ -304,8 +306,8 @@ function Contacto() {
           <p className="mt-4 text-lg text-[#B9C7DA]">Escribinos y te ayudamos a cargar tu comercio. O probá la demo ahora mismo, sin registrarte.</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <a
-              href={whatsapp ?? "#formulario"}
-              target={whatsapp ? "_blank" : undefined}
+              href={whatsapp}
+              target="_blank"
               rel="noopener noreferrer"
               className="inline-flex h-12 items-center gap-2 rounded-lg bg-gradient-to-r from-[#1C7BD6] to-[#2A9FDA] px-6 font-semibold text-white hover:opacity-90"
             >
@@ -316,11 +318,10 @@ function Contacto() {
               Probar Demo Gratis
             </Link>
           </div>
-          <div className="mt-10 grid gap-5 sm:grid-cols-2">
-            <DatoDeContacto icono={MessageCircle} titulo="WhatsApp" valor={CONTACTO.whatsapp ? `+${CONTACTO.whatsapp}` : "Próximamente"} href={whatsapp ?? undefined} />
-            <DatoDeContacto icono={Mail} titulo="Mail" valor={CONTACTO.mail || "Próximamente"} href={CONTACTO.mail ? `mailto:${CONTACTO.mail}` : undefined} />
-            <DatoDeContacto icono={AtSign} titulo="Instagram" valor={CONTACTO.instagram ? "Seguinos" : "Próximamente"} href={CONTACTO.instagram || undefined} />
-            <DatoDeContacto icono={Globe} titulo="LinkedIn" valor={CONTACTO.linkedin ? "Conectemos" : "Próximamente"} href={CONTACTO.linkedin || undefined} />
+          <div className="mt-10 grid gap-4 sm:grid-cols-2">
+            {EQUIPO.map((p) => (
+              <TarjetaPersona key={p.nombre} persona={p} />
+            ))}
           </div>
         </div>
         <FormularioContacto />
