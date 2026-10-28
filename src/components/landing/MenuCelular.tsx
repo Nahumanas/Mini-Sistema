@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, X } from "lucide-react";
+import { LogIn, Menu, X } from "lucide-react";
+import { LINK_INGRESAR } from "@/lib/direcciones";
 
 // El menú de la página de presentación en pantallas chicas: un botón que abre la lista.
 export function MenuCelular({ links }: { links: { href: string; texto: string }[] }) {
@@ -27,6 +28,13 @@ export function MenuCelular({ links }: { links: { href: string; texto: string }[
           <Link href="/ingresar" className="mt-3 flex h-12 items-center justify-center rounded-lg bg-[#1C7BD6] font-semibold text-white">
             Probar Demo Gratis
           </Link>
+          <a
+            href={LINK_INGRESAR}
+            className="mt-3 flex h-12 items-center justify-center gap-2 rounded-lg border border-[#DCE6F0] font-semibold text-[#0F2340]"
+          >
+            <LogIn className="size-5" />
+            Ingresar (clientes)
+          </a>
         </nav>
       )}
     </div>

@@ -14,8 +14,24 @@ const PROTECCIONES = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
 ];
 
+// Las direcciones que son "el sistema" y no la página de presentación.
+// Si alguien entra a una de estas, nunca ve la landing: va directo a la pantalla de ingreso.
+// Cuando esté el dominio propio se agrega "app.mantenete.com.ar" (ya está puesto, no molesta).
+// Ojo: tiene que coincidir con DIRECCION_SISTEMA de src/lib/direcciones.ts.
+const DIRECCIONES_DEL_SISTEMA = "(mantenete-app\\.vercel\\.app|app\\.mantenete\\.com\\.ar)";
+
 const nextConfig: NextConfig = {
   poweredByHeader: false, // no contarle a nadie con qué está hecho el sistema
+  async redirects() {
+    return [
+      {
+        source: "/",
+        has: [{ type: "host", value: DIRECCIONES_DEL_SISTEMA }],
+        destination: "/ingresar",
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     return [{ source: "/(.*)", headers: PROTECCIONES }];
   },
