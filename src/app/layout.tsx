@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { Avisos } from "@/components/ui/Avisos";
 import "./globals.css";
 
@@ -24,6 +25,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="h-full font-sans">
         {children}
         <Avisos />
+        {/* Cuenta las visitas (se ven en Vercel, pestaña Analytics). No muestra nada en la página. */}
+        <Analytics />
       </body>
     </html>
   );
