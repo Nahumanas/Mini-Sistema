@@ -72,6 +72,20 @@ y las pantallas que el jefe le habilitó en Mis comercios).
 Para probar el lector de barras: en la caja escribí un código (por ejemplo `7790001000101`) y apretá Enter.
 Sin código: escribí parte del nombre (`cano`, `canilla`), elegí con las flechas y Enter.
 
+## Pruebas automáticas
+
+En la carpeta `pruebas/` hay pruebas que revisan solas las cuentas que no pueden fallar: el arqueo de la caja
+y los relevos, las promos, el stock al vender, comprar y anular, los reportes, las cuotas del gimnasio,
+las fechas y el PIN. No usan internet ni base de datos: le pasan datos inventados a las cuentas y miran el resultado.
+
+```
+npm test
+```
+
+Tiene que decir `Tests  51 passed`. Si alguna dice `FAIL`, un cambio rompió algo que antes andaba.
+GitHub las corre solo en cada PR y en cada cambio que llega a `main` (`.github/workflows/pruebas.yml`).
+Cuando esté la base de datos, estas mismas pruebas sirven para comprobar que las cuentas no cambiaron.
+
 ## Seguridad
 
 Lo que ya tiene la web (con los datos de prueba en el navegador):
