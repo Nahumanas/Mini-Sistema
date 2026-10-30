@@ -102,23 +102,22 @@ function Encabezado() {
   );
 }
 
-// Por ahora muestra capturas del sistema. Cuando esté el video nuevo, va acá
-// (un <video> vertical o el video de YouTube) en lugar de las capturas.
+// Video de 1:28 con pantallas reales del sistema (sin voz, solo música, con el volumen bajo).
+// No arranca solo: la persona le da play. La portada se ve mientras tanto.
 function VistaDelSistema() {
   return (
-    <div className="relative mx-auto w-full max-w-xl pb-10 lg:pb-0">
+    <div className="relative mx-auto w-full max-w-xl">
       <div className="pointer-events-none absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-[#1C7BD6]/15 via-[#2A9FDA]/10 to-[#43DDE3]/20" />
-      <div className="relative overflow-hidden rounded-xl border border-[#DCE6F0] bg-white">
-        <div className="flex items-center gap-1.5 border-b border-[#DCE6F0] bg-[#F3F7FB] px-3 py-2">
-          <span className="size-2.5 rounded-full bg-[#DCE6F0]" />
-          <span className="size-2.5 rounded-full bg-[#DCE6F0]" />
-          <span className="size-2.5 rounded-full bg-[#DCE6F0]" />
-          <span className="ml-3 truncate rounded bg-white px-2 py-0.5 text-xs text-[#475569]">mantenete.vercel.app/caja</span>
-        </div>
-        <Image src="/landing/caja.png" alt="La caja de Mantenete cobrando con descuento en efectivo y calculando el vuelto" width={1400} height={1000} priority className="h-auto w-full" />
-      </div>
-      <div className="absolute -bottom-2 -left-3 w-[30%] overflow-hidden rounded-[1.4rem] border-[5px] border-[#0F2340] bg-white sm:-left-8 lg:-bottom-10">
-        <Image src="/landing/celular.png" alt="Mantenete en el celular: aviso de mercadería vencida" width={390} height={844} className="h-auto w-full" />
+      <div className="relative overflow-hidden rounded-xl border border-[#DCE6F0] bg-[#0F2340]">
+        <video
+          src="/landing/video-mantenete.mp4"
+          poster="/landing/video-portada.jpg"
+          controls
+          playsInline
+          preload="metadata"
+          className="aspect-video h-auto w-full"
+          aria-label="Video de Mantenete: caja con lector, promos, stock, reportes, vencimientos, permisos de empleados y arqueo"
+        />
       </div>
     </div>
   );
