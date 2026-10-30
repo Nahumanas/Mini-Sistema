@@ -1,0 +1,21 @@
+# Cada vez que se sube un cambio (o se abre un PR), GitHub corre las pruebas y el revisor de código.
+# Si algo se rompió, aparece una cruz roja en el PR antes de publicarlo.
+name: Pruebas
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
