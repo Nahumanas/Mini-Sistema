@@ -16,7 +16,7 @@ Hecha con **FastAPI** (Python). Está publicada en **Render** (plan gratis para 
 | Pedido | Para qué |
 |---|---|
 | `GET /salud` | Ver si la API está viva y llega a la base |
-| `GET /inicio` | Todo lo que la página necesita al entrar, en un solo pedido (comercios, empleados, productos, promos, y cajas, relevos y ventas de los últimos 62 días) |
+| `GET /inicio` | Todo lo que la página necesita al entrar, en un solo pedido (comercios, empleados, productos, promos, proveedores, tandas con stock, y cajas, relevos, ajustes, ventas, compras, gastos y retiros de los últimos 62 días) |
 | `GET /yo` | La ficha del dueño conectado (403 si no fue invitado) |
 | `POST /yo/pin/verificar`, `PUT /yo/pin` | Comprobar el PIN de jefe; elegirlo la primera vez o cambiarlo (pide el actual) |
 | `GET/POST /comercios`, `PATCH /comercios/{id}` | Mis comercios (datos, permisos de empleados, horarios y turnos) |
@@ -25,11 +25,16 @@ Hecha con **FastAPI** (Python). Está publicada en **Render** (plan gratis para 
 | `POST /comercios/{id}/productos/importar` | La lista del Excel: crea o actualiza por código, todo o nada |
 | `GET /comercios/{id}/caja`, `POST .../caja/abrir`, `.../caja/relevo`, `.../caja/cerrar` | Caja con relevo de turno y arqueo (una sola abierta por comercio, aunque haya varias compus) |
 | `POST /comercios/{id}/ventas`, `GET /comercios/{id}/ventas?desde=&hasta=` | Cobrar (baja stock y tandas, numera sin repetir) y ver ventas |
+| `POST /cajas/{id}/anular-venta`, `POST /cajas/{id}/recontar` | Ajustes de una caja cerrada: anular una venta (vuelve al stock; si era una cuota, el socio vuelve a como estaba) o corregir el efectivo contado |
+| `POST /comercios/{id}/proveedores`, `POST /comercios/{id}/compras` | Compras: suma al stock, cambia el costo y crea las tandas de lo que vence, todo o nada |
+| `POST /comercios/{id}/gastos`, `DELETE /gastos/{id}` | Gastos del comercio |
+| `POST /comercios/{id}/lotes`, `POST .../lotes/retirar-vencidos`, `POST /lotes/{id}/sacar` | Vencimientos: cargar una tanda, retirar lo vencido (pérdida) y corregir una tanda |
+| `POST /comercios/{id}/promos`, `PUT /promos/{id}`, `DELETE /promos/{id}` | Descuentos y promos |
 
 Las fechas con hora salen en hora argentina, con el formato de la página (`2026-10-31T18:05`).
 Con la API corriendo, la lista completa está en `/docs`.
 
-Todavía no están (próximas partes): compras, gastos, vencimientos, promos, ajustes de caja y gimnasio.
+Todavía no está (parte 4): el gimnasio (socios, cuotas, planes, clases, reservas e ingreso por DNI).
 Con la cuenta abierta, esas pantallas no aparecen en el menú; en la demo funcionan todas.
 
 ## Variables (en Render, nunca en GitHub)

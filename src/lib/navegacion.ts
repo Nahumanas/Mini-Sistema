@@ -76,9 +76,23 @@ export const CONFIGURACION: Seccion = { titulo: "Configuración", ruta: "/config
 
 export const SECCIONES: Seccion[] = [...MENU.flatMap((g) => g.secciones), CONFIGURACION];
 
-// Las pantallas que ya funcionan con la nube (paso 5, parte 2). Las demás llegan en las próximas partes:
+// Las pantallas que ya funcionan con la nube (paso 5, partes 2 y 3). Las del gimnasio llegan en la parte 4:
 // mientras tanto, con la cuenta abierta no aparecen en el menú (y en la demo funcionan todas).
-export const RUTAS_EN_LA_NUBE = ["/inicio", "/caja", "/panel-del-dia", "/stock", "/reportes", "/mis-comercios", "/excel", "/configuracion"];
+export const RUTAS_EN_LA_NUBE = [
+  "/inicio",
+  "/caja",
+  "/compras",
+  "/gastos",
+  "/vencimientos",
+  "/panel-del-dia",
+  "/cajas",
+  "/stock",
+  "/reportes",
+  "/descuentos",
+  "/mis-comercios",
+  "/excel",
+  "/configuracion",
+];
 
 export function estaEnLaNube(seccion: Seccion) {
   return RUTAS_EN_LA_NUBE.includes(seccion.ruta);

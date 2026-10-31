@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
 from .base import cerrar_pool, pool
-from .rutas import caja, comercios, cuenta, inicio, productos, ventas
+from .rutas import caja, comercios, compras, cuenta, inicio, productos, promos, vencimientos, ventas
 
 
 @asynccontextmanager
@@ -39,5 +39,5 @@ def salud():
     return {"ok": True}
 
 
-for modulo in (inicio, cuenta, comercios, productos, caja, ventas):
+for modulo in (inicio, cuenta, comercios, productos, caja, ventas, compras, vencimientos, promos):
     app.include_router(modulo.router)

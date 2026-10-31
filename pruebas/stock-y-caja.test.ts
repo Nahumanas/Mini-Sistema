@@ -58,7 +58,7 @@ describe("vender y anular", () => {
     const { producto, comercioId, cajaId } = await prepararCaja();
     const venta = await vender(comercioId, producto.id, 4);
     await datos().cerrarCaja(comercioId, 0, "");
-    datos().anularVenta(cajaId, venta.id, "Jefe", "Se cobró dos veces");
+    await datos().anularVenta(cajaId, venta.id, "Jefe", "Se cobró dos veces");
     expect(stockDe(producto.id)).toBe(producto.stock);
     expect(datos().ventas.find((v) => v.id === venta.id)!.anulada).toBeTruthy();
     expect(datos().ajustes.at(-1)).toMatchObject({ tipo: "anular_venta", ventaId: venta.id, hechoPor: "Jefe" });
@@ -67,11 +67,11 @@ describe("vender y anular", () => {
   it("no deja anular con la caja abierta, sin motivo, ni dos veces la misma venta", async () => {
     const { producto, comercioId, cajaId } = await prepararCaja();
     const venta = await vender(comercioId, producto.id, 1);
-    expect(() => datos().anularVenta(cajaId, venta.id, "Jefe", "x")).toThrow();
+    await expect(datos().anularVenta(cajaId, venta.id, "Jefe", "x")).rejects.toThrow();
     await datos().cerrarCaja(comercioId, 0, "");
-    expect(() => datos().anularVenta(cajaId, venta.id, "Jefe", "  ")).toThrow();
-    datos().anularVenta(cajaId, venta.id, "Jefe", "error");
-    expect(() => datos().anularVenta(cajaId, venta.id, "Jefe", "error")).toThrow();
+    await expect(datos().anularVenta(cajaId, venta.id, "Jefe", "  ")).rejects.toThrow();
+    await datos().anularVenta(cajaId, venta.id, "Jefe", "error");
+    await expect(datos().anularVenta(cajaId, venta.id, "Jefe", "error")).rejects.toThrow();
   });
 });
 
@@ -94,7 +94,7 @@ describe("relevo de turno", () => {
 describe("compras", () => {
   it("una compra sube el stock y actualiza el costo del producto", async () => {
     const { producto, comercioId } = await prepararCaja();
-    datos().registrarCompra(comercioId, 0, [{ productoId: producto.id, nombre: producto.nombre, cantidad: 12, costoUnitario: 777 }], "Jefe");
+    await datos().registrarCompra(comercioId, 0, [{ productoId: producto.id, nombre: producto.nombre, cantidad: 12, costoUnitario: 777 }], "Jefe");
     const despues = datos().productos.find((p) => p.id === producto.id)!;
     expect(despues.stock).toBe(producto.stock + 12);
     expect(despues.costo).toBe(777);

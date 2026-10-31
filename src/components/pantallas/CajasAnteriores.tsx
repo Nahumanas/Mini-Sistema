@@ -197,26 +197,28 @@ function NuevoAjuste({ caja }: { caja: Caja }) {
   const [efectivo, setEfectivo] = useState("");
   const [motivo, setMotivo] = useState("");
   const [error, setError] = useState("");
+  const [enviando, setEnviando] = useState(false);
 
   const validas = ventas.filter((v) => v.cajaId === caja.id && !v.anulada).sort((a, b) => b.fecha.localeCompare(a.fecha));
 
-  function guardar(e: React.FormEvent) {
+  async function guardar(e: React.FormEvent) {
     e.preventDefault();
+    if (enviando) return;
     setError("");
+    if (tipo === "anular" && !ventaId) return setError("Elegí la venta a anular.");
+    if (tipo === "recontar" && efectivo === "") return setError("Escribí el efectivo que contaste de nuevo.");
+    setEnviando(true);
     try {
-      if (tipo === "anular") {
-        if (!ventaId) return setError("Elegí la venta a anular.");
-        anularVenta(caja.id, Number(ventaId), quien, motivo);
-      } else {
-        if (efectivo === "") return setError("Escribí el efectivo que contaste de nuevo.");
-        recontarEfectivo(caja.id, Number(efectivo), quien, motivo);
-      }
+      if (tipo === "anular") await anularVenta(caja.id, Number(ventaId), quien, motivo);
+      else await recontarEfectivo(caja.id, Number(efectivo), quien, motivo);
       setVentaId("");
       setEfectivo("");
       setMotivo("");
       avisar("Ajuste guardado. Quedó anotado en la caja.");
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setEnviando(false);
     }
   }
 
@@ -259,8 +261,8 @@ function NuevoAjuste({ caja }: { caja: Caja }) {
       </Campo>
       {error && <p className="text-sm text-peligro">{error}</p>}
       <div className="flex justify-end">
-        <Boton type="submit" variante="primario" icono={tipo === "anular" ? Ban : Calculator} disabled={!motivo.trim()}>
-          Guardar ajuste
+        <Boton type="submit" variante="primario" icono={tipo === "anular" ? Ban : Calculator} disabled={!motivo.trim() || enviando}>
+          {enviando ? "Guardando…" : "Guardar ajuste"}
         </Boton>
       </div>
     </form>

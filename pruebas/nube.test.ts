@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DatosDeInicio } from "@/lib/api";
 import { calcular } from "@/lib/promos";
-import type { Caja, Venta } from "@/lib/tipos";
+import type { Caja, Lote, Producto, Promo, Venta } from "@/lib/tipos";
 import { useDatos } from "@/store/datos";
 import { item } from "./ayuda";
 
@@ -14,6 +14,11 @@ const api = vi.hoisted(() => ({
   abrirCaja: vi.fn(),
   cajaAbierta: vi.fn(),
   verificarPin: vi.fn(),
+  registrarCompra: vi.fn(),
+  retirarVencidos: vi.fn(),
+  crearPromo: vi.fn(),
+  actualizarPromo: vi.fn(),
+  anularVenta: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), api }));
@@ -31,7 +36,16 @@ const DE_LA_NUBE: DatosDeInicio = {
   relevos: [],
   ventas: [],
   promos: [],
+  ajustes: [],
+  proveedores: [],
+  compras: [],
+  gastos: [],
+  lotes: [],
+  retiros: [],
 };
+
+const ALFAJOR: Producto = DE_LA_NUBE.productos[0];
+const tanda = (id: number, cantidad: number, vence: string): Lote => ({ id, comercioId: 50, productoId: 900, cantidad, ingreso: "2026-10-01", vence });
 
 beforeEach(async () => {
   await datos().volverALaDemo();
@@ -46,7 +60,7 @@ describe("modo nube", () => {
     expect(datos().comercios.map((c) => c.nombre)).toEqual(["Kiosco de Ana"]);
     expect(datos().pinConfigurado).toBe(true);
     expect(datos().gastos).toEqual([]);
-    expect(datos().socios).toEqual([]);
+    expect(datos().socios).toEqual([]); // el gimnasio llega en la parte 4
   });
 
   it("no pisa la demo guardada en el navegador, y al cerrar la cuenta vuelve la demo como estaba", async () => {
@@ -65,8 +79,8 @@ describe("modo nube", () => {
 
   it("lo que todavía no está en la nube avisa en vez de guardar a medias", () => {
     datos().usarNube(DE_LA_NUBE);
-    expect(() => datos().cargarGasto({ comercioId: 50, fecha: "2026-10-31", categoria: "Luz", descripcion: "", monto: 100 })).toThrow(/todavía no funciona en la nube/);
-    expect(datos().gastos).toEqual([]);
+    expect(() => datos().crearSocio(50, { nombre: "Juan", dni: "30111222", telefono: "", email: "", nota: "" })).toThrow(/todavía no funciona en la nube/);
+    expect(datos().socios).toEqual([]);
   });
 
   it("una venta guarda lo que devolvió la API (número y total de la base) y baja el stock en pantalla", async () => {
@@ -106,6 +120,67 @@ describe("modo nube", () => {
     api.verificarPin.mockResolvedValue({ ok: false });
     expect(await datos().pinCorrecto("1234")).toBe(false);
     expect(api.verificarPin).toHaveBeenCalledWith("1234");
+  });
+});
+
+describe("modo nube, parte 3", () => {
+  it("la venta también saca de las tandas más viejas en pantalla (como hizo la API)", async () => {
+    datos().usarNube({ ...DE_LA_NUBE, cajas: [CAJA], lotes: [tanda(2, 5, "2026-11-10"), tanda(1, 2, "2026-11-02")] });
+    api.registrarVenta.mockResolvedValue({ id: 1, numero: 1, comercioId: 50, cajaId: 70, fecha: "2026-10-31T10:15", items: [], subtotal: 4500, descuento: 0, total: 4500, medioPago: "efectivo", vendidoPor: "Ana", promos: [], anulada: null });
+    const items = [item(900, 3, 1500)];
+    await datos().registrarVenta(50, items, "efectivo", calcular([], items, "efectivo", "mejor"), "Ana");
+    expect(datos().lotes).toEqual([tanda(2, 4, "2026-11-10")]); // la que vencía antes se vació
+  });
+
+  it("una compra guarda lo que devolvió la API: la compra, el stock y costo nuevos y las tandas", async () => {
+    datos().usarNube(DE_LA_NUBE);
+    const compra = { id: 5, comercioId: 50, proveedorId: null, fecha: "2026-10-31T11:00", items: [{ productoId: 900, nombre: "Alfajor", cantidad: 12, costoUnitario: 777 }], total: 9324, cargadaPor: "Ana" };
+    api.registrarCompra.mockResolvedValue({ compra, productos: [{ ...ALFAJOR, stock: 22, costo: 777 }], lotes: [tanda(8, 12, "2026-11-30")] });
+    await datos().registrarCompra(50, 0, compra.items, "Ana");
+    // Sin proveedor elegido (0) va null; el nombre lo pone la base
+    expect(api.registrarCompra).toHaveBeenCalledWith(50, { proveedorId: null, items: [{ productoId: 900, cantidad: 12, costoUnitario: 777 }], cargadaPor: "Ana" });
+    expect(datos().compras).toEqual([compra]);
+    expect(datos().productos[0]).toMatchObject({ stock: 22, costo: 777 });
+    expect(datos().lotes).toEqual([tanda(8, 12, "2026-11-30")]);
+  });
+
+  it("al retirar lo vencido se van las tandas vencidas de ese comercio y queda la pérdida", async () => {
+    datos().usarNube({ ...DE_LA_NUBE, lotes: [tanda(1, 3, "2020-01-01"), tanda(2, 4, "2999-01-01")] });
+    const retiro = { id: 9, comercioId: 50, productoId: 900, nombre: "Alfajor", cantidad: 3, motivo: "vencido" as const, fecha: "2026-10-31T12:00", costo: 2700 };
+    api.retirarVencidos.mockResolvedValue({ retirados: 3, lotesQuitados: [1], retiros: [retiro], productos: [{ ...ALFAJOR, stock: 7 }] });
+    expect(await datos().retirarVencidos(50)).toBe(3);
+    expect(datos().lotes.map((l) => l.id)).toEqual([2]);
+    expect(datos().retiros).toEqual([retiro]);
+    expect(datos().productos[0].stock).toBe(7);
+  });
+
+  it("una promo nueva se crea en el comercio; una que ya existe se guarda entera por su id", async () => {
+    datos().usarNube(DE_LA_NUBE);
+    const datosPromo = { nombre: "2x1", tipo: "combo" as const, porcentaje: 100, cada: 2, productoId: 900, categoria: null, medioPago: null, activa: true };
+    const guardada: Promo = { id: 31, comercioId: 50, ...datosPromo };
+    api.crearPromo.mockResolvedValue(guardada);
+    await datos().guardarPromo({ comercioId: 50, ...datosPromo });
+    expect(api.crearPromo).toHaveBeenCalledWith(50, datosPromo);
+
+    api.actualizarPromo.mockResolvedValue({ ...guardada, activa: false });
+    await datos().guardarPromo({ ...guardada, activa: false });
+    expect(api.actualizarPromo).toHaveBeenCalledWith(31, { ...datosPromo, activa: false });
+    expect(datos().promos).toEqual([{ ...guardada, activa: false }]);
+  });
+
+  it("anular una venta: sin motivo ni se pregunta a la API; con motivo se guarda lo que contestó", async () => {
+    const venta: Venta = { id: 1234, numero: 1, comercioId: 50, cajaId: 70, fecha: "2026-10-31T10:15", items: [item(900, 2, 1500)], subtotal: 3000, descuento: 0, total: 3000, medioPago: "efectivo", vendidoPor: "Ana", promos: [], anulada: null };
+    datos().usarNube({ ...DE_LA_NUBE, cajas: [{ ...CAJA, cerrada: "2026-10-31T20:00" }], ventas: [venta] });
+    await expect(datos().anularVenta(70, 1234, "Ana", "  ")).rejects.toThrow(/motivo/);
+    expect(api.anularVenta).not.toHaveBeenCalled();
+
+    const ajuste = { id: 3, comercioId: 50, cajaId: 70, fecha: "2026-10-31T21:00", hechoPor: "Ana", tipo: "anular_venta" as const, ventaId: 1234, monto: 3000, motivo: "Doble cobro" };
+    api.anularVenta.mockResolvedValue({ ajuste, venta: { ...venta, anulada: "2026-10-31T21:00" }, productos: [{ ...ALFAJOR, stock: 12 }], cuota: null, socio: null });
+    await datos().anularVenta(70, 1234, "Ana", " Doble cobro ");
+    expect(api.anularVenta).toHaveBeenCalledWith(70, { ventaId: 1234, hechoPor: "Ana", motivo: "Doble cobro" });
+    expect(datos().ventas[0].anulada).toBe("2026-10-31T21:00");
+    expect(datos().ajustes).toEqual([ajuste]);
+    expect(datos().productos[0].stock).toBe(12);
   });
 });
 

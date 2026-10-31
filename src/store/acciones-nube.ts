@@ -1,4 +1,6 @@
 import { api, ErrorDeApi } from "@/lib/api";
+import { sacarDeTandas } from "@/lib/calculos";
+import { hoy } from "@/lib/fechas";
 import type { BaseDemo } from "@/lib/datos-demo";
 import { validarHorarios } from "@/lib/horarios";
 import { validarPinNuevo } from "@/lib/pin";
@@ -9,14 +11,25 @@ import type { Acciones } from "./datos";
 // Cada una le pide el cambio a la API y, cuando la API contesta, guarda en pantalla lo que quedó en la base
 // (con el número de venta, el stock y los ids de verdad). Si la API dice que no, tira el error con su motivo.
 //
-// Por ahora están las de la parte 2 (caja, ventas, stock, comercios, empleados y PIN). Las demás
-// (compras, gastos, vencimientos, promos, gimnasio...) llegan en las próximas partes.
+// Parte 2: caja, ventas, stock, comercios, empleados y PIN. Parte 3: ajustes de cajas cerradas, compras,
+// gastos, vencimientos y promos. El gimnasio llega en la parte 4.
 
 export const ACCIONES_EN_LA_NUBE = [
   "registrarVenta",
   "abrirCaja",
   "cerrarCaja",
   "registrarRelevo",
+  "anularVenta",
+  "recontarEfectivo",
+  "registrarCompra",
+  "agregarProveedor",
+  "cargarGasto",
+  "borrarGasto",
+  "agregarTanda",
+  "retirarVencidos",
+  "sacarDeTanda",
+  "guardarPromo",
+  "borrarPromo",
   "crearProducto",
   "actualizarProducto",
   "asignarCodigo",
@@ -47,6 +60,7 @@ export function accionesNube(set: Set, get: Get): AccionesNube {
   const guardarCaja = (caja: Caja) => set((s) => ({ cajas: conCambio(s.cajas, caja) }));
   const guardarProducto = (producto: Producto) => set((s) => ({ productos: conCambio(s.productos, producto) }));
   const guardarComercio = (comercio: Comercio) => set((s) => ({ comercios: conCambio(s.comercios, comercio) }));
+  const guardarProductos = (productos: Producto[]) => set((s) => ({ productos: productos.reduce(conCambio, s.productos) }));
 
   return {
     registrarVenta: async (comercioId, items, medioPago, cuenta, vendidoPor) => {
@@ -63,6 +77,8 @@ export function accionesNube(set: Set, get: Get): AccionesNube {
       set((s) => ({
         ventas: [...s.ventas, venta],
         productos: s.productos.map((p) => (vendidos.has(p.id) ? { ...p, stock: p.stock - (vendidos.get(p.id) ?? 0) } : p)),
+        // La API ya sacó de las tandas más viejas; acá se hace la misma cuenta para no tener que pedirlas de nuevo
+        lotes: [...vendidos].reduce((lotes, [id, cantidad]) => sacarDeTandas(lotes, id, cantidad), s.lotes),
       }));
       return venta;
     },
@@ -98,6 +114,85 @@ export function accionesNube(set: Set, get: Get): AccionesNube {
       return r.relevo;
     },
 
+    // Ajustes de una caja cerrada: las mismas revisiones que en la demo (la API las vuelve a hacer)
+    anularVenta: async (cajaId, ventaId, hechoPor, motivo) => {
+      if (!motivo.trim()) throw new Error("Escribí el motivo: es lo que explica el ajuste más adelante.");
+      const r = await api.anularVenta(cajaId, { ventaId, hechoPor, motivo: motivo.trim().slice(0, 200) });
+      guardarProductos(r.productos);
+      set((s) => ({
+        ventas: conCambio(s.ventas, r.venta),
+        ajustes: [...s.ajustes, r.ajuste],
+        cuotas: r.cuota ? s.cuotas.map((c) => (c.id === r.cuota?.id ? { ...c, anulada: r.cuota.anulada } : c)) : s.cuotas,
+        socios: r.socio ? conCambio(s.socios, r.socio) : s.socios,
+      }));
+    },
+
+    recontarEfectivo: async (cajaId, efectivo, hechoPor, motivo) => {
+      if (!(efectivo >= 0)) throw new Error("Escribí el efectivo que contaste de nuevo.");
+      if (!motivo.trim()) throw new Error("Escribí el motivo: es lo que explica el ajuste más adelante.");
+      const ajuste = await api.recontar(cajaId, { efectivo, hechoPor, motivo: motivo.trim().slice(0, 200) });
+      set((s) => ({ ajustes: [...s.ajustes, ajuste] }));
+    },
+
+    registrarCompra: async (comercioId, proveedorId, items, cargadaPor) => {
+      const r = await api.registrarCompra(comercioId, {
+        proveedorId: proveedorId || null,
+        items: items.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad, costoUnitario: i.costoUnitario })),
+        cargadaPor,
+      });
+      guardarProductos(r.productos);
+      set((s) => ({ compras: [...s.compras, r.compra], lotes: [...s.lotes, ...r.lotes] }));
+    },
+
+    agregarProveedor: async (comercioId, nombre, telefono) => {
+      const proveedor = await api.agregarProveedor(comercioId, nombre, telefono);
+      set((s) => ({ proveedores: [...s.proveedores, proveedor] }));
+      return proveedor.id;
+    },
+
+    cargarGasto: async ({ comercioId, ...gasto }) => {
+      const nuevo = await api.cargarGasto(comercioId, gasto);
+      set((s) => ({ gastos: [...s.gastos, nuevo] }));
+    },
+
+    borrarGasto: async (id) => {
+      await api.borrarGasto(id);
+      set((s) => ({ gastos: s.gastos.filter((g) => g.id !== id) }));
+    },
+
+    agregarTanda: async (comercioId, productoId, cantidad) => {
+      const r = await api.agregarTanda(comercioId, productoId, cantidad);
+      guardarProducto(r.producto);
+      set((s) => ({ lotes: [...s.lotes, r.lote] }));
+    },
+
+    retirarVencidos: async (comercioId) => {
+      const r = await api.retirarVencidos(comercioId);
+      guardarProductos(r.productos);
+      // La API también borra las tandas vencidas que ya habían quedado en 0
+      set((s) => ({ lotes: s.lotes.filter((l) => l.comercioId !== comercioId || l.vence >= hoy()), retiros: [...s.retiros, ...r.retiros] }));
+      return r.retirados;
+    },
+
+    sacarDeTanda: async (loteId, cantidad, motivo) => {
+      const r = await api.sacarDeTanda(loteId, cantidad, motivo);
+      guardarProducto(r.producto);
+      set((s) => ({
+        lotes: r.lote ? conCambio(s.lotes, r.lote) : s.lotes.filter((l) => l.id !== loteId),
+        retiros: r.retiro ? [...s.retiros, r.retiro] : s.retiros,
+      }));
+    },
+
+    guardarPromo: async ({ id, comercioId, ...promo }) => {
+      const guardada = id ? await api.actualizarPromo(id, promo) : await api.crearPromo(comercioId, promo);
+      set((s) => ({ promos: conCambio(s.promos, guardada) }));
+    },
+
+    borrarPromo: async (id) => {
+      await api.borrarPromo(id);
+      set((s) => ({ promos: s.promos.filter((p) => p.id !== id) }));
+    },
+
     crearProducto: async ({ comercioId, ...producto }) => {
       guardarProducto(await api.crearProducto(comercioId, producto));
     },
@@ -118,7 +213,7 @@ export function accionesNube(set: Set, get: Get): AccionesNube {
 
     importarProductos: async (comercioId, filas) => {
       const r = await api.importarProductos(comercioId, filas);
-      set((s) => ({ productos: r.productos.reduce(conCambio, s.productos) }));
+      guardarProductos(r.productos);
       return { nuevos: r.nuevos, actualizados: r.actualizados };
     },
 

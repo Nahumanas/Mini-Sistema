@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { create } from "zustand";
 
 // Cosas de la pantalla que no son datos del negocio: el tema, el menú en el celular y los avisos.
@@ -61,3 +62,27 @@ export const useInterfaz = create<EstadoInterfaz>()((set, get) => ({
   },
   cerrarAviso: (id) => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })),
 }));
+
+/**
+ * Para los botones que guardan algo: mientras se guarda, enviando = true (para apagar el botón y que no se
+ * mande dos veces), y si no se pudo (en la nube: sin internet, o la API dijo que no) se avisa el motivo.
+ * intentar devuelve true si salió bien.
+ */
+export function useIntentar() {
+  const avisar = useInterfaz((s) => s.avisar);
+  const [enviando, setEnviando] = useState(false);
+  async function intentar(accion: () => Promise<unknown>, siSale?: string) {
+    setEnviando(true);
+    try {
+      await accion();
+      if (siSale) avisar(siSale);
+      return true;
+    } catch (err) {
+      avisar((err as Error).message, "error");
+      return false;
+    } finally {
+      setEnviando(false);
+    }
+  }
+  return { enviando, intentar };
+}

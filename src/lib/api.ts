@@ -1,6 +1,6 @@
 import type { MedioDePago } from "./formato";
 import { hayNube, supabase } from "./supabase";
-import type { Caja, Comercio, Empleado, Producto, Promo, Relevo, Venta } from "./tipos";
+import type { AjusteCaja, Caja, Comercio, Compra, Empleado, Gasto, Lote, Producto, Promo, Proveedor, Relevo, Retiro, Socio, Venta } from "./tipos";
 
 // La conexión con la API de Mantenete (FastAPI, en Render), que guarda todo en Supabase.
 //
@@ -57,7 +57,8 @@ export async function pedir<T>(ruta: string, metodo: Metodo = "GET", cuerpo?: un
   return (await respuesta.json()) as T;
 }
 
-/** Lo que trae /inicio: todo lo del dueño que la página necesita al entrar (ventas y cajas de los últimos 2 meses). */
+/** Lo que trae /inicio: todo lo del dueño que la página necesita al entrar
+ * (ventas, cajas, compras, gastos y retiros de los últimos 2 meses). */
 export type DatosDeInicio = {
   dueno: { nombre: string; email: string; pinConfigurado: boolean };
   comercios: Comercio[];
@@ -67,6 +68,12 @@ export type DatosDeInicio = {
   relevos: Relevo[];
   ventas: Venta[];
   promos: Promo[];
+  ajustes: AjusteCaja[];
+  proveedores: Proveedor[];
+  compras: Compra[];
+  gastos: Gasto[];
+  lotes: Lote[];
+  retiros: Retiro[];
 };
 
 export type NuevoProducto = Omit<Producto, "id" | "comercioId" | "activo">;
@@ -78,6 +85,9 @@ export type NuevaVenta = {
   descuento: number;
   promos: { nombre: string; monto: number }[];
 };
+export type NuevaCompra = { proveedorId: number | null; items: { productoId: number; cantidad: number; costoUnitario: number }[]; cargadaPor: string };
+export type DatosPromo = Omit<Promo, "id" | "comercioId">;
+type Cuota = { id: number; anulada: string | null };
 
 /** Cada cosa que la página le puede pedir a la API (ver servidor/README.md). */
 export const api = {
@@ -103,4 +113,24 @@ export const api = {
     pedir<{ relevo: Relevo; caja: Caja }>(`/comercios/${comercioId}/caja/relevo`, "POST", datos),
 
   registrarVenta: (comercioId: number, venta: NuevaVenta) => pedir<Venta>(`/comercios/${comercioId}/ventas`, "POST", venta),
+  anularVenta: (cajaId: number, datos: { ventaId: number; hechoPor: string; motivo: string }) =>
+    pedir<{ ajuste: AjusteCaja; venta: Venta; productos: Producto[]; cuota: Cuota | null; socio: Socio | null }>(`/cajas/${cajaId}/anular-venta`, "POST", datos),
+  recontar: (cajaId: number, datos: { efectivo: number; hechoPor: string; motivo: string }) => pedir<AjusteCaja>(`/cajas/${cajaId}/recontar`, "POST", datos),
+
+  agregarProveedor: (comercioId: number, nombre: string, telefono: string) => pedir<Proveedor>(`/comercios/${comercioId}/proveedores`, "POST", { nombre, telefono }),
+  registrarCompra: (comercioId: number, compra: NuevaCompra) =>
+    pedir<{ compra: Compra; productos: Producto[]; lotes: Lote[] }>(`/comercios/${comercioId}/compras`, "POST", compra),
+  cargarGasto: (comercioId: number, gasto: Omit<Gasto, "id" | "comercioId">) => pedir<Gasto>(`/comercios/${comercioId}/gastos`, "POST", gasto),
+  borrarGasto: (id: number) => pedir<{ ok: boolean }>(`/gastos/${id}`, "DELETE"),
+
+  agregarTanda: (comercioId: number, productoId: number, cantidad: number) =>
+    pedir<{ lote: Lote; producto: Producto }>(`/comercios/${comercioId}/lotes`, "POST", { productoId, cantidad }),
+  retirarVencidos: (comercioId: number) =>
+    pedir<{ retirados: number; lotesQuitados: number[]; retiros: Retiro[]; productos: Producto[] }>(`/comercios/${comercioId}/lotes/retirar-vencidos`, "POST"),
+  sacarDeTanda: (loteId: number, cantidad: number, motivo: Retiro["motivo"] | "vendido") =>
+    pedir<{ lote: Lote | null; retiro: Retiro | null; producto: Producto }>(`/lotes/${loteId}/sacar`, "POST", { cantidad, motivo }),
+
+  crearPromo: (comercioId: number, promo: DatosPromo) => pedir<Promo>(`/comercios/${comercioId}/promos`, "POST", promo),
+  actualizarPromo: (id: number, promo: DatosPromo) => pedir<Promo>(`/promos/${id}`, "PUT", promo),
+  borrarPromo: (id: number) => pedir<{ ok: boolean }>(`/promos/${id}`, "DELETE"),
 };
