@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
 from .base import cerrar_pool, pool
-from .rutas import caja, comercios, cuenta, productos, ventas
+from .rutas import caja, comercios, cuenta, inicio, productos, ventas
 
 
 @asynccontextmanager
@@ -26,18 +26,18 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=config.ORIGENES_PERMITIDOS,
     allow_origin_regex=config.ORIGENES_VISTA_PREVIA,
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
 
 @app.get("/salud", tags=["Salud"])
 def salud():
-    """Railway la consulta para saber si la API está viva (y si llega a la base)."""
+    """Render la consulta para saber si la API está viva (y si llega a la base)."""
     with pool().connection() as con:
         con.execute("select 1")
     return {"ok": True}
 
 
-for modulo in (cuenta, comercios, productos, caja, ventas):
+for modulo in (inicio, cuenta, comercios, productos, caja, ventas):
     app.include_router(modulo.router)

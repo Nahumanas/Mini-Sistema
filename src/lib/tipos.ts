@@ -260,4 +260,5 @@ export type Asistencia = {
   registradoPor: string;
 };
 
-export type Sesion = { rol: "jefe" | "empleado"; nombre: string; comercioId: number };
+// enNube: si entró con los datos de la nube (cuenta del dueño) o de la demo. Si cambia, la sesión se cierra.
+export type Sesion = { rol: "jefe" | "empleado"; nombre: string; comercioId: number; enNube?: boolean };

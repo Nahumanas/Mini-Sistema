@@ -40,6 +40,7 @@ export function Excel() {
   const { productos, ventas, gastos, importarProductos } = useDatos();
   const avisar = useInterfaz((s) => s.avisar);
   const [leido, setLeido] = useState<{ archivo: string; filas: Fila[]; faltan: string[] } | null>(null);
+  const [importando, setImportando] = useState(false);
 
   const suyos = productos.filter((p) => p.comercioId === comercio.id);
   const mes = rango("mes");
@@ -143,14 +144,21 @@ export function Excel() {
                     <Boton variante="fantasma" onClick={() => setLeido(null)}>Cancelar</Boton>
                     <Boton
                       variante="primario"
-                      disabled={!validas.length}
-                      onClick={() => {
-                        const r = importarProductos(comercio.id, validas.map(({ codigo, nombre, categoria, precioVenta, costo, stock, stockMinimo }) => ({ codigo, nombre, categoria, precioVenta, costo, stock, stockMinimo })));
-                        avisar(`Listo: ${r.nuevos} productos nuevos y ${r.actualizados} actualizados.`);
-                        setLeido(null);
+                      disabled={!validas.length || importando}
+                      onClick={async () => {
+                        setImportando(true);
+                        try {
+                          const r = await importarProductos(comercio.id, validas.map(({ codigo, nombre, categoria, precioVenta, costo, stock, stockMinimo }) => ({ codigo, nombre, categoria, precioVenta, costo, stock, stockMinimo })));
+                          avisar(`Listo: ${r.nuevos} productos nuevos y ${r.actualizados} actualizados.`);
+                          setLeido(null);
+                        } catch (err) {
+                          avisar(`No se importó nada. ${(err as Error).message}`, "error");
+                        } finally {
+                          setImportando(false);
+                        }
                       }}
                     >
-                      Importar {validas.length} productos
+                      {importando ? "Importando…" : `Importar ${validas.length} productos`}
                     </Boton>
                   </div>
                 </>

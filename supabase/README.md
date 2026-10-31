@@ -16,7 +16,7 @@ Acá viven las tablas de Mantenete en la nube y las reglas que cuidan que **cada
 5. Un visitante que no ingresó no ve ninguna tabla.
 6. Una sola caja abierta por comercio, aunque haya varias compus.
 
-> La **clave secreta** de Supabase (`sb_secret_...`) se saltea todas estas reglas: solo va en las variables de Railway y nunca se usa para lo que pide un usuario.
+> La **clave secreta** de Supabase (`sb_secret_...`) se saltea todas estas reglas: solo va en las variables del servidor (Render) y nunca se usa para lo que pide un usuario.
 
 ## Cómo pasar las tablas a Supabase (una sola vez)
 
@@ -42,3 +42,9 @@ Crea una base de prueba, imita lo mínimo de Supabase, carga las tablas, corre l
 - Para dar de alta un dueño: Supabase → **Authentication → Users → Invite user** con su Gmail (siempre *Invite*, nunca *Create new user*). Se le crea la ficha de dueño sola.
 - **Dos candados** contra los que no fueron invitados: el interruptor *Allow new users to sign up* apagado y, por si quedara prendido, la base no le da ficha de dueño a nadie sin invitación (`20261031200000_solo_invitados.sql`): la página lo saca y le dice que no tiene cuenta.
 - Las vistas previas de cada PR (`https://mantenete-*-nahuel-900e.vercel.app/**`) tienen que estar en **Authentication → URL Configuration → Redirect URLs**, si no Google no puede volver a la vista previa.
+
+## Datos de la nube (etapa 4)
+
+- Con `NEXT_PUBLIC_API_URL` cargada en Vercel, el dueño que entra con Gmail trabaja con sus datos de la base (por la API de `servidor/`). Sin ella, sigue viendo la demo.
+- La primera vez, la página le pide **crear su primer comercio** y **elegir su PIN de jefe** (en la nube no existe el 1234 de la demo).
+- **Si un dueño se olvida el PIN**: en el SQL Editor, `update public.duenos set pin_sal = null, pin_huella = null where email = 'su@gmail.com';`. La próxima vez que entre como jefe elige uno nuevo.

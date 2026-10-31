@@ -9,11 +9,11 @@ import { item } from "./ayuda";
 const datos = () => useDatos.getState();
 
 /** Un comercio de la demo con su caja recién abierta y un producto con stock. */
-function prepararCaja() {
+async function prepararCaja() {
   const producto = datos().productos.find((p) => p.activo && p.stock >= 10)!;
   const comercioId = producto.comercioId;
-  if (datos().cajas.some((c) => c.comercioId === comercioId && !c.cerrada)) datos().cerrarCaja(comercioId, 0, "");
-  datos().abrirCaja(comercioId, "Juan", 5000);
+  if (datos().cajas.some((c) => c.comercioId === comercioId && !c.cerrada)) await datos().cerrarCaja(comercioId, 0, "");
+  await datos().abrirCaja(comercioId, "Juan", 5000);
   const cajaId = datos().cajas.find((c) => c.comercioId === comercioId && !c.cerrada)!.id;
   return { producto, comercioId, cajaId };
 }
@@ -29,46 +29,46 @@ const stockDe = (id: number) => datos().productos.find((p) => p.id === id)!.stoc
 beforeEach(() => datos().reiniciar());
 
 describe("vender y anular", () => {
-  it("una venta baja el stock y queda en la caja abierta", () => {
-    const { producto, comercioId, cajaId } = prepararCaja();
-    const venta = vender(comercioId, producto.id, 3);
+  it("una venta baja el stock y queda en la caja abierta", async () => {
+    const { producto, comercioId, cajaId } = await prepararCaja();
+    const venta = await vender(comercioId, producto.id, 3);
     expect(stockDe(producto.id)).toBe(producto.stock - 3);
     expect(venta.cajaId).toBe(cajaId);
     expect(venta.total).toBe(producto.precioVenta * 3);
   });
 
-  it("los números de venta son seguidos dentro de cada comercio", () => {
-    const { producto, comercioId } = prepararCaja();
-    const a = vender(comercioId, producto.id, 1);
-    const b = vender(comercioId, producto.id, 1);
+  it("los números de venta son seguidos dentro de cada comercio", async () => {
+    const { producto, comercioId } = await prepararCaja();
+    const a = await vender(comercioId, producto.id, 1);
+    const b = await vender(comercioId, producto.id, 1);
     expect(b.numero).toBe(a.numero + 1);
   });
 
-  it("al cerrar, el efectivo esperado es lo inicial más las ventas en efectivo", () => {
-    const { producto, comercioId, cajaId } = prepararCaja();
-    vender(comercioId, producto.id, 2, "efectivo");
-    vender(comercioId, producto.id, 1, "debito");
-    datos().cerrarCaja(comercioId, 5000 + producto.precioVenta * 2, "");
+  it("al cerrar, el efectivo esperado es lo inicial más las ventas en efectivo", async () => {
+    const { producto, comercioId, cajaId } = await prepararCaja();
+    await vender(comercioId, producto.id, 2, "efectivo");
+    await vender(comercioId, producto.id, 1, "debito");
+    await datos().cerrarCaja(comercioId, 5000 + producto.precioVenta * 2, "");
     const caja = datos().cajas.find((c) => c.id === cajaId)!;
     expect(caja.efectivoEsperado).toBe(5000 + producto.precioVenta * 2);
     expect(caja.cerrada).not.toBeNull();
   });
 
-  it("anular una venta (con la caja cerrada) devuelve la mercadería y la marca como anulada", () => {
-    const { producto, comercioId, cajaId } = prepararCaja();
-    const venta = vender(comercioId, producto.id, 4);
-    datos().cerrarCaja(comercioId, 0, "");
+  it("anular una venta (con la caja cerrada) devuelve la mercadería y la marca como anulada", async () => {
+    const { producto, comercioId, cajaId } = await prepararCaja();
+    const venta = await vender(comercioId, producto.id, 4);
+    await datos().cerrarCaja(comercioId, 0, "");
     datos().anularVenta(cajaId, venta.id, "Jefe", "Se cobró dos veces");
     expect(stockDe(producto.id)).toBe(producto.stock);
     expect(datos().ventas.find((v) => v.id === venta.id)!.anulada).toBeTruthy();
     expect(datos().ajustes.at(-1)).toMatchObject({ tipo: "anular_venta", ventaId: venta.id, hechoPor: "Jefe" });
   });
 
-  it("no deja anular con la caja abierta, sin motivo, ni dos veces la misma venta", () => {
-    const { producto, comercioId, cajaId } = prepararCaja();
-    const venta = vender(comercioId, producto.id, 1);
+  it("no deja anular con la caja abierta, sin motivo, ni dos veces la misma venta", async () => {
+    const { producto, comercioId, cajaId } = await prepararCaja();
+    const venta = await vender(comercioId, producto.id, 1);
     expect(() => datos().anularVenta(cajaId, venta.id, "Jefe", "x")).toThrow();
-    datos().cerrarCaja(comercioId, 0, "");
+    await datos().cerrarCaja(comercioId, 0, "");
     expect(() => datos().anularVenta(cajaId, venta.id, "Jefe", "  ")).toThrow();
     datos().anularVenta(cajaId, venta.id, "Jefe", "error");
     expect(() => datos().anularVenta(cajaId, venta.id, "Jefe", "error")).toThrow();
@@ -76,24 +76,24 @@ describe("vender y anular", () => {
 });
 
 describe("relevo de turno", () => {
-  it("cambia quién atiende y anota la diferencia del que se va", () => {
-    const { producto, comercioId } = prepararCaja();
-    vender(comercioId, producto.id, 1, "efectivo");
+  it("cambia quién atiende y anota la diferencia del que se va", async () => {
+    const { producto, comercioId } = await prepararCaja();
+    await vender(comercioId, producto.id, 1, "efectivo");
     const esperado = 5000 + producto.precioVenta;
-    const r = datos().registrarRelevo(comercioId, "Martina", esperado - 100, "");
+    const r = await datos().registrarRelevo(comercioId, "Martina", esperado - 100, "");
     expect(r).toMatchObject({ sale: "Juan", entra: "Martina", esperado, diferencia: -100 });
     expect(datos().cajas.find((c) => c.comercioId === comercioId && !c.cerrada)!.responsable).toBe("Martina");
   });
 
-  it("no deja hacer el relevo a la misma persona que ya está atendiendo", () => {
-    const { comercioId } = prepararCaja();
-    expect(() => datos().registrarRelevo(comercioId, "juan", 5000, "")).toThrow();
+  it("no deja hacer el relevo a la misma persona que ya está atendiendo", async () => {
+    const { comercioId } = await prepararCaja();
+    await expect(datos().registrarRelevo(comercioId, "juan", 5000, "")).rejects.toThrow();
   });
 });
 
 describe("compras", () => {
-  it("una compra sube el stock y actualiza el costo del producto", () => {
-    const { producto, comercioId } = prepararCaja();
+  it("una compra sube el stock y actualiza el costo del producto", async () => {
+    const { producto, comercioId } = await prepararCaja();
     datos().registrarCompra(comercioId, 0, [{ productoId: producto.id, nombre: producto.nombre, cantidad: 12, costoUnitario: 777 }], "Jefe");
     const despues = datos().productos.find((p) => p.id === producto.id)!;
     expect(despues.stock).toBe(producto.stock + 12);

@@ -17,14 +17,22 @@ export function AbrirCaja({ comercioId, nombreComercio, responsable }: { comerci
   const abrirCaja = useDatos((s) => s.abrirCaja);
   const avisar = useInterfaz((s) => s.avisar);
   const [monto, setMonto] = useState("");
+  const [enviando, setEnviando] = useState(false);
 
   return (
     <Tarjeta>
       <form
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          abrirCaja(comercioId, responsable, Number(monto) || 0);
-          avisar(`Caja de ${nombreComercio} abierta con ${pesos(Number(monto) || 0)}.`);
+          setEnviando(true);
+          try {
+            await abrirCaja(comercioId, responsable, Number(monto) || 0);
+            avisar(`Caja de ${nombreComercio} abierta con ${pesos(Number(monto) || 0)}.`);
+          } catch (err) {
+            avisar((err as Error).message, "error");
+          } finally {
+            setEnviando(false);
+          }
         }}
         className="flex flex-col gap-4"
       >
@@ -37,7 +45,7 @@ export function AbrirCaja({ comercioId, nombreComercio, responsable }: { comerci
           <Campo etiqueta="Efectivo inicial ($)" className="w-48">
             <input id="monto-inicial" type="number" min={0} inputMode="numeric" value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="0" className={`${claseInput} numeros`} autoFocus />
           </Campo>
-          <Boton type="submit" variante="primario" icono={LockOpen}>
+          <Boton type="submit" variante="primario" icono={LockOpen} disabled={enviando}>
             Abrir caja
           </Boton>
         </div>
@@ -57,6 +65,7 @@ export function CerrarCaja({ caja, alTerminar }: { caja: Caja; alTerminar: () =>
   const avisar = useInterfaz((s) => s.avisar);
   const [contado, setContado] = useState("");
   const [nota, setNota] = useState("");
+  const [enviando, setEnviando] = useState(false);
 
   const deEstaCaja = ventas.filter((v) => v.cajaId === caja.id);
   const porMedio = (Object.keys(MEDIOS_DE_PAGO) as MedioDePago[]).map((m) => ({
@@ -118,9 +127,16 @@ export function CerrarCaja({ caja, alTerminar }: { caja: Caja; alTerminar: () =>
 
       <Tarjeta titulo="Arqueo">
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            cerrarCaja(caja.comercioId, Number(contado), nota);
+            setEnviando(true);
+            try {
+              await cerrarCaja(caja.comercioId, Number(contado), nota);
+            } catch (err) {
+              return avisar(`No se cerró la caja. ${(err as Error).message}`, "error");
+            } finally {
+              setEnviando(false);
+            }
             avisar(diferencia === 0 ? "Caja cerrada. El efectivo dio justo." : `Caja cerrada con una diferencia de ${pesos(diferencia ?? 0)}.`, diferencia === 0 ? "exito" : "info");
             alTerminar();
           }}
@@ -141,7 +157,7 @@ export function CerrarCaja({ caja, alTerminar }: { caja: Caja; alTerminar: () =>
             <Boton variante="fantasma" onClick={alTerminar}>
               Volver a la caja
             </Boton>
-            <Boton type="submit" variante="primario" icono={Lock} disabled={contado === ""}>
+            <Boton type="submit" variante="primario" icono={Lock} disabled={contado === "" || enviando}>
               Cerrar caja
             </Boton>
           </div>
@@ -163,6 +179,7 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
   const [contado, setContado] = useState("");
   const [nota, setNota] = useState("");
   const [error, setError] = useState("");
+  const [enviando, setEnviando] = useState(false);
 
   const turno = turnoEnCurso(caja, ventas, relevos);
   const diferencia = contado === "" ? null : Number(contado) - turno.esperado;
@@ -198,11 +215,12 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
 
       <Tarjeta titulo="Entregar la caja">
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
             setError("");
+            setEnviando(true);
             try {
-              const r = registrarRelevo(caja.comercioId, entra, Number(contado), nota, nombreTurno || null);
+              const r = await registrarRelevo(caja.comercioId, entra, Number(contado), nota, nombreTurno || null);
               // En esta compu ahora atiende el que entró: las ventas siguientes quedan a su nombre
               if (sesion?.rol === "empleado") ingresar({ ...sesion, nombre: r.entra });
               avisar(
@@ -213,6 +231,8 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
               alTerminar();
             } catch (err) {
               setError((err as Error).message);
+            } finally {
+              setEnviando(false);
             }
           }}
           className="flex flex-col gap-4"
@@ -254,7 +274,7 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
             <Boton variante="fantasma" onClick={alTerminar}>
               Volver a la caja
             </Boton>
-            <Boton type="submit" variante="primario" icono={Repeat} disabled={contado === "" || !entra.trim()}>
+            <Boton type="submit" variante="primario" icono={Repeat} disabled={contado === "" || !entra.trim() || enviando}>
               Registrar relevo
             </Boton>
           </div>

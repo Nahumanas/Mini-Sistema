@@ -5,8 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { LogOut, Moon, Sun, X } from "lucide-react";
-import { CONFIGURACION, MENU, pantallaDeEntrada, puedeVer, type Seccion } from "@/lib/navegacion";
+import { CONFIGURACION, estaEnLaNube, MENU, pantallaDeEntrada, puedeVer, type Seccion } from "@/lib/navegacion";
 import { useComercioActivo, useSesion } from "@/store/comercio";
+import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 
 // La barra de la izquierda. Arriba el logo y el menú; abajo de todo, ancladas:
@@ -19,6 +20,7 @@ export function Sidebar() {
   const { sesion, salir } = useSesion();
   const comercio = useComercioActivo();
   const esJefe = sesion?.rol === "jefe";
+  const enNube = useDatos((s) => s.modo === "nube");
 
   useEffect(leerTema, [leerTema]);
   useEffect(leerMenu, [leerMenu]);
@@ -41,11 +43,11 @@ export function Sidebar() {
       >
         <div className={`flex h-16 shrink-0 items-center justify-between border-b border-borde px-5 ${menuAchicado ? "lg:justify-center lg:px-0" : ""}`}>
           {menuAchicado && (
-            <Link href={pantallaDeEntrada(esJefe, comercio)} aria-label="Mantenete, ir al inicio" className="hidden lg:block">
+            <Link href={pantallaDeEntrada(esJefe, comercio, enNube)} aria-label="Mantenete, ir al inicio" className="hidden lg:block">
               <Image src="/icon.png" alt="" width={28} height={28} className="size-7" />
             </Link>
           )}
-          <Link href={pantallaDeEntrada(esJefe, comercio)} aria-label="Mantenete, ir al inicio" className={chico}>
+          <Link href={pantallaDeEntrada(esJefe, comercio, enNube)} aria-label="Mantenete, ir al inicio" className={chico}>
             {/* Dos logos, uno por tema: el CSS muestra el que corresponde, sin parpadeo */}
             <Image src="/logo-claro.png" alt="Mantenete" width={148} height={38} className="h-7 w-auto dark:hidden" priority />
             <Image src="/logo-oscuro.png" alt="Mantenete" width={148} height={36} className="hidden h-7 w-auto dark:block" priority />
@@ -61,7 +63,7 @@ export function Sidebar() {
 
         <nav className={`flex-1 overflow-y-auto px-3 py-4 ${menuAchicado ? "lg:px-2" : ""}`} aria-label="Menú principal">
           {MENU.map((grupo) => {
-            const visibles = grupo.secciones.filter((s) => puedeVer(s, esJefe, comercio));
+            const visibles = grupo.secciones.filter((s) => puedeVer(s, esJefe, comercio) && (!enNube || estaEnLaNube(s)));
             if (!visibles.length) return null;
             return (
               <div key={grupo.titulo ?? "inicio"} className="mb-5 last:mb-0">

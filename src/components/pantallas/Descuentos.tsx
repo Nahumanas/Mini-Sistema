@@ -181,7 +181,7 @@ export function Descuentos() {
           <Segmentado
             etiqueta="Cómo se combinan"
             valor={comercio.combinarPromos}
-            alCambiar={(combinarPromos) => actualizarComercio(comercio.id, { combinarPromos })}
+            alCambiar={(combinarPromos) => void actualizarComercio(comercio.id, { combinarPromos })}
             opciones={[
               { valor: "mejor", texto: "Se aplica la mejor" },
               { valor: "sumar", texto: "Se suman" },

@@ -76,6 +76,14 @@ export const CONFIGURACION: Seccion = { titulo: "Configuración", ruta: "/config
 
 export const SECCIONES: Seccion[] = [...MENU.flatMap((g) => g.secciones), CONFIGURACION];
 
+// Las pantallas que ya funcionan con la nube (paso 5, parte 2). Las demás llegan en las próximas partes:
+// mientras tanto, con la cuenta abierta no aparecen en el menú (y en la demo funcionan todas).
+export const RUTAS_EN_LA_NUBE = ["/inicio", "/caja", "/panel-del-dia", "/stock", "/reportes", "/mis-comercios", "/excel", "/configuracion"];
+
+export function estaEnLaNube(seccion: Seccion) {
+  return RUTAS_EN_LA_NUBE.includes(seccion.ruta);
+}
+
 export function buscarSeccion(ruta: string) {
   return SECCIONES.find((s) => s.ruta === ruta);
 }
@@ -104,8 +112,9 @@ export function migasDe(ruta: string): string[] {
   return ruta === CONFIGURACION.ruta ? [CONFIGURACION.titulo] : [];
 }
 
-/** Adónde va cada uno al entrar: el jefe al Inicio; el empleado a la Caja (en un gimnasio, a la recepción). */
-export function pantallaDeEntrada(esJefe: boolean, comercio: Comercio | undefined) {
+/** Adónde va cada uno al entrar: el jefe al Inicio; el empleado a la Caja (en un gimnasio, a la recepción;
+ * en la nube, a la Caja hasta que llegue el gimnasio). */
+export function pantallaDeEntrada(esJefe: boolean, comercio: Comercio | undefined, enNube = false) {
   if (esJefe) return "/inicio";
-  return comercio?.rubro === "gimnasio" ? "/ingreso-dni" : "/caja";
+  return comercio?.rubro === "gimnasio" && !enNube ? "/ingreso-dni" : "/caja";
 }

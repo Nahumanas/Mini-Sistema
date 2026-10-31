@@ -1,9 +1,9 @@
-"""Configuración de la API. Todo sale de variables de entorno (en Railway: pestaña Variables)."""
+"""Configuración de la API. Todo sale de variables de entorno (en Render: pestaña Environment)."""
 
 import os
 
 # Conexión a la base de Supabase (Project Settings → Database → Connection string, modo "Transaction pooler").
-# Lleva la contraseña de la base: es SECRETA, solo va en Railway.
+# Lleva la contraseña de la base: es SECRETA, solo va en Render.
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 # La dirección del proyecto de Supabase (no es secreta). Con ella se bajan las llaves públicas

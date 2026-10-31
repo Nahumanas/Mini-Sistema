@@ -38,6 +38,20 @@ _COLUMNAS = {"codigo": "codigo", "nombre": "nombre", "categoria": "categoria", "
              "activo": "activo"}
 
 
+class FilaExcel(BaseModel):
+    codigo: str = Field(min_length=1, max_length=50)
+    nombre: str = Field(min_length=1, max_length=120)
+    categoria: str = Field(default="", max_length=60)
+    precioVenta: float = Field(gt=0)
+    costo: float = Field(default=0, ge=0)
+    stock: float = 0
+    stockMinimo: float = Field(default=0, ge=0)
+
+
+class Importacion(BaseModel):
+    filas: list[FilaExcel] = Field(min_length=1, max_length=5000)
+
+
 def _codigo_repetido() -> HTTPException:
     return HTTPException(409, "Ya hay otro producto con ese código en este comercio.")
 
@@ -87,3 +101,30 @@ def actualizar(producto_id: int, cambios: CambiosProducto, usuario: Usuario = De
     except errors.UniqueViolation as error:
         raise _codigo_repetido() from error
     return a_camel(fila)
+
+
+@router.post("/comercios/{comercio_id}/productos/importar")
+def importar(comercio_id: int, datos: Importacion, usuario: Usuario = Depends(usuario_actual)):
+    """La lista de productos del Excel: si el código ya existe se actualiza, si no se crea. Todo o nada."""
+    nuevos = actualizados = 0
+    productos = []
+    with como_usuario(usuario) as con:
+        comercio_mio(con, comercio_id)
+        for f in datos.filas:
+            fila = con.execute(
+                """insert into public.productos
+                     (comercio_id, codigo, nombre, categoria, precio_venta, costo, stock, stock_minimo)
+                   values (%s, %s, %s, %s, %s, %s, %s, %s)
+                   on conflict (comercio_id, codigo) where codigo <> '' do update set
+                     nombre = excluded.nombre, categoria = excluded.categoria, precio_venta = excluded.precio_venta,
+                     costo = excluded.costo, stock = excluded.stock, stock_minimo = excluded.stock_minimo
+                   returning (xmax = 0) as es_nuevo, *""",
+                (comercio_id, f.codigo.strip(), f.nombre.strip(), f.categoria.strip(), f.precioVenta, f.costo,
+                 f.stock, f.stockMinimo),
+            ).fetchone()
+            if fila.pop("es_nuevo"):
+                nuevos += 1
+            else:
+                actualizados += 1
+            productos.append(a_camel(fila))
+    return {"nuevos": nuevos, "actualizados": actualizados, "productos": productos}
