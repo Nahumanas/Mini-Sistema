@@ -3,13 +3,30 @@
 \set ON_ERROR_STOP on
 
 -- Nahuel "invita" dos Gmail: el sistema crea sus fichas de dueño solo.
-insert into auth.users (id, email, raw_user_meta_data) values
-  ('00000000-0000-0000-0000-00000000000a', 'ana@gmail.com', '{"full_name":"Ana"}'),
-  ('00000000-0000-0000-0000-00000000000b', 'beto@gmail.com', '{"full_name":"Beto"}');
+insert into auth.users (id, email, raw_user_meta_data, invited_at) values
+  ('00000000-0000-0000-0000-00000000000a', 'ana@gmail.com', '{"full_name":"Ana"}', now()),
+  ('00000000-0000-0000-0000-00000000000b', 'beto@gmail.com', '{"full_name":"Beto"}', now());
 
 do $$ begin
   if (select count(*) from public.duenos) <> 2 then raise exception 'FALLA: no se crearon las fichas de dueño al invitar'; end if;
 end $$;
+
+-- Alguien entra con Google SIN invitación (por si el registro abierto quedó prendido): no recibe ficha.
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-00000000000c', 'colado@gmail.com');
+do $$ begin
+  if exists (select 1 from public.duenos where email = 'colado@gmail.com') then
+    raise exception 'FALLA: un Gmail sin invitar recibió ficha de dueño';
+  end if;
+end $$;
+
+-- Si después Nahuel lo invita, recién ahí recibe su ficha.
+update auth.users set invited_at = now() where email = 'colado@gmail.com';
+do $$ begin
+  if not exists (select 1 from public.duenos where email = 'colado@gmail.com') then
+    raise exception 'FALLA: al invitarlo después no recibió su ficha';
+  end if;
+end $$;
+delete from auth.users where email = 'colado@gmail.com';
 
 -- ---------- Ana carga su kiosco (conectada con SU token) ----------
 set role authenticated;
@@ -117,6 +134,20 @@ do $$ begin
     insert into public.cajas (comercio_id, responsable) values ((select id from public.comercios), 'Otra compu');
     raise exception 'FALLA: se abrieron dos cajas a la vez';
   exception when unique_violation then null;
+  end;
+end $$;
+
+-- ---------- Un usuario sin invitación (sin ficha) no puede crear comercios ----------
+reset role;
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-00000000000d', 'otro@gmail.com');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000d', false) \gset ignorar_
+do $$ begin
+  if (select count(*) from public.comercios) <> 0 then raise exception 'FALLA: un usuario sin ficha ve comercios'; end if;
+  begin
+    insert into public.comercios (dueno_id, nombre, rubro) values (1, 'Colado', 'kiosco');
+    raise exception 'FALLA: un usuario sin ficha pudo crear un comercio';
+  exception when insufficient_privilege then null;
   end;
 end $$;
 

@@ -42,7 +42,12 @@ export const useCuenta = create<EstadoCuenta>()((set) => ({
 
     const leerFicha = async (email: string) => {
       // La ficha del dueño la protege el RLS: cada uno solo puede leer la suya.
-      const { data } = await sb.from("duenos").select("nombre, email").maybeSingle();
+      const { data, error } = await sb.from("duenos").select("nombre, email").maybeSingle();
+      if (!data && !error) {
+        // Entró con Google pero Nahuel no lo invitó: no tiene ficha de dueño, así que no tiene cuenta.
+        await sb.auth.signOut();
+        return set({ cargando: false, cuenta: null, error: mensajeDeIngreso("not allowed") });
+      }
       set({ cargando: false, cuenta: { email: data?.email || email, nombre: data?.nombre ?? "" } });
     };
 
