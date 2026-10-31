@@ -1,20 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3 } from "lucide-react";
-import { cambio, porHora, porMedio, rankingProductos, resumen, ventasEntre } from "@/lib/calculos";
-import { diaDeLaSemana, hora, hoy, sumarDias } from "@/lib/fechas";
+import { BarChart3, Truck } from "lucide-react";
+import { cambio, porHora, porMedio, rankingProductos, resumen, salidasDelDia, type Salida, ventasEntre } from "@/lib/calculos";
+import { ddmm, diaDeLaSemana, hora, hoy, sumarDias } from "@/lib/fechas";
 import { MEDIOS_DE_PAGO, pesos } from "@/lib/formato";
 import { useComercioActivo, useEsJefe } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
-import { claseInput, Encabezado, Kpi, Tabla, Tarjeta, Vacio } from "../ui/base";
+import { Chip, claseInput, Encabezado, Kpi, Tabla, Tarjeta, Vacio } from "../ui/base";
 import { GraficoBarras } from "../ui/Graficos";
 
+const TIPOS: Record<Salida["tipo"], { texto: string; tono: "gris" | "amarillo" | "rojo" }> = {
+  compra: { texto: "Compra", tono: "gris" },
+  gasto: { texto: "Gasto", tono: "amarillo" },
+  tirado: { texto: "Se tiró", tono: "rojo" },
+};
+
 // Cómo viene el día en el comercio elegido. Las flechas comparan con el mismo día de la semana pasada.
+// El jefe ve además lo que salió ese día (compras, gastos y lo que se tiró) y cuánto quedó.
 export function PanelDelDia() {
   const comercio = useComercioActivo();
   const esJefe = useEsJefe();
-  const ventas = useDatos((s) => s.ventas);
+  const { ventas, compras, gastos, retiros, proveedores } = useDatos();
   const [dia, setDia] = useState(hoy());
 
   const delDia = ventasEntre(ventas, dia, dia, [comercio.id]);
@@ -25,6 +32,7 @@ export function PanelDelDia() {
   const ranking = rankingProductos(delDia).slice(0, 5);
   const ultimas = [...delDia].reverse().slice(0, 8);
   const comparado = `vs. el ${diaDeLaSemana(semanaPasada)} pasado`;
+  const salio = salidasDelDia({ compras, gastos, retiros, proveedores }, comercio.id, dia, r.total);
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -101,6 +109,35 @@ export function PanelDelDia() {
             </section>
           </div>
         </>
+      )}
+
+      {esJefe && (
+        <section className="flex flex-col gap-4">
+          <h2 className="text-lg font-semibold">Lo que salió {dia === hoy() ? "hoy" : `el ${ddmm(dia)}`}</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Kpi titulo="Compras" valor={pesos(salio.compras)} />
+            <Kpi titulo="Gastos" valor={pesos(salio.gastos)} />
+            <Kpi titulo="Se tiró (a costo)" valor={pesos(salio.tirado)} />
+            <Kpi titulo="Quedó del día" valor={pesos(salio.quedo)} detalle="cobrado − compras − gastos" />
+          </div>
+          {salio.salidas.length ? (
+            <Tabla columnas={[{ texto: "Hora" }, { texto: "Qué" }, { texto: "Detalle", ocultarCelular: true }, { texto: "Monto", derecha: true }]}>
+              {salio.salidas.map((x) => (
+                <tr key={x.id}>
+                  <td className="px-4 py-2.5">{x.fecha.length > 10 ? hora(x.fecha) : "—"}</td>
+                  <td className="px-4 py-2.5">
+                    <Chip tono={TIPOS[x.tipo].tono}>{TIPOS[x.tipo].texto}</Chip>
+                  </td>
+                  <td className="hidden px-4 py-2.5 text-texto-suave sm:table-cell">{x.detalle}</td>
+                  <td className="px-4 py-2.5 text-right font-medium">{pesos(x.monto)}</td>
+                </tr>
+              ))}
+            </Tabla>
+          ) : (
+            <Vacio icono={Truck}>Este día no hubo compras, gastos ni mercadería tirada.</Vacio>
+          )}
+          <p className="text-sm text-texto-suave">Lo que se tiró no se resta en «Quedó del día»: esa mercadería ya se pagó cuando se compró.</p>
+        </section>
       )}
     </div>
   );
