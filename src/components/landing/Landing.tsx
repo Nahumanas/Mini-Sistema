@@ -46,7 +46,7 @@ function Logo({ claro = false }: { claro?: boolean }) {
 function BotonDemo({ grande = false }: { grande?: boolean }) {
   return (
     <Link
-      href="/ingresar"
+      href="/ingresar?demo"
       className={`inline-flex items-center justify-center gap-2 rounded-lg bg-[#1C7BD6] font-semibold text-white transition-colors hover:bg-[#1767b4] ${
         grande ? "h-13 px-7 text-lg" : "h-10 px-4 text-[15px]"
       }`}
@@ -331,7 +331,7 @@ function Contacto() {
               <MessageCircle className="size-5" />
               Hablar por WhatsApp
             </a>
-            <Link href="/ingresar" className="inline-flex h-12 items-center rounded-lg border border-white/20 px-6 font-semibold hover:bg-white/5">
+            <Link href="/ingresar?demo" className="inline-flex h-12 items-center rounded-lg border border-white/20 px-6 font-semibold hover:bg-white/5">
               Probar Demo Gratis
             </Link>
           </div>

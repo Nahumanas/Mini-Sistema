@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Info, KeyRound, LogOut, User } from "lucide-react";
 import { DUENO } from "@/lib/datos-demo";
@@ -40,6 +40,8 @@ export function Ingreso() {
   const reiniciar = useDatos((s) => s.reiniciar);
   const { cargando, cuenta, error: errorCuenta, iniciar, ingresarConGoogle, salirDeLaCuenta } = useCuenta();
   const [probarDemo, setProbarDemo] = useState(false);
+  // Los botones "Probar Demo Gratis" de la landing traen ?demo: van directo a la demo, sin pedir Gmail.
+  const pideDemo = useSearchParams().has("demo");
   const [yendoAGoogle, setYendoAGoogle] = useState(false);
 
   useEffect(() => iniciar(), [iniciar]);
@@ -65,7 +67,7 @@ export function Ingreso() {
   );
 
   // Paso 1: todavía no se abrió la cuenta del dueño en esta compu
-  if (hayNube && !cuenta && !probarDemo) {
+  if (hayNube && !cuenta && !probarDemo && !pideDemo) {
     return (
       <main className="flex min-h-full items-center justify-center bg-fondo px-4 py-10">
         <div className="w-full max-w-md">

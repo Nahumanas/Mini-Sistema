@@ -25,7 +25,7 @@ export function MenuCelular({ links }: { links: { href: string; texto: string }[
               {l.texto}
             </a>
           ))}
-          <Link href="/ingresar" className="mt-3 flex h-12 items-center justify-center rounded-lg bg-[#1C7BD6] font-semibold text-white">
+          <Link href="/ingresar?demo" className="mt-3 flex h-12 items-center justify-center rounded-lg bg-[#1C7BD6] font-semibold text-white">
             Probar Demo Gratis
           </Link>
           <a
