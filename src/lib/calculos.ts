@@ -1,6 +1,6 @@
 import { MEDIOS_DE_PAGO, type MedioDePago } from "./formato";
 import { hoy, sumarDias } from "./fechas";
-import type { Lote, Producto, Venta } from "./tipos";
+import type { Compra, Gasto, Lote, Producto, Proveedor, Retiro, Venta } from "./tipos";
 
 // Las cuentas de los reportes (como reportes.py de Streamlit), separadas de las pantallas.
 // Reciben listas y devuelven números: así se pueden probar solas y reusar en Inicio, Panel y Reportes.
@@ -123,4 +123,30 @@ export function rango(periodo: Periodo): { desde: string; hasta: string; antesDe
   const dias = Number(h.slice(8, 10));
   const inicioAntes = `${sumarDias(inicio, -1).slice(0, 7)}-01`;
   return { desde: inicio, hasta: h, antesDesde: inicioAntes, antesHasta: sumarDias(inicioAntes, dias - 1), nombre: "Este mes" };
+}
+
+/** Un movimiento de plata (o mercadería) que salió del comercio en el día, para el Panel del día. */
+export type Salida = { id: string; fecha: string; tipo: "compra" | "gasto" | "tirado"; detalle: string; monto: number };
+
+/**
+ * Lo que salió en un día: compras a proveedores, gastos y lo que se tiró o regaló (a costo).
+ * "quedo" = lo cobrado menos compras y gastos (lo tirado no se resta: esa mercadería ya se pagó al comprarla).
+ */
+export function salidasDelDia(
+  base: { compras: Compra[]; gastos: Gasto[]; retiros: Retiro[]; proveedores: Proveedor[] },
+  comercioId: number,
+  dia: string,
+  cobrado: number,
+) {
+  const delDia = <T extends { comercioId: number; fecha: string }>(lista: T[]) => lista.filter((x) => x.comercioId === comercioId && x.fecha.slice(0, 10) === dia);
+  const proveedor = (id: number | null) => base.proveedores.find((p) => p.id === id)?.nombre;
+  const salidas: Salida[] = [
+    ...delDia(base.compras).map((c): Salida => ({ id: `c${c.id}`, fecha: c.fecha, tipo: "compra", detalle: proveedor(c.proveedorId) ? `Compra a ${proveedor(c.proveedorId)}` : "Compra", monto: c.total })),
+    ...delDia(base.gastos).map((g): Salida => ({ id: `g${g.id}`, fecha: g.fecha, tipo: "gasto", detalle: g.descripcion ? `${g.categoria}: ${g.descripcion}` : g.categoria, monto: g.monto })),
+    ...delDia(base.retiros).map((r): Salida => ({ id: `r${r.id}`, fecha: r.fecha, tipo: "tirado", detalle: `${r.cantidad} ${r.nombre} (${r.motivo})`, monto: r.costo })),
+  ].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const suma = (tipo: Salida["tipo"]) => salidas.filter((s) => s.tipo === tipo).reduce((t, s) => t + s.monto, 0);
+  const compras = suma("compra");
+  const gastos = suma("gasto");
+  return { salidas, compras, gastos, tirado: suma("tirado"), quedo: cobrado - compras - gastos };
 }

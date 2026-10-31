@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cambio, conStockBajo, porDia, porMedio, rankingProductos, resumen, ventasEntre } from "@/lib/calculos";
+import { cambio, conStockBajo, porDia, porMedio, rankingProductos, resumen, salidasDelDia, ventasEntre } from "@/lib/calculos";
 import type { Producto } from "@/lib/tipos";
 import { item, venta } from "./ayuda";
 
@@ -100,5 +100,28 @@ describe("conStockBajo", () => {
   it("avisa cuando el stock llega al mínimo, y no avisa de los productos dados de baja", () => {
     const bajos = conStockBajo([producto(1, 5, 5), producto(2, 6, 5), producto(3, 0, 5, false)]);
     expect(bajos.map((p) => p.id)).toEqual([1]);
+  });
+});
+
+describe("salidasDelDia (Panel del día)", () => {
+  const base = {
+    proveedores: [{ id: 7, comercioId: 1, nombre: "La Serenísima", telefono: "" }],
+    compras: [
+      { id: 1, comercioId: 1, proveedorId: 7, fecha: "2026-10-31T09:30", items: [], total: 9000, cargadaPor: "Ana" },
+      { id: 2, comercioId: 1, proveedorId: null, fecha: "2026-10-30T18:00", items: [], total: 5000, cargadaPor: "Ana" }, // otro día
+      { id: 3, comercioId: 2, proveedorId: null, fecha: "2026-10-31T10:00", items: [], total: 7000, cargadaPor: "Ana" }, // otro comercio
+    ],
+    gastos: [{ id: 4, comercioId: 1, fecha: "2026-10-31", categoria: "Luz", descripcion: "", monto: 2500 }],
+    retiros: [{ id: 5, comercioId: 1, productoId: 1, nombre: "Yogur", cantidad: 2, motivo: "tirado" as const, fecha: "2026-10-31T12:00", costo: 700 }],
+  };
+
+  it("suma las compras y gastos del día y comercio; lo tirado se muestra pero no se resta", () => {
+    const r = salidasDelDia(base, 1, "2026-10-31", 20000);
+    expect(r).toMatchObject({ compras: 9000, gastos: 2500, tirado: 700, quedo: 20000 - 9000 - 2500 });
+    expect(r.salidas.map((s) => s.detalle)).toEqual(["2 Yogur (tirado)", "Compra a La Serenísima", "Luz"]);
+  });
+
+  it("un día sin movimientos da todo en cero y lo cobrado queda entero", () => {
+    expect(salidasDelDia(base, 1, "2026-10-29", 1500)).toMatchObject({ salidas: [], compras: 0, gastos: 0, tirado: 0, quedo: 1500 });
   });
 });
