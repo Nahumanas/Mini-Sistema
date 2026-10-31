@@ -4,6 +4,7 @@ create schema if not exists auth;
 create table if not exists auth.users (
   id uuid primary key,
   email text,
+  invited_at timestamptz,
   raw_user_meta_data jsonb not null default '{}'::jsonb
 );
 -- Supabase saca el usuario del token (JWT). Acá lo "simulamos" con una variable.
