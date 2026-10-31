@@ -33,3 +33,10 @@ bash supabase/pruebas/probar-en-local.sh
 ```
 
 Crea una base de prueba, imita lo mínimo de Supabase, carga las tablas, corre la prueba y la borra. **Nunca se corre contra la base real.**
+
+## Ingreso con Gmail (etapa 3)
+
+- La web usa solo dos variables (en Vercel → Settings → Environment Variables): `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Si faltan, la web queda en modo demo como antes.
+- El dueño entra con Google **una vez** en cada compu o celular del local. Adentro, cada turno sigue igual: empleado con su nombre o jefe con su PIN.
+- Si alguien entra con un Gmail que no fue invitado, Supabase lo rechaza (registro abierto apagado) y la página le explica que tiene que contratar.
+- Para dar de alta un dueño: Supabase → **Authentication → Users → Invite user** con su Gmail. Se le crea la ficha de dueño sola.
