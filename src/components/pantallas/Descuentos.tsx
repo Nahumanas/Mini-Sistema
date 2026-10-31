@@ -6,7 +6,7 @@ import { MEDIOS_DE_PAGO, type MedioDePago } from "@/lib/formato";
 import type { Promo, TipoPromo } from "@/lib/tipos";
 import { useComercioActivo } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
-import { useInterfaz } from "@/store/interfaz";
+import { useIntentar, useInterfaz } from "@/store/interfaz";
 import { Boton, Campo, Chip, claseInput, Encabezado, Segmentado, Tarjeta, Vacio } from "../ui/base";
 
 const TIPOS: { valor: TipoPromo; texto: string }[] = [
@@ -26,6 +26,7 @@ export function Descuentos() {
   const comercio = useComercioActivo();
   const { promos: todas, productos: todos, guardarPromo, borrarPromo, actualizarComercio } = useDatos();
   const avisar = useInterfaz((s) => s.avisar);
+  const { enviando, intentar } = useIntentar();
   const [borrador, setBorrador] = useState<Borrador | null>(null);
 
   const promos = todas.filter((p) => p.comercioId === comercio.id);
@@ -39,16 +40,16 @@ export function Descuentos() {
     return `${p.porcentaje} % en ${sobre}`;
   }
 
-  function guardar(e: React.FormEvent) {
+  async function guardar(e: React.FormEvent) {
     e.preventDefault();
-    if (!borrador) return;
+    if (!borrador || enviando) return;
     const b = borrador;
     const [cada, fijo] = b.tipo === "combo" ? COMBOS[b.combo] : [null, null];
     const porcentaje = fijo ?? Number(b.porcentaje);
     if (!b.nombre.trim()) return avisar("Escribí el nombre de la promo (es lo que sale en el ticket).", "error");
     if (!(porcentaje > 0 && porcentaje <= 100)) return avisar("El descuento tiene que ser más de 0 % y hasta 100 %.", "error");
     if (b.tipo !== "medio_pago" && (b.alcance === "producto" ? !b.productoId : !b.categoria)) return avisar("Elegí a qué producto o categoría se aplica.", "error");
-    guardarPromo({
+    const promo = {
       comercioId: comercio.id,
       nombre: b.nombre.trim(),
       tipo: b.tipo,
@@ -58,9 +59,8 @@ export function Descuentos() {
       categoria: b.tipo !== "medio_pago" && b.alcance === "categoria" ? b.categoria : null,
       medioPago: b.tipo === "medio_pago" ? b.medioPago : null,
       activa: true,
-    });
-    avisar(`Promo "${b.nombre}" guardada y prendida.`);
-    setBorrador(null);
+    };
+    if (await intentar(() => guardarPromo(promo), `Promo "${promo.nombre}" guardada y prendida.`)) setBorrador(null);
   }
 
   return (
@@ -142,7 +142,9 @@ export function Descuentos() {
               </Campo>
             </div>
             <div className="flex justify-end">
-              <Boton type="submit" variante="primario">Guardar promo</Boton>
+              <Boton type="submit" variante="primario" disabled={enviando}>
+                {enviando ? "Guardando…" : "Guardar promo"}
+              </Boton>
             </div>
           </form>
         </Tarjeta>
@@ -156,7 +158,8 @@ export function Descuentos() {
                 role="switch"
                 aria-checked={p.activa}
                 aria-label={`${p.activa ? "Apagar" : "Prender"} ${p.nombre}`}
-                onClick={() => guardarPromo({ ...p, activa: !p.activa })}
+                disabled={enviando}
+                onClick={() => void intentar(() => guardarPromo({ ...p, activa: !p.activa }))}
                 className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${p.activa ? "bg-primary" : "bg-borde-fuerte"}`}
               >
                 <span className={`absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow transition-transform ${p.activa ? "translate-x-4" : ""}`} />
@@ -166,7 +169,7 @@ export function Descuentos() {
                 <p className="text-sm text-texto-suave">{describir(p)}</p>
               </div>
               <Chip tono={p.activa ? "verde" : "gris"}>{p.activa ? "Prendida" : "Apagada"}</Chip>
-              <button onClick={() => borrarPromo(p.id)} className="rounded-md p-1.5 text-texto-suave hover:text-peligro" aria-label={`Borrar ${p.nombre}`}>
+              <button onClick={() => void intentar(() => borrarPromo(p.id))} disabled={enviando} className="rounded-md p-1.5 text-texto-suave hover:text-peligro" aria-label={`Borrar ${p.nombre}`}>
                 <Trash2 className="size-4" />
               </button>
             </li>
@@ -181,7 +184,7 @@ export function Descuentos() {
           <Segmentado
             etiqueta="Cómo se combinan"
             valor={comercio.combinarPromos}
-            alCambiar={(combinarPromos) => void actualizarComercio(comercio.id, { combinarPromos })}
+            alCambiar={(combinarPromos) => void intentar(() => actualizarComercio(comercio.id, { combinarPromos }))}
             opciones={[
               { valor: "mejor", texto: "Se aplica la mejor" },
               { valor: "sumar", texto: "Se suman" },

@@ -7,7 +7,7 @@ import { pesos } from "@/lib/formato";
 import type { Compra } from "@/lib/tipos";
 import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
-import { useInterfaz } from "@/store/interfaz";
+import { useIntentar } from "@/store/interfaz";
 import { Boton, Campo, claseInput, Encabezado, Tabla, Tarjeta, Vacio } from "../ui/base";
 
 type Item = Compra["items"][number];
@@ -17,7 +17,7 @@ export function Compras() {
   const comercio = useComercioActivo();
   const sesion = useSesion((s) => s.sesion);
   const { productos: todos, proveedores: todosProv, compras, registrarCompra, agregarProveedor } = useDatos();
-  const avisar = useInterfaz((s) => s.avisar);
+  const { enviando, intentar } = useIntentar();
 
   const productos = useMemo(() => todos.filter((p) => p.comercioId === comercio.id && p.activo), [todos, comercio.id]);
   const proveedores = todosProv.filter((p) => p.comercioId === comercio.id);
@@ -42,11 +42,11 @@ export function Compras() {
     setCosto("");
   }
 
-  function guardar() {
-    if (proveedorId === "") return;
-    registrarCompra(comercio.id, proveedorId, items, sesion?.nombre ?? "");
-    avisar(`Compra guardada: ${items.reduce((s, i) => s + i.cantidad, 0)} unidades por ${pesos(total)}. El stock ya está actualizado.`);
-    setItems([]);
+  async function guardar() {
+    if (proveedorId === "" || enviando) return;
+    const unidades = items.reduce((s, i) => s + i.cantidad, 0);
+    const listo = `Compra guardada: ${unidades} unidades por ${pesos(total)}. El stock ya está actualizado.`;
+    if (await intentar(() => registrarCompra(comercio.id, proveedorId, items, sesion?.nombre ?? ""), listo)) setItems([]);
   }
 
   return (
@@ -75,11 +75,11 @@ export function Compras() {
 
           {nuevoProv && (
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                if (!nuevoProv.nombre.trim()) return;
-                setProveedorId(agregarProveedor(comercio.id, nuevoProv.nombre.trim(), nuevoProv.telefono.trim()));
-                setNuevoProv(null);
+                if (!nuevoProv.nombre.trim() || enviando) return;
+                const agregado = await intentar(async () => setProveedorId(await agregarProveedor(comercio.id, nuevoProv.nombre.trim(), nuevoProv.telefono.trim())));
+                if (agregado) setNuevoProv(null);
               }}
               className="flex flex-wrap items-end gap-3 rounded-md border border-borde bg-superficie-suave p-4"
             >
@@ -89,7 +89,7 @@ export function Compras() {
               <Campo etiqueta="Teléfono" className="w-44">
                 <input id="prov-tel" value={nuevoProv.telefono} onChange={(e) => setNuevoProv({ ...nuevoProv, telefono: e.target.value })} className={claseInput} />
               </Campo>
-              <Boton type="submit" variante="primario">Agregar proveedor</Boton>
+              <Boton type="submit" variante="primario" disabled={enviando}>Agregar proveedor</Boton>
               <Boton variante="fantasma" onClick={() => setNuevoProv(null)}>Cancelar</Boton>
             </form>
           )}
@@ -152,8 +152,8 @@ export function Compras() {
                 <p className="numeros text-lg">
                   Total de la compra <span className="font-semibold">{pesos(total)}</span>
                 </p>
-                <Boton variante="primario" icono={Save} onClick={guardar} disabled={proveedorId === ""} title={proveedorId === "" ? "Elegí el proveedor para poder guardar" : undefined}>
-                  Guardar compra
+                <Boton variante="primario" icono={Save} onClick={() => void guardar()} disabled={proveedorId === "" || enviando} title={proveedorId === "" ? "Elegí el proveedor para poder guardar" : undefined}>
+                  {enviando ? "Guardando…" : "Guardar compra"}
                 </Boton>
               </div>
               {proveedorId === "" && <p className="-mt-3 text-right text-sm text-texto-suave">Elegí el proveedor para poder guardar.</p>}

@@ -7,7 +7,7 @@ import { pesos } from "@/lib/formato";
 import type { Lote, Retiro } from "@/lib/tipos";
 import { useComercioActivo } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
-import { useInterfaz } from "@/store/interfaz";
+import { useIntentar, useInterfaz } from "@/store/interfaz";
 import { Boton, Campo, Chip, claseInput, Encabezado, Segmentado, Tabla, Tarjeta, Vacio } from "../ui/base";
 
 const MOTIVOS: { valor: Retiro["motivo"] | "vendido"; texto: string }[] = [
@@ -30,6 +30,7 @@ export function Vencimientos() {
   const comercio = useComercioActivo();
   const { productos: todos, lotes: todosLotes, retiros, retirarVencidos, sacarDeTanda, agregarTanda } = useDatos();
   const avisar = useInterfaz((s) => s.avisar);
+  const { enviando, intentar } = useIntentar();
   const [sacando, setSacando] = useState<{ loteId: number; cantidad: string; motivo: Retiro["motivo"] | "vendido" } | null>(null);
   const [tanda, setTanda] = useState({ productoId: "" as number | "", cantidad: "1" });
 
@@ -67,10 +68,13 @@ export function Vencimientos() {
           <Boton
             variante="primario"
             icono={Trash2}
-            onClick={() => {
-              const n = retirarVencidos(comercio.id);
-              avisar(`Listo: se sacaron ${n} unidades vencidas del stock.`);
-            }}
+            disabled={enviando}
+            onClick={() =>
+              void intentar(async () => {
+                const n = await retirarVencidos(comercio.id);
+                avisar(`Listo: se sacaron ${n} unidades vencidas del stock.`);
+              })
+            }
           >
             Ya lo retiré
           </Boton>
@@ -102,11 +106,10 @@ export function Vencimientos() {
 
         {sacando && (
           <form
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              sacarDeTanda(sacando.loteId, Number(sacando.cantidad) || 1, sacando.motivo);
-              avisar("Tanda corregida.");
-              setSacando(null);
+              if (enviando) return;
+              if (await intentar(() => sacarDeTanda(sacando.loteId, Number(sacando.cantidad) || 1, sacando.motivo), "Tanda corregida.")) setSacando(null);
             }}
             className="flex flex-wrap items-end gap-3 rounded-lg border border-borde bg-superficie p-4"
           >
@@ -118,7 +121,7 @@ export function Vencimientos() {
               <span className="text-sm font-medium">Por qué</span>
               <Segmentado etiqueta="Por qué" valor={sacando.motivo} alCambiar={(motivo) => setSacando({ ...sacando, motivo })} opciones={MOTIVOS} />
             </div>
-            <Boton type="submit" variante="primario">Sacar de esta tanda</Boton>
+            <Boton type="submit" variante="primario" disabled={enviando}>Sacar de esta tanda</Boton>
             <Boton variante="fantasma" onClick={() => setSacando(null)}>Cancelar</Boton>
             <p className="basis-full text-xs text-texto-suave">
               Se vendió: la venta ya se cobró en la Caja; solo se corrige de qué tanda salió. Se tiró o se regaló: baja el stock y cuenta como pérdida.
@@ -130,12 +133,13 @@ export function Vencimientos() {
       <div className="grid gap-6 md:grid-cols-2">
         <Tarjeta titulo="Cargar lo que salió hoy">
           <form
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              if (tanda.productoId === "") return;
-              agregarTanda(comercio.id, tanda.productoId, Number(tanda.cantidad) || 1);
-              avisar(`Tanda cargada: ${tanda.cantidad} ${nombre(tanda.productoId)}.`);
-              setTanda({ productoId: "", cantidad: "1" });
+              if (tanda.productoId === "" || enviando) return;
+              const { productoId, cantidad } = tanda;
+              if (await intentar(() => agregarTanda(comercio.id, productoId, Number(cantidad) || 1), `Tanda cargada: ${cantidad} ${nombre(productoId)}.`)) {
+                setTanda({ productoId: "", cantidad: "1" });
+              }
             }}
             className="flex flex-col gap-4"
           >
@@ -155,7 +159,7 @@ export function Vencimientos() {
                 <input id="tanda-cantidad" type="number" min={1} value={tanda.cantidad} onChange={(e) => setTanda({ ...tanda, cantidad: e.target.value })} className={`${claseInput} numeros`} />
               </Campo>
             </div>
-            <Boton type="submit" variante="secundario" icono={Plus} disabled={tanda.productoId === ""}>
+            <Boton type="submit" variante="secundario" icono={Plus} disabled={tanda.productoId === "" || enviando}>
               Agregar tanda
             </Boton>
           </form>
