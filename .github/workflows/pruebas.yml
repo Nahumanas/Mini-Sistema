@@ -38,3 +38,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash supabase/pruebas/probar-en-local.sh
+
+  # La API (FastAPI): sus pedidos y que un dueño no pueda tocar lo de otro, contra una base de prueba.
+  servidor:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    defaults:
+      run:
+        working-directory: servidor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: servidor/requirements-pruebas.txt
+      - run: pip install -r requirements-pruebas.txt
+      - run: pytest -q
