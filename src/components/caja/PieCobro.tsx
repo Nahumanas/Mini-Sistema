@@ -27,6 +27,7 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
   const [pagaCon, setPagaCon] = useState("");
   const [conTicket, setConTicket] = useState(false);
   const [ultima, setUltima] = useState<Venta | null>(null); // para volver a bajar el ticket de la última venta
+  const [cobrando, setCobrando] = useState(false); // en la nube la venta tarda un momento: no se cobra dos veces
 
   const total = cuenta.total;
   // "Paga con" es opcional: si se completa, el sistema calcula el vuelto (así no se da de más ni de menos)
@@ -35,8 +36,19 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
   const vuelto = paga !== null && paga >= total ? paga - total : null;
   const vacio = items.length === 0;
 
-  function cobrar() {
-    const venta = registrarVenta(comercioId, items, medio, cuenta, sesion?.nombre ?? "");
+  async function cobrar() {
+    if (cobrando) return;
+    setCobrando(true);
+    let venta: Venta;
+    try {
+      venta = await registrarVenta(comercioId, items, medio, cuenta, sesion?.nombre ?? "");
+    } catch (err) {
+      // La venta no se guardó: el carrito queda como estaba para probar de nuevo
+      avisar(`No se cobró la venta. ${(err as Error).message}`, "error");
+      return;
+    } finally {
+      setCobrando(false);
+    }
     avisar(
       `Venta N° ${venta.numero} cobrada: ${pesos(venta.total)} en ${MEDIOS_DE_PAGO[medio].toLowerCase()}.` +
         (vuelto ? ` Vuelto: ${pesos(vuelto)}.` : "") +
@@ -158,11 +170,11 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
           </button>
           <button
             type="button"
-            onClick={cobrar}
-            disabled={vacio || falta > 0}
+            onClick={() => void cobrar()}
+            disabled={vacio || falta > 0 || cobrando}
             className="flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-8 py-3 text-lg font-semibold text-primary-texto shadow-sm hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
           >
-            Cobrar
+            {cobrando ? "Cobrando…" : "Cobrar"}
           </button>
         </div>
       </div>

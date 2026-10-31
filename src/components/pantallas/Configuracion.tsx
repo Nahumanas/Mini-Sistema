@@ -15,6 +15,7 @@ const AVISOS = ["Apertura de caja", "Cierre de caja (con el arqueo)", "Relevo de
 export function Configuracion() {
   const { tema, alternarTema, avisar } = useInterfaz();
   const reiniciar = useDatos((s) => s.reiniciar);
+  const enNube = useDatos((s) => s.modo === "nube");
   const [confirmando, setConfirmando] = useState(false);
 
   return (
@@ -58,32 +59,35 @@ export function Configuracion() {
         </div>
       </Tarjeta>
 
-      <Tarjeta titulo="Datos de prueba">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <p className="max-w-md text-texto-suave">Las ventas, compras y cambios que hiciste se guardan en este navegador. Podés volver a los datos del principio (el PIN vuelve a ser {DUENO.pinDemo}).</p>
-          {confirmando ? (
-            <div className="flex gap-2">
-              <Boton variante="fantasma" onClick={() => setConfirmando(false)}>Cancelar</Boton>
-              <Boton
-                variante="peligro"
-                icono={RotateCcw}
-                onClick={() => {
-                  reiniciar();
-                  useCarrito.setState({ carritos: {} });
-                  setConfirmando(false);
-                  avisar("Listo: volviste a los datos de prueba del principio.");
-                }}
-              >
-                Sí, borrar mis cambios
+      {/* En la nube no hay datos de prueba para reiniciar: son los datos de verdad */}
+      {!enNube && (
+        <Tarjeta titulo="Datos de prueba">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p className="max-w-md text-texto-suave">Las ventas, compras y cambios que hiciste se guardan en este navegador. Podés volver a los datos del principio (el PIN vuelve a ser {DUENO.pinDemo}).</p>
+            {confirmando ? (
+              <div className="flex gap-2">
+                <Boton variante="fantasma" onClick={() => setConfirmando(false)}>Cancelar</Boton>
+                <Boton
+                  variante="peligro"
+                  icono={RotateCcw}
+                  onClick={() => {
+                    reiniciar();
+                    useCarrito.setState({ carritos: {} });
+                    setConfirmando(false);
+                    avisar("Listo: volviste a los datos de prueba del principio.");
+                  }}
+                >
+                  Sí, borrar mis cambios
+                </Boton>
+              </div>
+            ) : (
+              <Boton icono={RotateCcw} onClick={() => setConfirmando(true)}>
+                Reiniciar datos de prueba
               </Boton>
-            </div>
-          ) : (
-            <Boton icono={RotateCcw} onClick={() => setConfirmando(true)}>
-              Reiniciar datos de prueba
-            </Boton>
-          )}
-        </div>
-      </Tarjeta>
+            )}
+          </div>
+        </Tarjeta>
+      )}
     </div>
   );
 }
@@ -91,7 +95,8 @@ export function Configuracion() {
 /** Cambiar el PIN de jefe: hay que saber el actual y escribir el nuevo dos veces. */
 function CambiarPin() {
   const cambiarPin = useDatos((s) => s.cambiarPin);
-  const cambiado = useDatos((s) => s.pin !== null);
+  const enNube = useDatos((s) => s.modo === "nube");
+  const cambiado = useDatos((s) => (s.modo === "nube" ? s.pinConfigurado : s.pin !== null));
   const avisar = useInterfaz((s) => s.avisar);
   const [actual, setActual] = useState("");
   const [nuevo, setNuevo] = useState("");
@@ -139,8 +144,17 @@ function CambiarPin() {
         <div className="flex gap-3">
           <KeyRound className="mt-0.5 size-5 shrink-0 text-texto-suave" strokeWidth={1.75} />
           <p className="text-texto-suave">
-            {cambiado ? "Ya elegiste tu propio PIN." : <>Ahora es el de la demo (<b className="text-texto">{DUENO.pinDemo}</b>).</>} De 4 a 8 números. No se guarda tal cual: se guarda
-            una huella que no se puede dar vuelta. Con Supabase se va a entrar con Gmail, y el PIN queda para pasar de la vista de empleado a la del jefe.
+            {enNube ? (
+              <>
+                De 4 a 8 números. Sirve para pasar de la vista de empleado a la del jefe en cualquier compu del local. No se guarda tal cual: en la base queda una huella
+                que no se puede dar vuelta, y nunca llega a esta compu.
+              </>
+            ) : (
+              <>
+                {cambiado ? "Ya elegiste tu propio PIN." : <>Ahora es el de la demo (<b className="text-texto">{DUENO.pinDemo}</b>).</>} De 4 a 8 números. No se guarda tal cual: se guarda
+                una huella que no se puede dar vuelta. Con Supabase se va a entrar con Gmail, y el PIN queda para pasar de la vista de empleado a la del jefe.
+              </>
+            )}
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">

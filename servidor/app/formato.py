@@ -1,8 +1,15 @@
-"""La página usa nombres en camelCase (comercioId); la base, snake_case (comercio_id)."""
+"""La página usa nombres en camelCase (comercioId); la base, snake_case (comercio_id).
+
+Las fechas con hora salen en hora argentina y con el mismo formato que usa la página ("2026-10-31T18:05"),
+así las pantallas las comparan igual que a las de la demo.
+"""
 
 from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
+
+ARGENTINA = ZoneInfo("America/Argentina/Buenos_Aires")
 
 
 def _camel(nombre: str) -> str:
@@ -14,7 +21,7 @@ def _valor(v: Any) -> Any:
     if isinstance(v, Decimal):
         return int(v) if v == v.to_integral_value() else float(v)
     if isinstance(v, datetime):
-        return v.isoformat()
+        return v.astimezone(ARGENTINA).strftime("%Y-%m-%dT%H:%M")
     if isinstance(v, (date, time)):
         return v.isoformat()[:5] if isinstance(v, time) else v.isoformat()
     if isinstance(v, list):

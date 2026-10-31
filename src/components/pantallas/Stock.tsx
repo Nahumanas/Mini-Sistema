@@ -33,33 +33,37 @@ export function Stock() {
     .filter((p) => filtro !== "bajo" || p.stock <= p.stockMinimo)
     .filter((p) => !buscar || normalizar(p.nombre).includes(normalizar(buscar)) || p.codigo.includes(buscar.trim()) || normalizar(p.categoria).includes(normalizar(buscar)));
 
-  function guardarEdicion() {
+  async function guardarEdicion() {
     if (!editando) return;
     try {
-      asignarCodigo(editando.id, editando.codigo);
+      await asignarCodigo(editando.id, editando.codigo);
+      await actualizarProducto(editando.id, { precioVenta: Number(editando.precioVenta), stock: Number(editando.stock), stockMinimo: Number(editando.stockMinimo) });
     } catch (err) {
       return avisar((err as Error).message, "error");
     }
-    actualizarProducto(editando.id, { precioVenta: Number(editando.precioVenta), stock: Number(editando.stock), stockMinimo: Number(editando.stockMinimo) });
     setEditando(null);
     avisar("Cambios guardados.");
   }
 
-  function crear(e: React.FormEvent) {
+  async function crear(e: React.FormEvent) {
     e.preventDefault();
     if (!nuevo) return;
     if (nuevo.codigo.trim() && productos.some((p) => p.codigo === nuevo.codigo.trim())) return avisar(`Ya hay un producto con el código ${nuevo.codigo}.`, "error");
-    crearProducto({
-      comercioId: comercio.id,
-      codigo: nuevo.codigo.trim(),
-      nombre: nuevo.nombre.trim(),
-      categoria: nuevo.categoria.trim() || "Sin categoría",
-      precioVenta: Number(nuevo.precioVenta),
-      costo: Number(nuevo.costo) || 0,
-      stock: Number(nuevo.stock) || 0,
-      stockMinimo: Number(nuevo.stockMinimo) || 0,
-      diasDuracion: Number(nuevo.diasDuracion) || null,
-    });
+    try {
+      await crearProducto({
+        comercioId: comercio.id,
+        codigo: nuevo.codigo.trim(),
+        nombre: nuevo.nombre.trim(),
+        categoria: nuevo.categoria.trim() || "Sin categoría",
+        precioVenta: Number(nuevo.precioVenta),
+        costo: Number(nuevo.costo) || 0,
+        stock: Number(nuevo.stock) || 0,
+        stockMinimo: Number(nuevo.stockMinimo) || 0,
+        diasDuracion: Number(nuevo.diasDuracion) || null,
+      });
+    } catch (err) {
+      return avisar((err as Error).message, "error");
+    }
     avisar(`Producto creado: ${nuevo.nombre}.`);
     setNuevo(null);
   }
@@ -196,7 +200,7 @@ export function Stock() {
                         >
                           <Pencil className="size-4" />
                         </button>
-                        <button onClick={() => actualizarProducto(p.id, { activo: !p.activo })} className="ml-1 rounded-md px-2 py-1 text-xs text-texto-suave hover:bg-superficie-suave hover:text-texto">
+                        <button onClick={() => actualizarProducto(p.id, { activo: !p.activo }).catch((err: Error) => avisar(err.message, "error"))} className="ml-1 rounded-md px-2 py-1 text-xs text-texto-suave hover:bg-superficie-suave hover:text-texto">
                           {p.activo ? "Dar de baja" : "Reactivar"}
                         </button>
                       </>
@@ -232,13 +236,13 @@ function CodigosConLector({ productos, alCerrar }: { productos: Producto[]; alCe
   return (
     <Tarjeta titulo="Cargar códigos de barras con el lector" acciones={<Boton variante="fantasma" icono={X} onClick={alCerrar} aria-label="Cerrar" />}>
       <form
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
           setError("");
           const producto = productos.find((p) => p.id === Number(productoId));
           if (!producto || !codigo.trim()) return setError("Elegí el producto y pasá el lector.");
           try {
-            asignarCodigo(producto.id, codigo);
+            await asignarCodigo(producto.id, codigo);
           } catch (err) {
             return setError((err as Error).message);
           }

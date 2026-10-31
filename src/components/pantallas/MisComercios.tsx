@@ -38,9 +38,21 @@ export function MisComercios() {
   // Al cambiar de pestaña, el formulario toma los datos del otro comercio
   if (datos.id !== comercio.id) setDatos({ id: comercio.id, nombre: comercio.nombre, direccion: comercio.direccion, rubro: comercio.rubro, usaTicket: comercio.usaTicket });
 
+  /** Hace el cambio y avisa si no se pudo (en la nube, si no hay conexión o la API dice que no). */
+  async function intentar(accion: Promise<unknown>, siSale?: string) {
+    try {
+      await accion;
+      if (siSale) avisar(siSale);
+      return true;
+    } catch (err) {
+      avisar((err as Error).message, "error");
+      return false;
+    }
+  }
+
   function cambiarPermiso(clave: Permiso) {
     const tiene = comercio.permisosEmpleado.includes(clave);
-    actualizarComercio(comercio.id, { permisosEmpleado: tiene ? comercio.permisosEmpleado.filter((p) => p !== clave) : [...comercio.permisosEmpleado, clave] });
+    void intentar(actualizarComercio(comercio.id, { permisosEmpleado: tiene ? comercio.permisosEmpleado.filter((p) => p !== clave) : [...comercio.permisosEmpleado, clave] }));
   }
 
   return (
@@ -54,10 +66,15 @@ export function MisComercios() {
       {creando && (
         <Tarjeta titulo="Agregar un comercio" acciones={<Boton variante="fantasma" icono={X} onClick={() => setCreando(false)} aria-label="Cerrar" />}>
           <form
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
               if (!nuevo.nombre.trim()) return;
-              const id = crearComercio({ ...nuevo, nombre: nuevo.nombre.trim(), direccion: nuevo.direccion.trim() });
+              let id: number;
+              try {
+                id = await crearComercio({ ...nuevo, nombre: nuevo.nombre.trim(), direccion: nuevo.direccion.trim() });
+              } catch (err) {
+                return avisar((err as Error).message, "error");
+              }
               avisar(`Comercio creado: ${nuevo.nombre}. Ya podés cargarle productos en Stock.`);
               setEditandoId(id);
               elegir(id);
@@ -101,8 +118,7 @@ export function MisComercios() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              actualizarComercio(comercio.id, { nombre: datos.nombre.trim(), direccion: datos.direccion.trim(), rubro: datos.rubro, usaTicket: datos.usaTicket });
-              avisar("Datos guardados.");
+              void intentar(actualizarComercio(comercio.id, { nombre: datos.nombre.trim(), direccion: datos.direccion.trim(), rubro: datos.rubro, usaTicket: datos.usaTicket }), "Datos guardados.");
             }}
             className="flex flex-col gap-4"
           >
@@ -139,7 +155,7 @@ export function MisComercios() {
               {suyos.map((e) => (
                 <li key={e.id} className="inline-flex items-center gap-1 rounded-full border border-borde bg-superficie-suave py-1 pl-3 pr-1 text-[15px]">
                   {e.nombre}
-                  <button onClick={() => quitarEmpleado(e.id)} className="rounded-full p-1 text-texto-suave hover:text-peligro" aria-label={`Quitar a ${e.nombre}`}>
+                  <button onClick={() => void intentar(quitarEmpleado(e.id))} className="rounded-full p-1 text-texto-suave hover:text-peligro" aria-label={`Quitar a ${e.nombre}`}>
                     <X className="size-3.5" />
                   </button>
                 </li>
@@ -147,11 +163,10 @@ export function MisComercios() {
               {!suyos.length && <li className="text-texto-suave">Todavía no hay empleados.</li>}
             </ul>
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 if (!nombreEmpleado.trim()) return;
-                agregarEmpleado(comercio.id, nombreEmpleado.trim());
-                setNombreEmpleado("");
+                if (await intentar(agregarEmpleado(comercio.id, nombreEmpleado.trim()))) setNombreEmpleado("");
               }}
               className="flex gap-2"
             >
@@ -200,11 +215,11 @@ function HorariosYTurnos({ comercio }: { comercio: Comercio }) {
   return (
     <Tarjeta titulo={<span className="inline-flex items-center gap-2"><Clock className="size-4 text-texto-suave" />Horarios y turnos {cargado ? `· ${comercio.horaApertura} a ${comercio.horaCierre}` : "· sin cargar"}</span>}>
       <form
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
           setError("");
           try {
-            guardarHorarios(comercio.id, apertura, cierre, turnos);
+            await guardarHorarios(comercio.id, apertura, cierre, turnos);
             avisar("Listo, guardaste los horarios y turnos.");
           } catch (err) {
             setError((err as Error).message);

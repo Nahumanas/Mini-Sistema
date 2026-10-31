@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+import type { DatosDeInicio } from "@/lib/api";
 import { crearDatosDemo, DUENO, type BaseDemo } from "@/lib/datos-demo";
 import { ahora, hoy } from "@/lib/fechas";
 import type { MedioDePago } from "@/lib/formato";
@@ -10,17 +11,24 @@ import { validarHorarios } from "@/lib/horarios";
 import { huellaDelPin, validarPinNuevo } from "@/lib/pin";
 import type { Comercio, Compra, Gasto, ItemVenta, Producto, Promo, Relevo, Retiro, Socio, Turno, Venta } from "@/lib/tipos";
 import { type AccionesGimnasio, accionesGimnasio } from "./acciones-gimnasio";
+import { accionesNube } from "./acciones-nube";
 
-// La "base de datos" de prueba, guardada en el navegador (localStorage).
-// Todo lo que se carga queda conectado como en el sistema real: una venta baja el stock,
-// una compra lo sube, lo vencido que se retira cuenta como pérdida, etc.
-// Cuando esté la API de FastAPI, cada acción de acá pasa a ser un pedido a la API (ver lib/api.ts).
+// Los datos que usan todas las pantallas, de dos maneras:
+// - Demo: la "base de datos" de prueba, guardada en el navegador (localStorage).
+//   Todo lo que se carga queda conectado como en el sistema real: una venta baja el stock,
+//   una compra lo sube, lo vencido que se retira cuenta como pérdida, etc.
+// - Nube (paso 5): con la cuenta del dueño abierta y la API configurada, los datos vienen de la API
+//   (usarNube) y cada acción le pide el cambio a la API (ver acciones-nube.ts). En ese modo no se toca
+//   lo guardado en el navegador: la demo queda como estaba para cuando se cierre la cuenta.
+// Las acciones que cambian algo que ya está en la nube devuelven una promesa (hay que esperarlas con await).
 
-type Acciones = {
-  registrarVenta: (comercioId: number, items: ItemVenta[], medioPago: MedioDePago, cuenta: Cuenta, vendidoPor: string) => Venta;
-  abrirCaja: (comercioId: number, responsable: string, montoInicial: number) => void;
-  cerrarCaja: (comercioId: number, efectivoContado: number, nota: string) => void;
-  registrarRelevo: (comercioId: number, entra: string, efectivoContado: number, nota: string, turno?: string | null) => Relevo;
+export type Modo = "demo" | "nube";
+
+export type Acciones = {
+  registrarVenta: (comercioId: number, items: ItemVenta[], medioPago: MedioDePago, cuenta: Cuenta, vendidoPor: string) => Promise<Venta>;
+  abrirCaja: (comercioId: number, responsable: string, montoInicial: number) => Promise<void>;
+  cerrarCaja: (comercioId: number, efectivoContado: number, nota: string) => Promise<void>;
+  registrarRelevo: (comercioId: number, entra: string, efectivoContado: number, nota: string, turno?: string | null) => Promise<Relevo>;
   anularVenta: (cajaId: number, ventaId: number, hechoPor: string, motivo: string) => void;
   recontarEfectivo: (cajaId: number, efectivo: number, hechoPor: string, motivo: string) => void;
   registrarCompra: (comercioId: number, proveedorId: number, items: Compra["items"], cargadaPor: string) => void;
@@ -30,32 +38,91 @@ type Acciones = {
   agregarTanda: (comercioId: number, productoId: number, cantidad: number) => void;
   retirarVencidos: (comercioId: number) => number;
   sacarDeTanda: (loteId: number, cantidad: number, motivo: Retiro["motivo"] | "vendido") => void;
-  crearProducto: (producto: Omit<Producto, "id" | "activo">) => void;
-  actualizarProducto: (id: number, cambios: Partial<Producto>) => void;
-  importarProductos: (comercioId: number, filas: Omit<Producto, "id" | "comercioId" | "activo" | "diasDuracion">[]) => { nuevos: number; actualizados: number };
-  crearComercio: (comercio: Omit<Comercio, "id" | "permisosEmpleado" | "combinarPromos" | "horaApertura" | "horaCierre" | "turnos">) => number;
-  actualizarComercio: (id: number, cambios: Partial<Comercio>) => void;
-  guardarHorarios: (comercioId: number, apertura: string, cierre: string, turnos: Turno[]) => void;
-  asignarCodigo: (productoId: number, codigo: string) => void;
+  crearProducto: (producto: Omit<Producto, "id" | "activo">) => Promise<void>;
+  actualizarProducto: (id: number, cambios: Partial<Producto>) => Promise<void>;
+  importarProductos: (comercioId: number, filas: Omit<Producto, "id" | "comercioId" | "activo" | "diasDuracion">[]) => Promise<{ nuevos: number; actualizados: number }>;
+  crearComercio: (comercio: Omit<Comercio, "id" | "permisosEmpleado" | "combinarPromos" | "horaApertura" | "horaCierre" | "turnos">) => Promise<number>;
+  actualizarComercio: (id: number, cambios: Partial<Comercio>) => Promise<void>;
+  guardarHorarios: (comercioId: number, apertura: string, cierre: string, turnos: Turno[]) => Promise<void>;
+  asignarCodigo: (productoId: number, codigo: string) => Promise<void>;
   pinCorrecto: (pin: string) => Promise<boolean>;
   cambiarPin: (actual: string, nuevo: string, repetido: string) => Promise<void>;
   guardarPromo: (promo: Omit<Promo, "id"> & { id?: number }) => void;
   borrarPromo: (id: number) => void;
-  agregarEmpleado: (comercioId: number, nombre: string) => void;
-  quitarEmpleado: (id: number) => void;
+  agregarEmpleado: (comercioId: number, nombre: string) => Promise<void>;
+  quitarEmpleado: (id: number) => Promise<void>;
   reiniciar: () => void;
 };
 
-// pin: la "huella" del PIN de jefe (nunca el PIN tal cual). null = el PIN de la demo (1234), que todavía no se cambió.
-type Seguridad = { pin: { sal: string; huella: string } | null };
+// pin: la "huella" del PIN de jefe de la demo (nunca el PIN tal cual). null = el de la demo (1234), que todavía no se cambió.
+// pinConfigurado: en la nube, si el dueño ya eligió su PIN (la huella queda en la base, no acá).
+type Seguridad = { pin: { sal: string; huella: string } | null; pinConfigurado: boolean };
 
-type EstadoDatos = BaseDemo & { siguienteId: number } & Seguridad & Acciones & AccionesGimnasio;
+type Conexion = {
+  modo: Modo;
+  /** Pasa a trabajar con los datos de la nube (los que trajo /inicio). */
+  usarNube: (datos: DatosDeInicio) => void;
+  /** Vuelve a la demo, con lo que había guardado en este navegador. */
+  volverALaDemo: () => Promise<void>;
+};
+
+type EstadoDatos = BaseDemo & { siguienteId: number } & Seguridad & Conexion & Acciones & AccionesGimnasio;
+
+const TODAVIA_NO = "Esta parte todavía no funciona en la nube: llega en la próxima actualización. Mientras tanto la podés probar en la demo.";
+
+// Mientras se trabaja con la nube, no se guarda nada en el navegador (así no se pisa la demo).
+let guardarEnElNavegador = true;
+const almacen = createJSONStorage(() => ({
+  getItem: (clave: string) => localStorage.getItem(clave),
+  setItem: (clave: string, valor: string) => {
+    if (guardarEnElNavegador) localStorage.setItem(clave, valor);
+  },
+  removeItem: (clave: string) => localStorage.removeItem(clave),
+}));
+
+/**
+ * Arma las acciones según el modo: en la demo hacen lo de siempre; en la nube, las que ya están en la API
+ * le piden el cambio a la API, y las que todavía no están avisan con un error en vez de guardar a medias.
+ */
+function segunElModo<T extends object>(demo: T, nube: Partial<T>, modo: () => Modo): T {
+  type Funcion = (...args: unknown[]) => unknown;
+  const enNube = nube as Record<string, Funcion | undefined>;
+  return Object.fromEntries(
+    Object.entries(demo as Record<string, Funcion>).map(([nombre, enDemo]) => [
+      nombre,
+      (...args: unknown[]) => {
+        if (modo() !== "nube") return enDemo(...args);
+        const accion = enNube[nombre];
+        if (!accion) throw new Error(TODAVIA_NO);
+        return accion(...args);
+      },
+    ]),
+  ) as T;
+}
 
 function baseNueva() {
   const base = crearDatosDemo();
   const ids = (Object.values(base).flat() as { id?: number }[]).map((x) => x.id ?? 0);
   return { ...base, siguienteId: Math.max(...ids) + 1, pin: null };
 }
+
+/** En la nube, lo que todavía no está en la API arranca vacío (compras, gastos, gimnasio...). */
+const SIN_DATOS_TODAVIA = {
+  ajustes: [],
+  proveedores: [],
+  compras: [],
+  gastos: [],
+  lotes: [],
+  retiros: [],
+  disciplinas: [],
+  planes: [],
+  clases: [],
+  reglasGimnasio: [],
+  socios: [],
+  reservas: [],
+  cuotas: [],
+  asistencias: [],
+} satisfies Partial<BaseDemo>;
 
 export const useDatos = create<EstadoDatos>()(
   persist(
@@ -85,10 +152,15 @@ export const useDatos = create<EstadoDatos>()(
       const moverStock = (productoId: number, cambio: number) =>
         set((s) => ({ productos: s.productos.map((p) => (p.id === productoId ? { ...p, stock: p.stock + cambio } : p)) }));
 
-      return {
-        ...baseNueva(),
+      const cambiarProducto = (id: number, cambios: Partial<Producto>) => set((s) => ({ productos: s.productos.map((p) => (p.id === id ? { ...p, ...cambios } : p)) }));
+      const nuevoProducto = (producto: Omit<Producto, "id" | "activo">) => {
+        const id = nuevoId();
+        set((s) => ({ productos: [...s.productos, { ...producto, id, activo: true }] }));
+      };
+      const cambiarComercio = (id: number, cambios: Partial<Comercio>) => set((s) => ({ comercios: s.comercios.map((c) => (c.id === id ? { ...c, ...cambios } : c)) }));
 
-        registrarVenta: (comercioId, items, medioPago, cuenta, vendidoPor) => {
+      const demo: Acciones & AccionesGimnasio = {
+        registrarVenta: async (comercioId, items, medioPago, cuenta, vendidoPor) => {
           const s = get();
           const caja = s.cajas.find((c) => c.comercioId === comercioId && !c.cerrada);
           const productos = new Map(s.productos.map((p) => [p.id, p]));
@@ -114,25 +186,26 @@ export const useDatos = create<EstadoDatos>()(
           return venta;
         },
 
-        abrirCaja: (comercioId, responsable, montoInicial) => {
+        abrirCaja: async (comercioId, responsable, montoInicial) => {
           const id = nuevoId();
           set((s) => ({
             cajas: [...s.cajas, { id, comercioId, responsable, abierta: ahora(), montoInicial, cerrada: null, efectivoEsperado: null, efectivoContado: null, nota: "" }],
           }));
         },
 
-        cerrarCaja: (comercioId, efectivoContado, nota) =>
+        cerrarCaja: async (comercioId, efectivoContado, nota) => {
           set((s) => ({
             cajas: s.cajas.map((c) => {
               if (c.comercioId !== comercioId || c.cerrada) return c;
               const efectivo = s.ventas.filter((v) => v.cajaId === c.id && v.medioPago === "efectivo").reduce((t, v) => t + v.total, 0);
               return { ...c, cerrada: ahora(), efectivoEsperado: c.montoInicial + efectivo, efectivoContado, nota };
             }),
-          })),
+          }));
+        },
 
         // Relevo de turno: el que se va cuenta el efectivo y se compara con lo de SU turno (con lo que arrancó
         // más lo que cobró en efectivo). La caja sigue abierta y desde ahora queda a nombre del que entra.
-        registrarRelevo: (comercioId, entra, efectivoContado, nota, turno = null) => {
+        registrarRelevo: async (comercioId, entra, efectivoContado, nota, turno = null) => {
           const s = get();
           const caja = s.cajas.find((c) => c.comercioId === comercioId && !c.cerrada);
           if (!caja) throw new Error("La caja ya está cerrada. Abrí una nueva para seguir cobrando.");
@@ -269,30 +342,29 @@ export const useDatos = create<EstadoDatos>()(
           moverStock(lote.productoId, -sale);
         },
 
-        crearProducto: (producto) => {
-          const id = nuevoId();
-          set((s) => ({ productos: [...s.productos, { ...producto, id, activo: true }] }));
+        crearProducto: async (producto) => nuevoProducto(producto),
+
+        actualizarProducto: async (id, cambios) => {
+          cambiarProducto(id, cambios);
         },
 
-        actualizarProducto: (id, cambios) => set((s) => ({ productos: s.productos.map((p) => (p.id === id ? { ...p, ...cambios } : p)) })),
-
-        importarProductos: (comercioId, filas) => {
+        importarProductos: async (comercioId, filas) => {
           let nuevos = 0;
           let actualizados = 0;
           for (const fila of filas) {
             const existe = get().productos.find((p) => p.comercioId === comercioId && p.codigo === fila.codigo);
             if (existe) {
-              get().actualizarProducto(existe.id, fila);
+              cambiarProducto(existe.id, fila);
               actualizados++;
             } else {
-              get().crearProducto({ ...fila, comercioId, diasDuracion: null });
+              nuevoProducto({ ...fila, comercioId, diasDuracion: null });
               nuevos++;
             }
           }
           return { nuevos, actualizados };
         },
 
-        crearComercio: (comercio) => {
+        crearComercio: async (comercio) => {
           const id = nuevoId();
           // En un gimnasio el empleado de recepción también anota socios
           const permisosEmpleado: Comercio["permisosEmpleado"] = comercio.rubro === "gimnasio" ? ["panel_del_dia", "stock", "socios", "cuotas", "clases"] : ["panel_del_dia", "stock", "compras"];
@@ -300,19 +372,23 @@ export const useDatos = create<EstadoDatos>()(
           return id;
         },
 
-        actualizarComercio: (id, cambios) => set((s) => ({ comercios: s.comercios.map((c) => (c.id === id ? { ...c, ...cambios } : c)) })),
+        actualizarComercio: async (id, cambios) => {
+          cambiarComercio(id, cambios);
+        },
 
         // Horario del local y turnos (solo el jefe, desde Mis comercios). Tira un error si algo no cierra.
-        guardarHorarios: (comercioId, apertura, cierre, turnos) => get().actualizarComercio(comercioId, validarHorarios(apertura, cierre, turnos)),
+        guardarHorarios: async (comercioId, apertura, cierre, turnos) => {
+          cambiarComercio(comercioId, validarHorarios(apertura, cierre, turnos));
+        },
 
         // Ponerle (o cambiarle) el código de barras a un producto. Vacío = sin código.
-        asignarCodigo: (productoId, codigo) => {
+        asignarCodigo: async (productoId, codigo) => {
           const producto = get().productos.find((p) => p.id === productoId);
           if (!producto) throw new Error("Elegí el producto.");
           const limpio = codigo.trim().replace(/\.0+$/, "").slice(0, 50);
           const otro = limpio && get().productos.find((p) => p.comercioId === producto.comercioId && p.id !== productoId && p.codigo === limpio);
           if (otro) throw new Error(`Ese código ya es de ${otro.nombre}.`);
-          get().actualizarProducto(productoId, { codigo: limpio });
+          cambiarProducto(productoId, { codigo: limpio });
         },
 
         // El PIN no se guarda tal cual: se guarda una "huella" que no se puede dar vuelta (como en Streamlit).
@@ -341,17 +417,40 @@ export const useDatos = create<EstadoDatos>()(
 
         borrarPromo: (id) => set((s) => ({ promos: s.promos.filter((p) => p.id !== id) })),
 
-        agregarEmpleado: (comercioId, nombre) => {
+        agregarEmpleado: async (comercioId, nombre) => {
           const id = nuevoId();
           set((s) => ({ empleados: [...s.empleados, { id, comercioId, nombre, activo: true }] }));
         },
 
-        quitarEmpleado: (id) => set((s) => ({ empleados: s.empleados.filter((e) => e.id !== id) })),
+        quitarEmpleado: async (id) => {
+          set((s) => ({ empleados: s.empleados.filter((e) => e.id !== id) }));
+        },
 
         // Socios, cuotas, planes, clases y reservas del gimnasio (ver acciones-gimnasio.ts)
         ...accionesGimnasio(set, get, nuevoId),
 
         reiniciar: () => set(baseNueva()),
+      };
+
+      return {
+        ...baseNueva(),
+        modo: "demo",
+        pinConfigurado: false,
+
+        usarNube: (datos) => {
+          guardarEnElNavegador = false; // antes de cambiar nada, así no se pisa la demo guardada
+          const { dueno, ...base } = datos;
+          set({ ...SIN_DATOS_TODAVIA, ...base, modo: "nube", pinConfigurado: dueno.pinConfigurado });
+        },
+
+        volverALaDemo: async () => {
+          if (get().modo === "demo") return;
+          set({ ...baseNueva(), modo: "demo", pinConfigurado: false }); // todavía sin guardar en el navegador
+          guardarEnElNavegador = true;
+          await useDatos.persist.rehydrate(); // vuelve lo que había en la demo (si había algo)
+        },
+
+        ...segunElModo(demo, accionesNube(set, get), () => get().modo),
       };
     },
     // skipHydration: se lee del navegador recién cuando la página cargó (ver components/layout/Marco.tsx)
@@ -363,6 +462,14 @@ export const useDatos = create<EstadoDatos>()(
       version: 5,
       migrate: (guardado, version) => migrar(guardado as Partial<EstadoDatos>, version),
       skipHydration: true,
+      storage: almacen,
+      // El modo y el PIN de la nube no se guardan: se leen de nuevo al entrar
+      partialize: (estado) => {
+        const guardado: Partial<EstadoDatos> = { ...estado };
+        delete guardado.modo;
+        delete guardado.pinConfigurado;
+        return guardado;
+      },
     },
   ),
 );

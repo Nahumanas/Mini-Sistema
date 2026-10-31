@@ -1,7 +1,7 @@
 """Conexión a la base, SIEMPRE como el usuario que pide (así se aplican las reglas RLS).
 
 Cada pedido abre una transacción y, adentro, se "pone el traje" del usuario:
-  set local role authenticated            → deja de ser administrador: el RLS se aplica
+  role = authenticated                    → deja de ser administrador: el RLS se aplica
   request.jwt.claims = <su token>         → auth.uid() devuelve SU id
 Al terminar la transacción todo vuelve a como estaba, así la conexión siguiente arranca limpia.
 """
@@ -44,9 +44,12 @@ def cerrar_pool() -> None:
 @contextmanager
 def como_usuario(usuario: Usuario) -> Iterator[Connection]:
     with pool().connection() as con, con.transaction():
-        con.execute("set local role authenticated")
+        # Las tres cosas en una sola consulta (la base está lejos del servidor: cada ida y vuelta se nota).
+        # set_config('role', ..., true) es lo mismo que "set local role authenticated".
         con.execute(
-            "select set_config('request.jwt.claims', %s, true), set_config('request.jwt.claim.sub', %s, true)",
+            """select set_config('role', 'authenticated', true),
+                      set_config('request.jwt.claims', %s, true),
+                      set_config('request.jwt.claim.sub', %s, true)""",
             (json.dumps(usuario.claims), usuario.id),
         )
         yield con

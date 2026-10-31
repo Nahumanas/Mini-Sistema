@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 from typing import Literal
@@ -33,20 +34,18 @@ class NuevaVenta(BaseModel):
     promos: list[PromoAplicada] = Field(default_factory=list, max_length=50)
 
 
-def _con_items(con, ventas: list[dict]) -> list[dict]:
+def con_items(con, ventas: list[dict]) -> list[dict]:
+    """Las ventas con lo que se vendió en cada una (items), como las usa la página."""
     if not ventas:
         return []
-    detalle = con.execute(
+    por_venta: dict[int, list[dict]] = defaultdict(list)
+    for d in con.execute(
         """select venta_id, producto_id, nombre, categoria, cantidad, precio_unitario, costo_unitario
            from public.ventas_detalle where venta_id = any(%s) order by id""",
         ([v["id"] for v in ventas],),
-    ).fetchall()
-    resultado = []
-    for v in ventas:
-        venta = a_camel(v)
-        venta["items"] = [a_camel({k: d[k] for k in d if k != "venta_id"}) for d in detalle if d["venta_id"] == v["id"]]
-        resultado.append(venta)
-    return resultado
+    ).fetchall():
+        por_venta[d.pop("venta_id")].append(a_camel(d))
+    return [{**a_camel(v), "items": por_venta[v["id"]]} for v in ventas]
 
 
 @router.post("/comercios/{comercio_id}/ventas", status_code=201)
@@ -102,7 +101,7 @@ def registrar(comercio_id: int, venta: NuevaVenta, usuario: Usuario = Depends(us
             con.execute("update public.productos set stock = stock - %s where id = %s", (item.cantidad, p["id"]))
             _consumir_tandas(con, p["id"], Decimal(str(item.cantidad)))
 
-        return _con_items(con, [fila])[0]
+        return con_items(con, [fila])[0]
 
 
 def _consumir_tandas(con, producto_id: int, cantidad: Decimal) -> None:
@@ -132,4 +131,4 @@ def listar(comercio_id: int, desde: date | None = None, hasta: date | None = Non
                 order by fecha""",
             (comercio_id, desde, hasta),
         ).fetchall()
-        return _con_items(con, ventas)
+        return con_items(con, ventas)
