@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { DatosDeInicio } from "@/lib/api";
 import { crearDatosDemo, DUENO, type BaseDemo } from "@/lib/datos-demo";
+import { sacarDeTandas } from "@/lib/calculos";
 import { ahora, hoy } from "@/lib/fechas";
 import type { MedioDePago } from "@/lib/formato";
 import type { Cuenta } from "@/lib/promos";
@@ -29,15 +30,15 @@ export type Acciones = {
   abrirCaja: (comercioId: number, responsable: string, montoInicial: number) => Promise<void>;
   cerrarCaja: (comercioId: number, efectivoContado: number, nota: string) => Promise<void>;
   registrarRelevo: (comercioId: number, entra: string, efectivoContado: number, nota: string, turno?: string | null) => Promise<Relevo>;
-  anularVenta: (cajaId: number, ventaId: number, hechoPor: string, motivo: string) => void;
-  recontarEfectivo: (cajaId: number, efectivo: number, hechoPor: string, motivo: string) => void;
-  registrarCompra: (comercioId: number, proveedorId: number, items: Compra["items"], cargadaPor: string) => void;
-  agregarProveedor: (comercioId: number, nombre: string, telefono: string) => number;
-  cargarGasto: (gasto: Omit<Gasto, "id">) => void;
-  borrarGasto: (id: number) => void;
-  agregarTanda: (comercioId: number, productoId: number, cantidad: number) => void;
-  retirarVencidos: (comercioId: number) => number;
-  sacarDeTanda: (loteId: number, cantidad: number, motivo: Retiro["motivo"] | "vendido") => void;
+  anularVenta: (cajaId: number, ventaId: number, hechoPor: string, motivo: string) => Promise<void>;
+  recontarEfectivo: (cajaId: number, efectivo: number, hechoPor: string, motivo: string) => Promise<void>;
+  registrarCompra: (comercioId: number, proveedorId: number, items: Compra["items"], cargadaPor: string) => Promise<void>;
+  agregarProveedor: (comercioId: number, nombre: string, telefono: string) => Promise<number>;
+  cargarGasto: (gasto: Omit<Gasto, "id">) => Promise<void>;
+  borrarGasto: (id: number) => Promise<void>;
+  agregarTanda: (comercioId: number, productoId: number, cantidad: number) => Promise<void>;
+  retirarVencidos: (comercioId: number) => Promise<number>;
+  sacarDeTanda: (loteId: number, cantidad: number, motivo: Retiro["motivo"] | "vendido") => Promise<void>;
   crearProducto: (producto: Omit<Producto, "id" | "activo">) => Promise<void>;
   actualizarProducto: (id: number, cambios: Partial<Producto>) => Promise<void>;
   importarProductos: (comercioId: number, filas: Omit<Producto, "id" | "comercioId" | "activo" | "diasDuracion">[]) => Promise<{ nuevos: number; actualizados: number }>;
@@ -47,8 +48,8 @@ export type Acciones = {
   asignarCodigo: (productoId: number, codigo: string) => Promise<void>;
   pinCorrecto: (pin: string) => Promise<boolean>;
   cambiarPin: (actual: string, nuevo: string, repetido: string) => Promise<void>;
-  guardarPromo: (promo: Omit<Promo, "id"> & { id?: number }) => void;
-  borrarPromo: (id: number) => void;
+  guardarPromo: (promo: Omit<Promo, "id"> & { id?: number }) => Promise<void>;
+  borrarPromo: (id: number) => Promise<void>;
   agregarEmpleado: (comercioId: number, nombre: string) => Promise<void>;
   quitarEmpleado: (id: number) => Promise<void>;
   reiniciar: () => void;
@@ -106,14 +107,8 @@ function baseNueva() {
   return { ...base, siguienteId: Math.max(...ids) + 1, pin: null };
 }
 
-/** En la nube, lo que todavía no está en la API arranca vacío (compras, gastos, gimnasio...). */
+/** En la nube, lo que todavía no está en la API arranca vacío (el gimnasio llega en la parte 4). */
 const SIN_DATOS_TODAVIA = {
-  ajustes: [],
-  proveedores: [],
-  compras: [],
-  gastos: [],
-  lotes: [],
-  retiros: [],
   disciplinas: [],
   planes: [],
   clases: [],
@@ -133,21 +128,7 @@ export const useDatos = create<EstadoDatos>()(
         return id;
       };
 
-      /** Saca unidades de las tandas de un producto, primero las más viejas. */
-      const consumirTandas = (productoId: number, cantidad: number) =>
-        set((s) => {
-          let falta = cantidad;
-          const lotes = [...s.lotes]
-            .sort((a, b) => a.vence.localeCompare(b.vence))
-            .map((l) => {
-              if (l.productoId !== productoId || falta <= 0) return l;
-              const sale = Math.min(l.cantidad, falta);
-              falta -= sale;
-              return { ...l, cantidad: l.cantidad - sale };
-            })
-            .filter((l) => l.cantidad > 0);
-          return { lotes };
-        });
+      const consumirTandas = (productoId: number, cantidad: number) => set((s) => ({ lotes: sacarDeTandas(s.lotes, productoId, cantidad) }));
 
       const moverStock = (productoId: number, cambio: number) =>
         set((s) => ({ productos: s.productos.map((p) => (p.id === productoId ? { ...p, stock: p.stock + cambio } : p)) }));
@@ -234,7 +215,7 @@ export const useDatos = create<EstadoDatos>()(
 
         // Ajustes de una caja cerrada (solo el jefe). La venta no se borra: queda marcada como anulada,
         // la mercadería vuelve al stock y el ajuste dice quién lo hizo, cuándo y por qué.
-        anularVenta: (cajaId, ventaId, hechoPor, motivo) => {
+        anularVenta: async (cajaId, ventaId, hechoPor, motivo) => {
           const s = get();
           const caja = s.cajas.find((c) => c.id === cajaId);
           if (!caja?.cerrada) throw new Error("La caja sigue abierta: los ajustes son para cajas cerradas.");
@@ -262,7 +243,7 @@ export const useDatos = create<EstadoDatos>()(
           }
         },
 
-        recontarEfectivo: (cajaId, efectivo, hechoPor, motivo) => {
+        recontarEfectivo: async (cajaId, efectivo, hechoPor, motivo) => {
           const caja = get().cajas.find((c) => c.id === cajaId);
           if (!caja?.cerrada) throw new Error("La caja sigue abierta: los ajustes son para cajas cerradas.");
           if (!(efectivo >= 0)) throw new Error("Escribí el efectivo que contaste de nuevo.");
@@ -270,7 +251,7 @@ export const useDatos = create<EstadoDatos>()(
           set((x) => ({ ajustes: [...x.ajustes, { id: nuevoId(), comercioId: caja.comercioId, cajaId, fecha: ahora(), hechoPor, tipo: "recontar", ventaId: null, monto: efectivo, motivo: motivo.trim().slice(0, 200) }] }));
         },
 
-        registrarCompra: (comercioId, proveedorId, items, cargadaPor) => {
+        registrarCompra: async (comercioId, proveedorId, items, cargadaPor) => {
           const id = nuevoId();
           set((s) => ({
             compras: [...s.compras, { id, comercioId, proveedorId, fecha: ahora(), items, total: items.reduce((t, i) => t + i.cantidad * i.costoUnitario, 0), cargadaPor }],
@@ -292,20 +273,22 @@ export const useDatos = create<EstadoDatos>()(
           }
         },
 
-        agregarProveedor: (comercioId, nombre, telefono) => {
+        agregarProveedor: async (comercioId, nombre, telefono) => {
           const id = nuevoId();
           set((s) => ({ proveedores: [...s.proveedores, { id, comercioId, nombre, telefono }] }));
           return id;
         },
 
-        cargarGasto: (gasto) => {
+        cargarGasto: async (gasto) => {
           const id = nuevoId();
           set((s) => ({ gastos: [...s.gastos, { ...gasto, id }] }));
         },
 
-        borrarGasto: (id) => set((s) => ({ gastos: s.gastos.filter((g) => g.id !== id) })),
+        borrarGasto: async (id) => {
+          set((s) => ({ gastos: s.gastos.filter((g) => g.id !== id) }));
+        },
 
-        agregarTanda: (comercioId, productoId, cantidad) => {
+        agregarTanda: async (comercioId, productoId, cantidad) => {
           const producto = get().productos.find((p) => p.id === productoId);
           if (!producto?.diasDuracion) return;
           const id = nuevoId();
@@ -315,7 +298,7 @@ export const useDatos = create<EstadoDatos>()(
           moverStock(productoId, cantidad);
         },
 
-        retirarVencidos: (comercioId) => {
+        retirarVencidos: async (comercioId) => {
           const s = get();
           const vencidos = s.lotes.filter((l) => l.comercioId === comercioId && l.vence < hoy());
           for (const l of vencidos) {
@@ -328,7 +311,7 @@ export const useDatos = create<EstadoDatos>()(
           return vencidos.reduce((t, l) => t + l.cantidad, 0);
         },
 
-        sacarDeTanda: (loteId, cantidad, motivo) => {
+        sacarDeTanda: async (loteId, cantidad, motivo) => {
           const s = get();
           const lote = s.lotes.find((l) => l.id === loteId);
           if (!lote) return;
@@ -406,7 +389,7 @@ export const useDatos = create<EstadoDatos>()(
           set({ pin: { sal, huella: await huellaDelPin(nuevo, sal) } });
         },
 
-        guardarPromo: (promo) => {
+        guardarPromo: async (promo) => {
           if (promo.id) {
             set((s) => ({ promos: s.promos.map((p) => (p.id === promo.id ? { ...p, ...promo, id: p.id } : p)) }));
           } else {
@@ -415,7 +398,9 @@ export const useDatos = create<EstadoDatos>()(
           }
         },
 
-        borrarPromo: (id) => set((s) => ({ promos: s.promos.filter((p) => p.id !== id) })),
+        borrarPromo: async (id) => {
+          set((s) => ({ promos: s.promos.filter((p) => p.id !== id) }));
+        },
 
         agregarEmpleado: async (comercioId, nombre) => {
           const id = nuevoId();

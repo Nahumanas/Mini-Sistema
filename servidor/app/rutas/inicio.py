@@ -4,11 +4,12 @@ from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario
 from ..formato import a_camel
 from .cuenta import SIN_CUENTA
+from .compras import con_items as compras_con_items
 from .ventas import con_items
 
 router = APIRouter(tags=["Inicio"])
 
-# Cuántos días de ventas y cajas se mandan al entrar. Alcanza para los reportes de la página
+# Cuántos días de ventas, cajas, compras, gastos y retiros se mandan al entrar. Alcanza para los reportes de la página
 # ("Este mes" contra el mes pasado y "Últimos 30 días" contra los 30 anteriores).
 DIAS = 62
 
@@ -44,6 +45,20 @@ def inicio(usuario: Usuario = Depends(usuario_actual)):
             ([c["id"] for c in cajas if c["cerrada"] is None],),
         ).fetchall()
         promos = con.execute("select * from public.promos order by id").fetchall()
+        ajustes = con.execute(
+            "select * from public.ajustes_caja where caja_id = any(%s) order by fecha, id", ([c["id"] for c in cajas],)
+        ).fetchall()
+        proveedores = con.execute("select * from public.proveedores order by nombre").fetchall()
+        compras = con.execute(
+            f"""select * from public.compras
+                where (fecha at time zone 'America/Argentina/Buenos_Aires')::date >= {_DESDE} order by fecha, id"""
+        ).fetchall()
+        gastos = con.execute(f"select * from public.gastos where fecha >= {_DESDE} order by fecha, id").fetchall()
+        lotes = con.execute("select * from public.lotes where cantidad > 0 order by vence, id").fetchall()
+        retiros = con.execute(
+            f"""select * from public.retiros
+                where (fecha at time zone 'America/Argentina/Buenos_Aires')::date >= {_DESDE} order by fecha, id"""
+        ).fetchall()
         return {
             "dueno": a_camel(dueno),
             "comercios": [a_camel(f) for f in comercios],
@@ -53,4 +68,10 @@ def inicio(usuario: Usuario = Depends(usuario_actual)):
             "relevos": [a_camel(f) for f in relevos],
             "ventas": con_items(con, ventas),
             "promos": [a_camel(f) for f in promos],
+            "ajustes": [a_camel(f) for f in ajustes],
+            "proveedores": [a_camel(f) for f in proveedores],
+            "compras": compras_con_items(con, compras),
+            "gastos": [a_camel(f) for f in gastos],
+            "lotes": [a_camel(f) for f in lotes],
+            "retiros": [a_camel(f) for f in retiros],
         }

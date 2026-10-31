@@ -7,14 +7,14 @@ import { pesos } from "@/lib/formato";
 import { CATEGORIAS_GASTO } from "@/lib/tipos";
 import { useComercioActivo } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
-import { useInterfaz } from "@/store/interfaz";
+import { useIntentar } from "@/store/interfaz";
 import { Boton, Campo, claseInput, Encabezado, Segmentado, Tabla, Tarjeta, Vacio } from "../ui/base";
 
 // Los gastos fijos y sueltos del comercio (alquiler, luz, sueldos...). Entran en la ganancia de Reportes.
 export function Gastos() {
   const comercio = useComercioActivo();
   const { gastos, cargarGasto, borrarGasto } = useDatos();
-  const avisar = useInterfaz((s) => s.avisar);
+  const { enviando, intentar } = useIntentar();
 
   const esteMes = hoy().slice(0, 7);
   const mesAnterior = sumarDias(`${esteMes}-01`, -1).slice(0, 7);
@@ -37,13 +37,14 @@ export function Gastos() {
       <div className="grid gap-6 lg:grid-cols-[22rem_1fr]">
         <Tarjeta titulo="Cargar un gasto" className="self-start">
           <form
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              if (!(Number(monto) > 0)) return;
-              cargarGasto({ comercioId: comercio.id, fecha, categoria, descripcion: descripcion.trim(), monto: Number(monto) });
-              avisar(`Gasto guardado: ${categoria} por ${pesos(Number(monto))}.`);
-              setDescripcion("");
-              setMonto("");
+              if (!(Number(monto) > 0) || enviando) return;
+              const gasto = { comercioId: comercio.id, fecha, categoria, descripcion: descripcion.trim(), monto: Number(monto) };
+              if (await intentar(() => cargarGasto(gasto), `Gasto guardado: ${categoria} por ${pesos(gasto.monto)}.`)) {
+                setDescripcion("");
+                setMonto("");
+              }
             }}
             className="flex flex-col gap-4"
           >
@@ -63,8 +64,8 @@ export function Gastos() {
             <Campo etiqueta="Monto ($)">
               <input id="monto" type="number" min={1} value={monto} onChange={(e) => setMonto(e.target.value)} className={`${claseInput} numeros`} required />
             </Campo>
-            <Boton type="submit" variante="primario" icono={Save}>
-              Guardar gasto
+            <Boton type="submit" variante="primario" icono={Save} disabled={enviando}>
+              {enviando ? "Guardando…" : "Guardar gasto"}
             </Boton>
           </form>
         </Tarjeta>
@@ -108,7 +109,7 @@ export function Gastos() {
                   <td className="hidden px-4 py-2.5 text-texto-suave sm:table-cell">{g.descripcion || "—"}</td>
                   <td className="px-4 py-2.5 text-right font-medium">{pesos(g.monto)}</td>
                   <td className="w-10 px-2">
-                    <button onClick={() => borrarGasto(g.id)} className="rounded-md p-1.5 text-texto-suave hover:text-peligro" aria-label={`Borrar gasto de ${g.categoria}`}>
+                    <button onClick={() => void intentar(() => borrarGasto(g.id))} disabled={enviando} className="rounded-md p-1.5 text-texto-suave hover:text-peligro" aria-label={`Borrar gasto de ${g.categoria}`}>
                       <Trash2 className="size-4" />
                     </button>
                   </td>

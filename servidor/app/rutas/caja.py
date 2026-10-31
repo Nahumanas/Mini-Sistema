@@ -8,6 +8,7 @@ from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario
 from ..formato import a_camel
 from .comun import comercio_mio
+from .ventas import con_items
 
 router = APIRouter(tags=["Caja"])
 
@@ -122,3 +123,102 @@ def relevo(comercio_id: int, datos: Relevo, usuario: Usuario = Depends(usuario_a
             "update public.cajas set responsable = %s where id = %s returning *", (quien, caja["id"])
         ).fetchone()
     return {"relevo": a_camel(fila), "caja": a_camel(caja)}
+
+
+# -----------------------------------------------------------------------------
+# Ajustes de una caja cerrada (solo el jefe, desde Cajas anteriores). La caja no se toca:
+# el ajuste queda anotado con la fecha, quién y por qué.
+# -----------------------------------------------------------------------------
+
+
+class AnularVenta(BaseModel):
+    ventaId: int
+    hechoPor: str = Field(min_length=1, max_length=100)
+    motivo: str = Field(min_length=1, max_length=200)
+
+
+class Recontar(BaseModel):
+    efectivo: float = Field(ge=0)
+    hechoPor: str = Field(min_length=1, max_length=100)
+    motivo: str = Field(min_length=1, max_length=200)
+
+
+def _caja_cerrada(con, caja_id: int) -> dict:
+    caja = con.execute("select * from public.cajas where id = %s for update", (caja_id,)).fetchone()
+    if caja is None:
+        raise HTTPException(404, "No existe esa caja.")
+    if caja["cerrada"] is None:
+        raise HTTPException(409, "La caja sigue abierta: los ajustes son para cajas cerradas.")
+    return caja
+
+
+def _motivo(texto: str) -> str:
+    motivo = texto.strip()
+    if not motivo:
+        raise HTTPException(422, "Escribí el motivo: es lo que explica el ajuste más adelante.")
+    return motivo
+
+
+@router.post("/cajas/{caja_id}/anular-venta", status_code=201)
+def anular_venta(caja_id: int, datos: AnularVenta, usuario: Usuario = Depends(usuario_actual)):
+    """La venta no se borra: queda marcada como anulada y la mercadería vuelve al stock.
+    Si era la cuota de un socio, la cuota queda anulada y el socio vuelve a como estaba."""
+    motivo = _motivo(datos.motivo)
+    with como_usuario(usuario) as con:
+        caja = _caja_cerrada(con, caja_id)
+        venta = con.execute(
+            "select * from public.ventas where id = %s and caja_id = %s for update", (datos.ventaId, caja_id)
+        ).fetchone()
+        if venta is None or venta["anulada"] is not None:
+            raise HTTPException(409, "Esa venta no está en la caja o ya se anuló.")
+        venta = con.execute(
+            "update public.ventas set anulada = now() where id = %s returning *", (venta["id"],)
+        ).fetchone()
+        ajuste = con.execute(
+            """insert into public.ajustes_caja (comercio_id, caja_id, hecho_por, tipo, venta_id, monto, motivo)
+               values (%s, %s, %s, 'anular_venta', %s, %s, %s) returning *""",
+            (caja["comercio_id"], caja_id, datos.hechoPor.strip(), venta["id"], venta["total"], motivo),
+        ).fetchone()
+        productos = con.execute(
+            """update public.productos p set stock = p.stock + d.cantidad
+               from (select producto_id, sum(cantidad) as cantidad from public.ventas_detalle
+                     where venta_id = %s and producto_id is not null group by producto_id) d
+               where p.id = d.producto_id returning p.*""",
+            (venta["id"],),
+        ).fetchall()
+
+        socio = None
+        cuota = con.execute(
+            "update public.cuotas set anulada = now() where venta_id = %s and anulada is null returning *", (venta["id"],)
+        ).fetchone()
+        if cuota is not None:
+            # Si fue la última cuota que pagó, vuelve al vencimiento de antes; si después pagó otra, manda la nueva
+            socio = con.execute(
+                """update public.socios
+                   set clases_restantes = greatest(clases_restantes - coalesce(%s, 0), 0),
+                       vence = case when vence = %s then %s else vence end
+                   where id = %s returning *""",
+                (cuota["clases_cargadas"], cuota["vence_nuevo"], cuota["vence_antes"], cuota["socio_id"]),
+            ).fetchone()
+
+        return {
+            "ajuste": a_camel(ajuste),
+            "venta": con_items(con, [venta])[0],
+            "productos": [a_camel(p) for p in productos],
+            "cuota": a_camel(cuota),
+            "socio": a_camel(socio),
+        }
+
+
+@router.post("/cajas/{caja_id}/recontar", status_code=201)
+def recontar(caja_id: int, datos: Recontar, usuario: Usuario = Depends(usuario_actual)):
+    """Corrige el efectivo contado. El conteo original queda guardado; vale el último."""
+    motivo = _motivo(datos.motivo)
+    with como_usuario(usuario) as con:
+        caja = _caja_cerrada(con, caja_id)
+        ajuste = con.execute(
+            """insert into public.ajustes_caja (comercio_id, caja_id, hecho_por, tipo, monto, motivo)
+               values (%s, %s, %s, 'recontar', %s, %s) returning *""",
+            (caja["comercio_id"], caja_id, datos.hechoPor.strip(), datos.efectivo, motivo),
+        ).fetchone()
+    return a_camel(ajuste)

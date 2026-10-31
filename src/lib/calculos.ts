@@ -90,6 +90,21 @@ export function tandasVencidas(lotes: Lote[], comercioId: number) {
   return lotes.filter((l) => l.comercioId === comercioId && l.vence < hoy());
 }
 
+/** Lo vendido sale de las tandas del producto, primero de la que vence antes (igual que en la API).
+ * Las tandas que quedan en 0 se sacan de la lista. */
+export function sacarDeTandas(lotes: Lote[], productoId: number, cantidad: number): Lote[] {
+  let falta = cantidad;
+  return [...lotes]
+    .sort((a, b) => a.vence.localeCompare(b.vence) || a.id - b.id)
+    .map((l) => {
+      if (l.productoId !== productoId || falta <= 0) return l;
+      const sale = Math.min(l.cantidad, falta);
+      falta -= sale;
+      return { ...l, cantidad: l.cantidad - sale };
+    })
+    .filter((l) => l.cantidad > 0);
+}
+
 /** Cuántos días de cada período: "semana" = últimos 7 días, "mes" = este mes hasta hoy. */
 export type Periodo = "hoy" | "semana" | "mes" | "30dias";
 
