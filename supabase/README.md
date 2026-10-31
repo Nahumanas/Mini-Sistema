@@ -40,3 +40,4 @@ Crea una base de prueba, imita lo mínimo de Supabase, carga las tablas, corre l
 - El dueño entra con Google **una vez** en cada compu o celular del local. Adentro, cada turno sigue igual: empleado con su nombre o jefe con su PIN.
 - Si alguien entra con un Gmail que no fue invitado, Supabase lo rechaza (registro abierto apagado) y la página le explica que tiene que contratar.
 - Para dar de alta un dueño: Supabase → **Authentication → Users → Invite user** con su Gmail. Se le crea la ficha de dueño sola.
+- Las vistas previas de cada PR (`https://mantenete-*-nahuel-900e.vercel.app/**`) tienen que estar en **Authentication → URL Configuration → Redirect URLs**, si no Google no puede volver a la vista previa.
