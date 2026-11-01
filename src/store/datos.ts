@@ -57,7 +57,9 @@ export type Acciones = {
 
 // pin: la "huella" del PIN de jefe de la demo (nunca el PIN tal cual). null = el de la demo (1234), que todavía no se cambió.
 // pinConfigurado: en la nube, si el dueño ya eligió su PIN (la huella queda en la base, no acá).
-type Seguridad = { pin: { sal: string; huella: string } | null; pinConfigurado: boolean };
+// cifradoActivo: en la nube, si el dueño ya activó el cifrado (con su frase de recuperación).
+// codigos: en la nube, qué comercios ya tienen código de empleados y desde cuándo (comercioId → fecha).
+export type Seguridad = { pin: { sal: string; huella: string } | null; pinConfigurado: boolean; cifradoActivo: boolean; codigos: Record<number, string> };
 
 type Conexion = {
   modo: Modo;
@@ -109,6 +111,9 @@ function baseNueva() {
 
 /** Por las dudas, si la API todavía no manda alguna lista del gimnasio (por ejemplo, mientras se publica
  * la versión nueva), arranca vacía en vez de romper las pantallas. */
+/** La demo no tiene cifrado (sus datos viven en el navegador): solo el PIN de la demo. */
+const SIN_CIFRADO = { pinConfigurado: false, cifradoActivo: false, codigos: {} } as const;
+
 const GIMNASIO_VACIO = {
   disciplinas: [],
   planes: [],
@@ -421,17 +426,24 @@ export const useDatos = create<EstadoDatos>()(
       return {
         ...baseNueva(),
         modo: "demo",
-        pinConfigurado: false,
+        ...SIN_CIFRADO,
 
         usarNube: (datos) => {
           guardarEnElNavegador = false; // antes de cambiar nada, así no se pisa la demo guardada
-          const { dueno, ...base } = datos;
-          set({ ...GIMNASIO_VACIO, ...base, modo: "nube", pinConfigurado: dueno.pinConfigurado });
+          const { dueno, codigos, ...base } = datos;
+          set({
+            ...GIMNASIO_VACIO,
+            ...base,
+            modo: "nube",
+            pinConfigurado: dueno.pinConfigurado,
+            cifradoActivo: Boolean(dueno.cifradoActivo),
+            codigos: Object.fromEntries((codigos ?? []).map((c) => [c.comercioId, c.codigoCambiado])),
+          });
         },
 
         volverALaDemo: async () => {
           if (get().modo === "demo") return;
-          set({ ...baseNueva(), modo: "demo", pinConfigurado: false }); // todavía sin guardar en el navegador
+          set({ ...baseNueva(), modo: "demo", ...SIN_CIFRADO }); // todavía sin guardar en el navegador
           guardarEnElNavegador = true;
           await useDatos.persist.rehydrate(); // vuelve lo que había en la demo (si había algo)
         },
@@ -449,11 +461,13 @@ export const useDatos = create<EstadoDatos>()(
       migrate: (guardado, version) => migrar(guardado as Partial<EstadoDatos>, version),
       skipHydration: true,
       storage: almacen,
-      // El modo y el PIN de la nube no se guardan: se leen de nuevo al entrar
+      // El modo, el PIN y el cifrado de la nube no se guardan: se leen de nuevo al entrar
       partialize: (estado) => {
         const guardado: Partial<EstadoDatos> = { ...estado };
         delete guardado.modo;
         delete guardado.pinConfigurado;
+        delete guardado.cifradoActivo;
+        delete guardado.codigos;
         return guardado;
       },
     },

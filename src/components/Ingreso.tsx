@@ -3,17 +3,19 @@
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Info, KeyRound, LogOut, Plus, Store, User } from "lucide-react";
+import { Info, KeyRound, LifeBuoy, LogOut, Plus, Store, User } from "lucide-react";
 import { DUENO } from "@/lib/datos-demo";
 import { pantallaDeEntrada } from "@/lib/navegacion";
 import { hayNube } from "@/lib/supabase";
 import type { Rubro } from "@/lib/tipos";
+import { entrarConCodigo, recuperarPin } from "@/store/cifrado";
 import { useCuenta } from "@/store/cuenta";
 import { useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useConexion } from "@/store/nube";
 import { Conectando, SinConexion, useDatosListos } from "./layout/Marco";
 import { RUBROS } from "./layout/Topbar";
+import { ActivarCifrado } from "./seguridad/ActivarCifrado";
 import { Boton, Campo, claseInput, Segmentado } from "./ui/base";
 
 const INTENTOS_MAXIMOS = 3; // PIN mal escrito 3 veces seguidas...
@@ -26,6 +28,8 @@ const ESPERA_SEGUNDOS = 30; // ...y hay que esperar 30 segundos para probar de n
 // 2. Cada turno: elegir el comercio y entrar como empleado (con su nombre) o como jefe (con PIN).
 //    En la nube, la primera vez el dueño crea su primer comercio y elige su PIN de jefe.
 //    El jefe también puede crear otro comercio desde acá ("+ Crear un comercio nuevo"), con su PIN.
+// 3. Cifrado (en la nube): la primera vez que el jefe entra, activa el cifrado anotando su frase de recuperación.
+//    Después, el empleado entra con su nombre y el código de empleados del comercio, y "Me olvidé el PIN" usa la frase.
 export function Ingreso() {
   const listos = useDatosListos();
   const conexion = useConexion(listos);
@@ -38,6 +42,8 @@ export function Ingreso() {
   const crearComercio = useDatos((s) => s.crearComercio);
   const enNube = useDatos((s) => s.modo === "nube");
   const pinCambiado = useDatos((s) => (s.modo === "nube" ? s.pinConfigurado : s.pin !== null));
+  const cifrado = useDatos((s) => s.modo === "nube" && s.cifradoActivo);
+  const codigos = useDatos((s) => s.codigos);
 
   const [comercioId, setComercioId] = useState<number | null>(null);
   const [creando, setCreando] = useState(false); // eligió "+ Crear un comercio nuevo" (solo el jefe, con PIN)
@@ -51,6 +57,9 @@ export function Ingreso() {
   const [intentos, setIntentos] = useState(0);
   const [restante, setRestante] = useState(0); // segundos que faltan para poder probar de nuevo
   const [olvido, setOlvido] = useState(false);
+  const [codigo, setCodigo] = useState(""); // con el cifrado: el código de empleados del comercio
+  const [activando, setActivando] = useState(""); // el PIN de jefe ya comprobado, mientras se activa el cifrado
+  const [recupero, setRecupero] = useState({ frase: "", nuevo: "", repetido: "" });
   const reiniciar = useDatos((s) => s.reiniciar);
   const { cuenta, error: errorCuenta, ingresarConGoogle, salirDeLaCuenta } = useCuenta();
   const [probarDemo, setProbarDemo] = useState(false);
@@ -156,13 +165,52 @@ export function Ingreso() {
   const bloqueado = restante > 0;
   const deEste = empleados.filter((e) => e.comercioId === elegido && e.activo);
   const nombreJefe = enNube ? cuenta?.nombre || "Jefe" : DUENO.nombre;
-  const eligePin = enNube && !pinCambiado; // en la nube no hay PIN de demo: la primera vez se elige
+  // Con el cifrado, si Nahuel borró el PIN desde Supabase, el PIN nuevo se elige con la frase (no alcanza con elegir uno)
+  const sinPinConCifrado = enNube && cifrado && !pinCambiado;
+  const eligePin = enNube && !pinCambiado && !cifrado; // en la nube no hay PIN de demo: la primera vez se elige
+  const recuperando = quien === "jefe" && enNube && cifrado && (olvido || sinPinConCifrado);
+  const sinCodigo = quien === "empleado" && cifrado && !codigos[elegido]; // el jefe todavía no eligió el código de este comercio
+
+  /** Con el PIN bien (o recién elegido): si eligió crear un comercio se crea, y se entra directo. */
+  async function entrarComoJefe() {
+    const id = creando ? await crearComercio({ ...nuevo, nombre: nuevo.nombre.trim(), direccion: nuevo.direccion.trim() }) : elegido;
+    ingresar({ rol: "jefe", nombre: nombreJefe, comercioId: id, enNube });
+  }
+
+  /** PIN o código mal escrito: cuenta el intento y, al tercero, hay que esperar. */
+  function fallo(que: "PIN" | "código") {
+    const nuevos = intentos + 1;
+    setIntentos(nuevos);
+    setPin("");
+    setCodigo("");
+    if (nuevos >= INTENTOS_MAXIMOS) {
+      setIntentos(0);
+      setRestante(ESPERA_SEGUNDOS);
+      return setError(`Escribiste mal el ${que} ${INTENTOS_MAXIMOS} veces. Esperá ${ESPERA_SEGUNDOS} segundos y probá de nuevo.`);
+    }
+    return setError(`${que === "PIN" ? "PIN incorrecto" : "Código incorrecto"}. Te quedan ${INTENTOS_MAXIMOS - nuevos} intentos.`);
+  }
 
   async function entrar(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     if (quien === "empleado") {
       if (!nombre.trim()) return setError("Escribí tu nombre: queda anotado en la caja que abras.");
+      if (cifrado) {
+        if (sinCodigo) return setError("El jefe todavía no eligió el código de empleados de este comercio.");
+        if (bloqueado || enviando) return;
+        setEnviando(true);
+        let correcto: boolean;
+        try {
+          correcto = await entrarConCodigo(elegido, codigo);
+        } catch (err) {
+          setCodigo("");
+          return setError((err as Error).message);
+        } finally {
+          setEnviando(false);
+        }
+        if (!correcto) return fallo("código");
+      }
       ingresar({ rol: "empleado", nombre: nombre.trim(), comercioId: elegido, enNube });
       return;
     }
@@ -171,34 +219,59 @@ export function Ingreso() {
     if (creando && !nuevo.nombre.trim()) return setError("Escribí el nombre del comercio nuevo.");
     setEnviando(true);
     try {
-      // Con el PIN bien (o recién elegido), si eligió crear uno se crea y se entra directo a ese comercio
-      const entrarComoJefe = async () => {
-        const id = creando ? await crearComercio({ ...nuevo, nombre: nuevo.nombre.trim(), direccion: nuevo.direccion.trim() }) : elegido;
-        ingresar({ rol: "jefe", nombre: nombreJefe, comercioId: id, enNube });
-      };
-      if (eligePin) {
-        await cambiarPin("", pin, pinRepetido);
-        return await entrarComoJefe();
-      }
-      if (await pinCorrecto(pin)) return await entrarComoJefe();
+      let correcto = true;
+      if (eligePin) await cambiarPin("", pin, pinRepetido);
+      else correcto = await pinCorrecto(pin);
+      if (!correcto) return fallo("PIN");
+      // En la nube, la primera vez que entra el jefe se activa el cifrado (con la frase de recuperación)
+      if (enNube && !cifrado) return setActivando(pin);
+      await entrarComoJefe();
     } catch (err) {
       // Sin conexión, PIN nuevo que no cumple las reglas, o demasiados intentos (la API traba un minuto)
       setPin("");
       setPinRepetido("");
-      return setError((err as Error).message);
+      setError((err as Error).message);
     } finally {
       setEnviando(false);
     }
-    // PIN incorrecto
-    const nuevos = intentos + 1;
-    setIntentos(nuevos);
-    setPin("");
-    if (nuevos >= INTENTOS_MAXIMOS) {
-      setIntentos(0);
-      setRestante(ESPERA_SEGUNDOS);
-      return setError(`Escribiste mal el PIN ${INTENTOS_MAXIMOS} veces. Esperá ${ESPERA_SEGUNDOS} segundos y probá de nuevo.`);
+  }
+
+  /** "Me olvidé el PIN" con el cifrado: con la frase se elige un PIN nuevo y se entra. */
+  async function recuperar() {
+    setError("");
+    if (creando && !nuevo.nombre.trim()) return setError("Escribí el nombre del comercio nuevo.");
+    setEnviando(true);
+    try {
+      await recuperarPin(recupero.frase, recupero.nuevo, recupero.repetido);
+      setRecupero({ frase: "", nuevo: "", repetido: "" });
+      setOlvido(false);
+      await entrarComoJefe();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setEnviando(false);
     }
-    return setError(`PIN incorrecto. Te quedan ${INTENTOS_MAXIMOS - nuevos} intentos.`);
+  }
+
+  if (activando) {
+    return (
+      <main className="flex min-h-full items-center justify-center bg-fondo px-4 py-10">
+        <div className="w-full max-w-md">
+          {logo}
+          {barraCuenta}
+          <div className="rounded-xl border border-borde bg-superficie p-6 shadow-sm shadow-black/[0.03] sm:p-8">
+            <ActivarCifrado
+              pin={activando}
+              alTerminar={entrarComoJefe}
+              cancelar={() => {
+                setActivando("");
+                setPin("");
+              }}
+            />
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -287,9 +360,70 @@ export function Ingreso() {
           </div>
 
           {quien === "empleado" ? (
-            <Campo etiqueta="Tu nombre" ayuda={deEste.length ? `Empleados de este comercio: ${deEste.map((e) => e.nombre).join(", ")}` : undefined}>
-              <input id="nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej.: Juan" className={claseInput} autoComplete="off" />
-            </Campo>
+            <>
+              <Campo etiqueta="Tu nombre" ayuda={deEste.length ? `Empleados de este comercio: ${deEste.map((e) => e.nombre).join(", ")}` : undefined}>
+                <input id="nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej.: Juan" className={claseInput} autoComplete="off" />
+              </Campo>
+              {sinCodigo ? (
+                <p className="flex gap-2.5 rounded-md border border-borde bg-superficie-suave p-3 text-sm">
+                  <Info className="mt-0.5 size-4 shrink-0 text-texto-suave" />
+                  <span>El jefe todavía no eligió el código de empleados de este comercio. Pedile que entre como jefe y lo elija en Mis comercios.</span>
+                </p>
+              ) : (
+                cifrado && (
+                  <Campo etiqueta="Código de empleados" ayuda="Los 6 números que te pasó el jefe.">
+                    <input
+                      id="codigo"
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      autoComplete="off"
+                      value={codigo}
+                      onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ""))}
+                      disabled={bloqueado}
+                      className={`${claseInput} tracking-[0.4em]`}
+                    />
+                  </Campo>
+                )
+              )}
+            </>
+          ) : recuperando ? (
+            <div className="flex flex-col gap-4 rounded-md border border-borde p-4">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <LifeBuoy className="size-4 text-primary" /> {sinPinConCifrado ? "Tu PIN se borró: elegí uno nuevo con tu frase" : "Me olvidé el PIN"}
+              </p>
+              <p className="text-sm text-texto-suave">Escribí la frase de recuperación que anotaste en papel y elegí un PIN nuevo. Tus datos siguen todos.</p>
+              <Campo etiqueta="Frase de recuperación">
+                <input
+                  id="frase-recuperar"
+                  value={recupero.frase}
+                  onChange={(e) => setRecupero({ ...recupero, frase: e.target.value })}
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  translate="no"
+                  className={`${claseInput} notranslate font-mono uppercase tracking-wider`}
+                />
+              </Campo>
+              <div className="grid grid-cols-2 gap-3">
+                <Campo etiqueta="PIN nuevo">
+                  <input id="pin-nuevo-recuperar" type="password" inputMode="numeric" maxLength={8} autoComplete="off" value={recupero.nuevo} onChange={(e) => setRecupero({ ...recupero, nuevo: e.target.value.replace(/\D/g, "") })} className={`${claseInput} tracking-[0.4em]`} />
+                </Campo>
+                <Campo etiqueta="Repetilo">
+                  <input id="pin-repetido-recuperar" type="password" inputMode="numeric" maxLength={8} autoComplete="off" value={recupero.repetido} onChange={(e) => setRecupero({ ...recupero, repetido: e.target.value.replace(/\D/g, "") })} className={`${claseInput} tracking-[0.4em]`} />
+                </Campo>
+              </div>
+              <div className="flex flex-wrap justify-between gap-2">
+                {!sinPinConCifrado && (
+                  <Boton variante="fantasma" onClick={() => setOlvido(false)}>
+                    Volver a poner mi PIN
+                  </Boton>
+                )}
+                <Boton variante="primario" icono={KeyRound} disabled={enviando} onClick={() => void recuperar()} className="ml-auto">
+                  {enviando ? "Comprobando…" : "Guardar PIN nuevo y entrar"}
+                </Boton>
+              </div>
+            </div>
           ) : eligePin ? (
             <>
               <p className="text-sm text-texto-suave">
@@ -323,7 +457,7 @@ export function Ingreso() {
           {error && <p className="text-sm text-peligro">{bloqueado ? `${error} (${restante} s)` : error}</p>}
 
           {/* Olvidé mi PIN: en la demo no hay mail para recuperarlo, así que se vuelve a empezar (con Supabase va por mail) */}
-          {quien === "jefe" && pinCambiado && (
+          {quien === "jefe" && pinCambiado && !recuperando && (
             <div className="text-sm text-texto-suave">
               {olvido && enNube ? (
                 <p className="flex flex-col gap-2 rounded-md border border-borde p-3">
@@ -355,9 +489,11 @@ export function Ingreso() {
             </div>
           )}
 
-          <Boton type="submit" variante="primario" icono={quien === "jefe" ? KeyRound : User} disabled={quien === "jefe" && (bloqueado || enviando)} className="h-11">
-            {quien === "jefe" && enviando ? "Comprobando…" : creando ? "Crear comercio y entrar" : eligePin && quien === "jefe" ? "Guardar PIN y entrar" : "Entrar"}
-          </Boton>
+          {!recuperando && (
+            <Boton type="submit" variante="primario" icono={quien === "jefe" ? KeyRound : User} disabled={sinCodigo || ((quien === "jefe" || cifrado) && (bloqueado || enviando))} className="h-11">
+              {enviando ? "Comprobando…" : creando ? "Crear comercio y entrar" : eligePin && quien === "jefe" ? "Guardar PIN y entrar" : "Entrar"}
+            </Boton>
+          )}
         </form>
       </div>
     </main>
