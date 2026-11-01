@@ -100,6 +100,8 @@ export type DatosDeInicio = {
 };
 
 export type NuevoProducto = Omit<Producto, "id" | "comercioId" | "activo">;
+// stockAntes: el stock que se veía al editar. Si otra compu vendió mientras tanto, la API no lo pisa (409).
+export type CambiosProducto = Partial<Producto> & { stockAntes?: number };
 export type FilaExcel = Pick<Producto, "codigo" | "nombre" | "categoria" | "precioVenta" | "costo" | "stock" | "stockMinimo">;
 export type NuevaVenta = {
   items: { productoId: number; cantidad: number }[];
@@ -155,7 +157,7 @@ export const api = {
   quitarEmpleado: (id: number) => pedir<Empleado>(`/empleados/${id}`, "DELETE"),
 
   crearProducto: (comercioId: number, producto: NuevoProducto) => pedir<Producto>(`/comercios/${comercioId}/productos`, "POST", producto),
-  actualizarProducto: (id: number, cambios: Partial<Producto>) => pedir<Producto>(`/productos/${id}`, "PATCH", cambios),
+  actualizarProducto: (id: number, cambios: CambiosProducto) => pedir<Producto>(`/productos/${id}`, "PATCH", cambios),
   importarProductos: (comercioId: number, filas: FilaExcel[]) =>
     pedir<{ nuevos: number; actualizados: number; productos: Producto[] }>(`/comercios/${comercioId}/productos/importar`, "POST", { filas }),
 

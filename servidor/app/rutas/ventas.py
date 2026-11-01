@@ -103,10 +103,13 @@ def registrar(comercio_id: int, venta: NuevaVenta, tareas: BackgroundTasks, usua
             raise HTTPException(409, "La caja está cerrada. Abrila para poder cobrar.")
 
         ids = list({i.productoId for i in venta.items})
+        # Trabados de una, y siempre en el mismo orden (por id), como en las compras: si no, una venta y una compra
+        # de los mismos productos a la vez se pueden trabar entre sí (deadlock) y una de las dos termina en error.
         productos = {
             p["id"]: p
             for p in cofre.abrir_todas("productos", con.execute(
-                "select id, comercio_id, sobre from public.productos where comercio_id = %s and id = any(%s)",
+                """select id, comercio_id, sobre from public.productos where comercio_id = %s and id = any(%s)
+                   order by id for update""",
                 (comercio_id, ids),
             ).fetchall())
         }

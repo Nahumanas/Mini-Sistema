@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException
 from psycopg import errors
 from pydantic import BaseModel, Field
@@ -30,6 +32,9 @@ class CambiosProducto(BaseModel):
     precioVenta: float | None = Field(default=None, ge=0)
     costo: float | None = Field(default=None, ge=0)
     stock: float | None = None
+    # El stock que se veía en la pantalla al abrir la edición. Si mientras tanto otra compu vendió o cargó
+    # una compra, no se pisa: se avisa para que actualice (si no, esas ventas desaparecerían del stock).
+    stockAntes: float | None = None
     stockMinimo: float | None = Field(default=None, ge=0)
     diasDuracion: int | None = Field(default=None, gt=0)
     activo: bool | None = None
@@ -109,6 +114,7 @@ def actualizar(producto_id: int, cambios: CambiosProducto, usuario: Usuario = De
                llave: Llave = Depends(llave_requerida)):
     # null solo vale para "Dura X días" (sacarle el vencimiento); en lo demás se ignora.
     valores = {k: v for k, v in cambios.model_dump(exclude_unset=True).items() if v is not None or k == "diasDuracion"}
+    stock_antes = valores.pop("stockAntes", None)
     if "nombre" in valores:
         valores["nombre"] = _limpio(valores["nombre"])
     for k in ("codigo", "categoria"):
@@ -122,6 +128,9 @@ def actualizar(producto_id: int, cambios: CambiosProducto, usuario: Usuario = De
             )
             if actual is None:
                 raise HTTPException(404, "No existe ese producto.")
+            if "stock" in valores and stock_antes is not None and Decimal(str(stock_antes)) != actual["stock"]:
+                raise HTTPException(409, f"Mientras editabas, otra compu vendió o cargó {actual['nombre']}: ahora hay "
+                                         f"{actual['stock']:g}. Revisá el stock y guardá de nuevo.")
             if not valores:
                 return a_camel(actual)
             sets = [f"{_A_LA_VISTA[k]} = %s" for k in valores if k in _A_LA_VISTA]
