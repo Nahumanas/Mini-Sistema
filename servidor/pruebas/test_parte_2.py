@@ -50,6 +50,8 @@ def test_pin_de_jefe(cliente):
 
     assert cliente.put("/yo/pin", json={"nuevo": "1111"}, headers=ana).status_code == 422  # muy fácil
     assert cliente.put("/yo/pin", json={"nuevo": "12a4"}, headers=ana).status_code == 422
+    for facil in ("123456", "45678", "1212", "123123", "1990", "2580"):  # seguidos, repetidos, año o muy común
+        assert cliente.put("/yo/pin", json={"nuevo": facil}, headers=ana).status_code == 422, facil
     assert cliente.put("/yo/pin", json={"nuevo": "4826"}, headers=ana).status_code == 200  # la primera vez no pide el actual
     assert cliente.get("/yo", headers=ana).json()["pinConfigurado"] is True
 

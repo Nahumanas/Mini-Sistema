@@ -66,12 +66,34 @@ def _coincide(pin: str, sal: str | None, guardada: str | None) -> bool:
         return False
 
 
+# PIN muy usados que no son seguidos ni repetidos: columnas y diagonales del teclado, pares e impares (igual que lib/pin.ts)
+PIN_COMUNES = {"2580", "0852", "1470", "0741", "3690", "0963", "1590", "0951", "3570", "0753", "1357", "7531", "2468", "8642",
+               "13579", "97531", "24680", "08642", "147258", "258369", "369258", "159753", "147852", "123321", "321123", "112233"}
+
+
+def pin_facil(pin: str) -> str | None:
+    """Por qué ese PIN es muy fácil de adivinar, o None si está bien (las mismas reglas que pinFacil de lib/pin.ts)."""
+    if len(set(pin)) < 3:
+        return "Ese PIN es muy fácil de adivinar: usá por lo menos 3 números distintos (no 1111, 1212 ni 1122)."
+    pasos = {(int(b) - int(a)) % 10 for a, b in zip(pin, pin[1:])}
+    if len(pasos) == 1 and pasos & {1, 9}:
+        return "Ese PIN es muy fácil de adivinar: tiene los números seguidos (como 1234 o 45678)."
+    if re.fullmatch(r"(\d{2,4})\1+", pin):
+        return "Ese PIN es muy fácil de adivinar: repite el mismo pedazo (como 123123)."
+    if re.fullmatch(r"(19|20)\d\d", pin):
+        return "Ese PIN parece un año (como 1990 o 2026): es lo primero que se prueba. Elegí otro."
+    if pin in PIN_COMUNES:
+        return "Ese PIN es de los más usados (sigue una línea del teclado o pares/impares). Elegí otro."
+    return None
+
+
 def validar_pin_nuevo(nuevo: str) -> None:
     """Las mismas reglas que la página (lib/pin.ts): de 4 a 8 números y que no sea muy fácil."""
     if not re.fullmatch(r"\d{4,8}", nuevo):
         raise HTTPException(422, "El PIN tiene que tener de 4 a 8 números (sin letras ni espacios).")
-    if re.fullmatch(r"(\d)\1+", nuevo) or nuevo in "0123456789" or nuevo in "9876543210":
-        raise HTTPException(422, "Ese PIN es muy fácil de adivinar (números iguales o seguidos). Elegí otro.")
+    facil = pin_facil(nuevo)
+    if facil:
+        raise HTTPException(422, facil)
 
 
 def _ficha_con_pin(con) -> dict:

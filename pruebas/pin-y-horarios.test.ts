@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validarHorarios } from "@/lib/horarios";
-import { huellaDelPin, validarPinNuevo } from "@/lib/pin";
+import { huellaDelPin, pinFacil, validarPinNuevo } from "@/lib/pin";
 
 describe("PIN de jefe", () => {
   it("rechaza PIN cortos, con letras, fáciles de adivinar o mal repetidos", () => {
@@ -10,6 +10,14 @@ describe("PIN de jefe", () => {
     expect(() => validarPinNuevo("1234", "1234")).toThrow();
     expect(() => validarPinNuevo("4826", "4827")).toThrow();
     expect(() => validarPinNuevo("4826", "4826")).not.toThrow();
+  });
+
+  it("no deja PIN fáciles: seguidos, con pocos números distintos, repetidos, años o muy comunes", () => {
+    for (const facil of ["123456", "45678", "9876", "7890", "1212", "1122", "0000", "123123", "1990", "2026", "2580", "1357", "147258"]) {
+      expect(pinFacil(facil), facil).not.toBeNull();
+      expect(() => validarPinNuevo(facil, facil)).toThrow();
+    }
+    for (const bueno of ["4826", "5937", "73915", "482619", "8401"]) expect(pinFacil(bueno), bueno).toBeNull();
   });
 
   it("la huella no es el PIN, siempre da lo mismo y cambia con otra sal", async () => {
