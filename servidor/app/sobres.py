@@ -82,11 +82,14 @@ class _Comercio:
 class Cofre:
     """Abre y cierra los sobres de un pedido. Se arma con la conexión (ya como el usuario) y su llave de sesión."""
 
-    def __init__(self, con: Connection, llave: Llave):
+    def __init__(self, con: Connection, llave: Llave, claves: list[dict] | None = None):
+        """claves: las filas de claves_comercio si ya se leyeron junto con otras cosas (así no se piden de nuevo)."""
         self.con = con
         self.llave = llave
         self._abiertos: dict[int, _Comercio] = {}
-        self._envueltas: dict[int, str] | None = None
+        self._envueltas: dict[int, str] | None = (
+            None if claves is None else {f["comercio_id"]: f["clave_dueno"] for f in claves}
+        )
 
     def __repr__(self) -> str:  # nunca mostrar claves en un error
         return f"Cofre({self.llave!r})"
@@ -136,6 +139,10 @@ class Cofre:
         fila = comercio_mio(self.con, comercio_id, bloquear)
         self._comercio(comercio_id)
         return fila
+
+    def comercio_ya_leido(self, comercio_id: int) -> None:
+        """Como comercio(), cuando la fila del comercio ya se leyó (y trabó) junto con otras cosas."""
+        self._comercio(comercio_id)
 
     # ------------------------------------------------------------ sobres
 

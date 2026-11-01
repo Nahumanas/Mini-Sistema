@@ -26,6 +26,10 @@ Resultado del 2026-11-01 (en la máquina de Claude, 3 minutos, 100 usuarios): **
 y 495 intentos de espiar otro comercio, todos frenados. **PASÓ.** Ojo: en tu compu la base está al lado de la API, así que
 esto mide la API y la base, no internet. La prueba que cuenta es la de abajo.
 
+Con la distancia simulada (0,06 s de ida y 0,06 s de vuelta entre la API y la base, como Virginia ↔ São Paulo), antes
+una venta tardaba 1,8 s. Juntando las consultas en pocos viajes: **8.571 pedidos, 0 errores, p95 420 ms → PASÓ**
+(sin contar lo que tarda internet desde el local hasta Render, unos 0,15 s más).
+
 ## 2. En el proyecto Supabase de pruebas
 
 La guía paso a paso para Nahuel está en `/mnt/project-files/paso-5/guia-prueba-de-carga.md` (proyecto `mantenete-pruebas`,

@@ -17,3 +17,16 @@ def comercio_mio(con: Connection, comercio_id: int, bloquear: bool = False) -> d
     if fila is None:
         raise HTTPException(404, "No existe ese comercio.")
     return fila
+
+
+# Para las rutas que leen todo en un viaje (base.Viaje): el comercio (el RLS deja ver solo los del usuario)
+# y las claves de sus comercios (para abrir los sobres sin pedirlas aparte).
+LEER_COMERCIO = "select * from public.comercios where id = %s"
+LEER_CLAVES = "select comercio_id, clave_dueno from public.claves_comercio"
+
+
+def existe(comercios: list[dict]) -> dict:
+    """El comercio leído con LEER_COMERCIO, o 404 como comercio_mio."""
+    if not comercios:
+        raise HTTPException(404, "No existe ese comercio.")
+    return comercios[0]

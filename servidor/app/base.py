@@ -10,7 +10,7 @@ import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from psycopg import Connection
+from psycopg import ClientCursor, Connection
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
@@ -26,10 +26,13 @@ def pool() -> ConnectionPool:
         _pool = ConnectionPool(
             config.DATABASE_URL,
             min_size=1,
-            max_size=10,
+            # Mientras una consulta viaja a la base, esa conexión queda ocupada: con pocas, los pedidos hacen fila.
+            # 20 entra cómodo en el plan gratis de Supabase (el pooler acepta 200 conexiones).
+            max_size=config.POOL_MAXIMO,
             open=True,
             # El "Transaction pooler" de Supabase no admite consultas preparadas.
-            kwargs={"row_factory": dict_row, "prepare_threshold": None},
+            # autocommit: las transacciones las abre y cierra el código (con.transaction() o Viaje).
+            kwargs={"row_factory": dict_row, "prepare_threshold": None, "autocommit": True},
         )
     return _pool
 
@@ -53,3 +56,60 @@ def como_usuario(usuario: Usuario) -> Iterator[Connection]:
             (json.dumps(usuario.claims), usuario.id),
         )
         yield con
+
+
+class Viaje:
+    """Varias consultas en UN solo viaje a la base (la base está lejos del servidor: cada ida y vuelta se nota).
+
+    Se mandan juntas, separadas por ";", con los valores ya escritos adentro de forma segura (ClientCursor.mogrify
+    los pone entre comillas como corresponde), y la base las corre una detrás de otra, en orden.
+    El primer viaje abre la transacción y se pone el traje del usuario (igual que como_usuario);
+    terminar=True la cierra (COMMIT) en el mismo viaje. Si algo falla en el medio, se deshace todo.
+    """
+
+    def __init__(self, con: Connection, usuario: Usuario):
+        self.con = con
+        self.usuario = usuario
+        self.abierta = False
+
+    def __call__(self, *consultas: tuple[str, tuple | dict | None], terminar: bool = False) -> list[list[dict]]:
+        poner = ClientCursor(self.con).mogrify
+        partes = []
+        if not self.abierta:
+            partes += ["begin", poner(
+                """select set_config('role', 'authenticated', true),
+                          set_config('request.jwt.claims', %s, true),
+                          set_config('request.jwt.claim.sub', %s, true)""",
+                (json.dumps(self.usuario.claims), self.usuario.id),
+            )]
+            self.abierta = True
+        partes += [poner(sql, params) if params is not None else sql for sql, params in consultas]
+        if terminar:
+            partes.append("commit")
+        cursor = self.con.cursor()
+        cursor.execute(";\n".join(partes))
+        resultados = []
+        while True:
+            resultados.append(cursor.fetchall() if cursor.description else None)
+            if not cursor.nextset():
+                break
+        if terminar:
+            self.abierta = False
+        # Solo lo de las consultas pedidas (sin el begin, el traje ni el commit)
+        inicio = len(partes) - len(consultas) - (1 if terminar else 0)
+        return resultados[inicio:inicio + len(consultas)]
+
+
+@contextmanager
+def en_viajes(usuario: Usuario) -> Iterator[Viaje]:
+    """Como como_usuario, pero para mandar las consultas en tandas (Viaje). Si no se terminó, se termina al salir."""
+    with pool().connection() as con:
+        viaje = Viaje(con, usuario)
+        try:
+            yield viaje
+            if viaje.abierta:
+                con.execute("commit")
+        except BaseException:
+            if viaje.abierta or con.info.transaction_status != 0:
+                con.execute("rollback")
+            raise

@@ -5,11 +5,12 @@ from psycopg import errors
 from pydantic import BaseModel, Field
 
 from ..autenticacion import Usuario, usuario_actual
-from ..base import como_usuario
+from ..base import como_usuario, en_viajes
 from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import llave_requerida
 from ..sobres import Cofre, por_nombre
+from .comun import LEER_CLAVES, LEER_COMERCIO, existe
 
 router = APIRouter(tags=["Productos"])
 
@@ -79,11 +80,14 @@ def _limpio(texto: str | None) -> str | None:
 
 @router.get("/comercios/{comercio_id}/productos")
 def listar(comercio_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
-    with como_usuario(usuario) as con:
-        cofre = Cofre(con, llave)
-        cofre.comercio(comercio_id)
-        filas = con.execute("select * from public.productos where comercio_id = %s", (comercio_id,)).fetchall()
-        return [a_camel(f) for f in por_nombre(cofre.abrir_todas("productos", filas))]
+    with en_viajes(usuario) as viaje:  # todo en un solo viaje a la base
+        comercios, claves, filas = viaje(
+            (LEER_COMERCIO, (comercio_id,)), (LEER_CLAVES, None),
+            ("select * from public.productos where comercio_id = %s", (comercio_id,)), terminar=True,
+        )
+    cofre = Cofre(viaje.con, llave, claves)
+    cofre.comercio_ya_leido(existe(comercios)["id"])
+    return [a_camel(f) for f in por_nombre(cofre.abrir_todas("productos", filas))]
 
 
 @router.post("/comercios/{comercio_id}/productos", status_code=201)
