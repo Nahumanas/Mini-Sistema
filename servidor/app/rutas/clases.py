@@ -14,8 +14,10 @@ from pydantic import BaseModel, Field
 from .. import gimnasio as g
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario
+from ..cifrado import Llave
 from ..formato import a_camel
-from .comun import comercio_mio
+from ..llaves import llave_requerida
+from ..sobres import Cofre
 
 router = APIRouter(tags=["Gimnasio: clases y reservas"])
 
@@ -66,10 +68,10 @@ class Cambios:
         self.reservas: set[int] = set()
         self.socios: set[int] = set()
 
-    def respuesta(self, con) -> dict:
+    def respuesta(self, con, cofre: Cofre) -> dict:
         reservas = con.execute("select * from public.reservas where id = any(%s) order by id", (list(self.reservas),)).fetchall()
         socios = con.execute("select * from public.socios where id = any(%s) order by id", (list(self.socios),)).fetchall()
-        return {"reservas": [a_camel(r) for r in reservas], "socios": [a_camel(s) for s in socios]}
+        return {"reservas": [a_camel(r) for r in reservas], "socios": [a_camel(s) for s in cofre.abrir_todas("socios", socios)]}
 
 
 def reglas_de(con, comercio_id: int) -> dict:
@@ -77,14 +79,14 @@ def reglas_de(con, comercio_id: int) -> dict:
     return fila or g.REGLAS_INICIALES
 
 
-def plan_de(con, plan_id: int | None) -> dict | None:
+def plan_de(con, cofre: Cofre, plan_id: int | None) -> dict | None:
     if plan_id is None:
         return None
-    return con.execute("select * from public.planes where id = %s", (plan_id,)).fetchone()
+    return cofre.abrir("planes", con.execute("select * from public.planes where id = %s", (plan_id,)).fetchone())
 
 
-def _socio(con, socio_id: int) -> dict:
-    return con.execute("select * from public.socios where id = %s for update", (socio_id,)).fetchone()
+def _socio(con, cofre: Cofre, socio_id: int) -> dict:
+    return cofre.abrir("socios", con.execute("select * from public.socios where id = %s for update", (socio_id,)).fetchone())
 
 
 def _ocupacion(con, clase_id: int, fecha: date) -> tuple[int, int]:
@@ -97,7 +99,7 @@ def _ocupacion(con, clase_id: int, fecha: date) -> tuple[int, int]:
     return fila["ocupados"], fila["espera"]
 
 
-def llenar_desde_espera(con, clase: dict, fecha: date, cambios: Cambios) -> list[dict]:
+def llenar_desde_espera(con, cofre: Cofre, clase: dict, fecha: date, cambios: Cambios) -> list[dict]:
     """Si hay lugares libres, entran los de la lista de espera en orden de llegada
     (se saltea a quien ya no puede ir o no tiene clases)."""
     _, fin = g.horario(clase, fecha)
@@ -111,8 +113,8 @@ def llenar_desde_espera(con, clase: dict, fecha: date, cambios: Cambios) -> list
     ).fetchall():
         if libres <= 0:
             break
-        socio = _socio(con, r["socio_id"])
-        plan = plan_de(con, socio["plan_id"])
+        socio = _socio(con, cofre, r["socio_id"])
+        plan = plan_de(con, cofre, socio["plan_id"])
         if g.problema_para_la_clase(socio, plan, clase, fecha):
             continue
         por_clases = g.es_por_clases(plan)
@@ -130,7 +132,7 @@ def llenar_desde_espera(con, clase: dict, fecha: date, cambios: Cambios) -> list
     return entraron
 
 
-def cancelar(con, reserva: dict, hecha_por: str, devolver: bool | None, cambios: Cambios) -> dict:
+def cancelar(con, cofre: Cofre, reserva: dict, hecha_por: str, devolver: bool | None, cambios: Cambios) -> dict:
     """Cancela una reserva (la reserva ya está trabada). Cancelando con la anticipación que pide el gimnasio
     se devuelve la clase; el jefe puede devolverla igual. Si se liberó un lugar, entra el primero de la espera."""
     if reserva["estado"] not in ("reservado", "espera"):
@@ -148,7 +150,7 @@ def cancelar(con, reserva: dict, hecha_por: str, devolver: bool | None, cambios:
         (devuelta, hecha_por.strip() or reserva["hecha_por"], reserva["id"]),
     )
     cambios.reservas.add(reserva["id"])
-    entraron = [] if era_espera else llenar_desde_espera(con, clase, reserva["fecha"], cambios)
+    entraron = [] if era_espera else llenar_desde_espera(con, cofre, clase, reserva["fecha"], cambios)
     return {"devuelta": devuelta, "aTiempo": a_tiempo, "eraEspera": era_espera,
             "planLibre": not era_espera and not reserva["clase_descontada"], "entraron": entraron}
 
@@ -161,22 +163,23 @@ def _reservas_que_vienen(con, columna: str, valor: int) -> list[dict]:
     ).fetchall()
 
 
-def cancelar_las_que_vienen(con, columna: str, valor: int, hecha_por: str, devolver: bool, cambios: Cambios) -> int:
+def cancelar_las_que_vienen(con, cofre: Cofre, columna: str, valor: int, hecha_por: str, devolver: bool,
+                            cambios: Cambios) -> int:
     """Al dar de baja un socio o sacar una clase de la grilla, se cancelan sus reservas que vienen."""
     futuras = _reservas_que_vienen(con, columna, valor)
     for r in futuras:
         # Releer: al cancelar una, alguna de la lista de espera pudo haber cambiado
         actual = con.execute("select * from public.reservas where id = %s", (r["id"],)).fetchone()
         if actual["estado"] in ("reservado", "espera"):
-            cancelar(con, actual, hecha_por, devolver, cambios)
+            cancelar(con, cofre, actual, hecha_por, devolver, cambios)
     return len(futuras)
 
 
-def _clase_de(con, clase_id: int) -> dict:
+def _clase_de(con, cofre: Cofre, clase_id: int) -> dict:
     clase = con.execute("select * from public.clases where id = %s", (clase_id,)).fetchone()
     if clase is None:
         raise HTTPException(404, "No se encontró la clase.")
-    comercio_mio(con, clase["comercio_id"], bloquear=True)
+    cofre.comercio(clase["comercio_id"], bloquear=True)
     return con.execute("select * from public.clases where id = %s for update", (clase_id,)).fetchone()
 
 
@@ -188,9 +191,10 @@ def revisar_disciplina(con, comercio_id: int, disciplina_id: int) -> None:
 
 
 @router.post("/comercios/{comercio_id}/clases", status_code=201)
-def crear_clase(comercio_id: int, datos: DatosClase, usuario: Usuario = Depends(usuario_actual)):
+def crear_clase(comercio_id: int, datos: DatosClase, usuario: Usuario = Depends(usuario_actual),
+                llave: Llave = Depends(llave_requerida)):
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id)
+        Cofre(con, llave).comercio(comercio_id)
         revisar_disciplina(con, comercio_id, datos.disciplinaId)
         clase = con.execute(
             """insert into public.clases
@@ -203,10 +207,12 @@ def crear_clase(comercio_id: int, datos: DatosClase, usuario: Usuario = Depends(
 
 
 @router.put("/clases/{clase_id}")
-def guardar_clase(clase_id: int, datos: DatosClase, usuario: Usuario = Depends(usuario_actual)):
+def guardar_clase(clase_id: int, datos: DatosClase, usuario: Usuario = Depends(usuario_actual),
+                  llave: Llave = Depends(llave_requerida)):
     """Si se agranda el cupo, entra gente de la lista de espera."""
     with como_usuario(usuario) as con:
-        antes = _clase_de(con, clase_id)
+        cofre = Cofre(con, llave)
+        antes = _clase_de(con, cofre, clase_id)
         revisar_disciplina(con, antes["comercio_id"], datos.disciplinaId)
         if antes["dia_semana"] != datos.diaSemana and _reservas_que_vienen(con, "clase_id", clase_id):
             raise HTTPException(409, "Esa clase ya tiene reservas. Para cambiarle el día, creá la clase nueva y desactivá esta.")
@@ -223,27 +229,31 @@ def guardar_clase(clase_id: int, datos: DatosClase, usuario: Usuario = Depends(u
                 "select distinct fecha from public.reservas where clase_id = %s and estado = 'espera' and fecha >= %s order by fecha",
                 (clase_id, g.hoy()),
             ).fetchall():
-                entraron += llenar_desde_espera(con, clase, f["fecha"], cambios)
-        return {"clase": a_camel(clase), "entraron": entraron, **cambios.respuesta(con)}
+                entraron += llenar_desde_espera(con, cofre, clase, f["fecha"], cambios)
+        return {"clase": a_camel(clase), "entraron": entraron, **cambios.respuesta(con, cofre)}
 
 
 @router.post("/clases/{clase_id}/desactivar")
-def desactivar_clase(clase_id: int, datos: HechaPor, usuario: Usuario = Depends(usuario_actual)):
+def desactivar_clase(clase_id: int, datos: HechaPor, usuario: Usuario = Depends(usuario_actual),
+                     llave: Llave = Depends(llave_requerida)):
     """Sale de la grilla: las reservas que venían se cancelan y se devuelven las clases."""
     with como_usuario(usuario) as con:
-        _clase_de(con, clase_id)
+        cofre = Cofre(con, llave)
+        _clase_de(con, cofre, clase_id)
         clase = con.execute("update public.clases set activa = false where id = %s returning *", (clase_id,)).fetchone()
         cambios = Cambios()
-        canceladas = cancelar_las_que_vienen(con, "clase_id", clase_id, datos.hechaPor, True, cambios)
-        return {"clase": a_camel(clase), "canceladas": canceladas, **cambios.respuesta(con)}
+        canceladas = cancelar_las_que_vienen(con, cofre, "clase_id", clase_id, datos.hechaPor, True, cambios)
+        return {"clase": a_camel(clase), "canceladas": canceladas, **cambios.respuesta(con, cofre)}
 
 
 @router.post("/comercios/{comercio_id}/reservas", status_code=201)
-def reservar(comercio_id: int, datos: NuevaReserva, usuario: Usuario = Depends(usuario_actual)):
+def reservar(comercio_id: int, datos: NuevaReserva, usuario: Usuario = Depends(usuario_actual),
+             llave: Llave = Depends(llave_requerida)):
     """Si la clase está llena, va a la lista de espera. Con plan por clases, reservar le descuenta una
     (la lista de espera no descuenta: se descuenta recién cuando entra)."""
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id, bloquear=True)
+        cofre = Cofre(con, llave)
+        cofre.comercio(comercio_id, bloquear=True)
         clase = con.execute(
             "select * from public.clases where id = %s and comercio_id = %s", (datos.claseId, comercio_id)
         ).fetchone()
@@ -255,12 +265,12 @@ def reservar(comercio_id: int, datos: NuevaReserva, usuario: Usuario = Depends(u
             raise HTTPException(422, "Esa clase no es ese día de la semana.")
         if g.horario(clase, datos.fecha)[1] <= g.ahora():
             raise HTTPException(409, "Esa clase ya terminó.")
-        socio = con.execute(
+        socio = cofre.abrir("socios", con.execute(
             "select * from public.socios where id = %s and comercio_id = %s for update", (datos.socioId, comercio_id)
-        ).fetchone()
+        ).fetchone())
         if socio is None:
             raise HTTPException(404, "No se encontró el socio.")
-        plan = plan_de(con, socio["plan_id"])
+        plan = plan_de(con, cofre, socio["plan_id"])
         problema = g.problema_para_la_clase(socio, plan, clase, datos.fecha)
         if problema:
             raise HTTPException(409, problema)
@@ -279,9 +289,9 @@ def reservar(comercio_id: int, datos: NuevaReserva, usuario: Usuario = Depends(u
             raise HTTPException(409, f"A {socio['nombre']} no le quedan clases. Cobrale la cuota para cargarle más." if hay_lugar
                                 else f"La clase está llena y a {socio['nombre']} no le quedan clases.")
         if hay_lugar and por_clases:
-            socio = con.execute(
+            socio = cofre.abrir("socios", con.execute(
                 "update public.socios set clases_restantes = clases_restantes - 1 where id = %s returning *", (socio["id"],)
-            ).fetchone()
+            ).fetchone())
         try:
             reserva = con.execute(
                 """insert into public.reservas (comercio_id, clase_id, socio_id, fecha, estado, hecha_por, clase_descontada)
@@ -300,26 +310,28 @@ def reservar(comercio_id: int, datos: NuevaReserva, usuario: Usuario = Depends(u
         }
 
 
-def _reserva_trabada(con, reserva_id: int) -> dict:
+def _reserva_trabada(con, cofre: Cofre, reserva_id: int) -> dict:
     reserva = con.execute("select comercio_id from public.reservas where id = %s", (reserva_id,)).fetchone()
     if reserva is None:
         raise HTTPException(404, "No se encontró la reserva.")
-    comercio_mio(con, reserva["comercio_id"], bloquear=True)
+    cofre.comercio(reserva["comercio_id"], bloquear=True)
     return con.execute("select * from public.reservas where id = %s for update", (reserva_id,)).fetchone()
 
 
 @router.post("/reservas/{reserva_id}/cancelar")
-def cancelar_reserva(reserva_id: int, datos: Cancelar, usuario: Usuario = Depends(usuario_actual)):
+def cancelar_reserva(reserva_id: int, datos: Cancelar, usuario: Usuario = Depends(usuario_actual),
+                     llave: Llave = Depends(llave_requerida)):
     with como_usuario(usuario) as con:
-        cambios = Cambios()
-        info = cancelar(con, _reserva_trabada(con, reserva_id), datos.hechaPor, datos.devolver, cambios)
-        return {**info, **cambios.respuesta(con)}
+        cofre, cambios = Cofre(con, llave), Cambios()
+        info = cancelar(con, cofre, _reserva_trabada(con, cofre, reserva_id), datos.hechaPor, datos.devolver, cambios)
+        return {**info, **cambios.respuesta(con, cofre)}
 
 
 @router.post("/reservas/{reserva_id}/asistencia")
-def marcar_asistencia(reserva_id: int, datos: Asistencia, usuario: Usuario = Depends(usuario_actual)):
+def marcar_asistencia(reserva_id: int, datos: Asistencia, usuario: Usuario = Depends(usuario_actual),
+                      llave: Llave = Depends(llave_requerida)):
     with como_usuario(usuario) as con:
-        _reserva_trabada(con, reserva_id)
+        _reserva_trabada(con, Cofre(con, llave), reserva_id)
         fila = con.execute(
             "update public.reservas set estado = %s where id = %s returning *", ("vino" if datos.vino else "falto", reserva_id)
         ).fetchone()
@@ -327,11 +339,12 @@ def marcar_asistencia(reserva_id: int, datos: Asistencia, usuario: Usuario = Dep
 
 
 @router.post("/comercios/{comercio_id}/reservas/cerrar-pasadas")
-def cerrar_clases_pasadas(comercio_id: int, usuario: Usuario = Depends(usuario_actual)):
+def cerrar_clases_pasadas(comercio_id: int, usuario: Usuario = Depends(usuario_actual),
+                          llave: Llave = Depends(llave_requerida)):
     """Las clases que ya terminaron: el que tenía lugar y no vino queda "faltó" (pierde la clase)
     y el que seguía en la lista de espera queda "cancelado" (no le llegó el lugar)."""
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id, bloquear=True)
+        Cofre(con, llave).comercio(comercio_id, bloquear=True)
         filas = con.execute(
             """update public.reservas r
                set estado = case when r.estado = 'reservado' then 'falto' else 'cancelado' end
@@ -345,11 +358,13 @@ def cerrar_clases_pasadas(comercio_id: int, usuario: Usuario = Depends(usuario_a
 
 
 @router.post("/comercios/{comercio_id}/ingresos", status_code=201)
-def registrar_ingreso(comercio_id: int, datos: Ingreso, usuario: Usuario = Depends(usuario_actual)):
+def registrar_ingreso(comercio_id: int, datos: Ingreso, usuario: Usuario = Depends(usuario_actual),
+                      llave: Llave = Depends(llave_requerida)):
     """Si pasa y tiene reserva para esta hora, la reserva queda "vino". Si ya entró hace menos de una hora,
     no se anota otra vez."""
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id, bloquear=True)
+        cofre = Cofre(con, llave)
+        cofre.comercio(comercio_id, bloquear=True)
         socio = con.execute(
             "select id from public.socios where id = %s and comercio_id = %s", (datos.socioId, comercio_id)
         ).fetchone()
@@ -378,8 +393,9 @@ def registrar_ingreso(comercio_id: int, datos: Ingreso, usuario: Usuario = Depen
         if reserva:
             reserva = con.execute("update public.reservas set estado = 'vino' where id = %s returning *", (reserva["id"],)).fetchone()
         asistencia = con.execute(
-            """insert into public.asistencias (comercio_id, socio_id, resultado, motivo, reserva_id, registrado_por)
+            """insert into public.asistencias (comercio_id, socio_id, resultado, reserva_id, registrado_por, sobre)
                values (%s, %s, %s, %s, %s, %s) returning *""",
-            (comercio_id, socio["id"], datos.resultado, motivo[:200], reserva["id"] if reserva else None, datos.registradoPor.strip()),
+            (comercio_id, socio["id"], datos.resultado, reserva["id"] if reserva else None, datos.registradoPor.strip(),
+             cofre.cerrar("asistencias", comercio_id, {"motivo": motivo[:200]})),
         ).fetchone()
-        return {"repetido": False, "asistencia": a_camel(asistencia), "reserva": a_camel(reserva)}
+        return {"repetido": False, "asistencia": a_camel(cofre.abrir("asistencias", asistencia)), "reserva": a_camel(reserva)}

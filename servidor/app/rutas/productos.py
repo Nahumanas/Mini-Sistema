@@ -4,8 +4,10 @@ from pydantic import BaseModel, Field
 
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario
+from ..cifrado import Llave
 from ..formato import a_camel
-from .comun import comercio_mio
+from ..llaves import llave_requerida
+from ..sobres import Cofre, por_nombre
 
 router = APIRouter(tags=["Productos"])
 
@@ -33,9 +35,9 @@ class CambiosProducto(BaseModel):
     activo: bool | None = None
 
 
-_COLUMNAS = {"codigo": "codigo", "nombre": "nombre", "categoria": "categoria", "precioVenta": "precio_venta",
-             "costo": "costo", "stock": "stock", "stockMinimo": "stock_minimo", "diasDuracion": "dias_duracion",
-             "activo": "activo"}
+# Lo que queda a la vista en la base (lo demás va en el sobre: código, nombre, categoría, precio y costo)
+_A_LA_VISTA = {"stock": "stock", "stockMinimo": "stock_minimo", "diasDuracion": "dias_duracion", "activo": "activo"}
+_EN_EL_SOBRE = {"codigo": "codigo", "nombre": "nombre", "categoria": "categoria", "precioVenta": "precio_venta", "costo": "costo"}
 
 
 class FilaExcel(BaseModel):
@@ -56,75 +58,121 @@ def _codigo_repetido() -> HTTPException:
     return HTTPException(409, "Ya hay otro producto con ese código en este comercio.")
 
 
+def huella_codigo(cofre: Cofre, comercio_id: int, codigo: str) -> str | None:
+    """Sin código no hay huella (pueden ser muchos los productos sin código)."""
+    return cofre.huella(comercio_id, "productos.codigo", codigo) if codigo else None
+
+
+def _limpio(texto: str | None) -> str | None:
+    if texto is None:
+        return None
+    limpio = texto.strip()
+    if not limpio:
+        raise HTTPException(422, "El nombre del producto no puede quedar vacío.")
+    return limpio
+
+
 @router.get("/comercios/{comercio_id}/productos")
-def listar(comercio_id: int, usuario: Usuario = Depends(usuario_actual)):
+def listar(comercio_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id)
-        filas = con.execute(
-            "select * from public.productos where comercio_id = %s order by nombre", (comercio_id,)
-        ).fetchall()
-    return [a_camel(f) for f in filas]
+        cofre = Cofre(con, llave)
+        cofre.comercio(comercio_id)
+        filas = con.execute("select * from public.productos where comercio_id = %s", (comercio_id,)).fetchall()
+        return [a_camel(f) for f in por_nombre(cofre.abrir_todas("productos", filas))]
 
 
 @router.post("/comercios/{comercio_id}/productos", status_code=201)
-def crear(comercio_id: int, datos: NuevoProducto, usuario: Usuario = Depends(usuario_actual)):
+def crear(comercio_id: int, datos: NuevoProducto, usuario: Usuario = Depends(usuario_actual),
+          llave: Llave = Depends(llave_requerida)):
+    codigo, nombre = datos.codigo.strip(), _limpio(datos.nombre)
     try:
         with como_usuario(usuario) as con:
-            comercio_mio(con, comercio_id)
+            cofre = Cofre(con, llave)
+            cofre.comercio(comercio_id)
+            sobre = cofre.cerrar("productos", comercio_id, {
+                "codigo": codigo, "nombre": nombre, "categoria": datos.categoria.strip(),
+                "precio_venta": datos.precioVenta, "costo": datos.costo,
+            })
             fila = con.execute(
-                """insert into public.productos
-                     (comercio_id, codigo, nombre, categoria, precio_venta, costo, stock, stock_minimo, dias_duracion)
-                   values (%s, %s, %s, %s, %s, %s, %s, %s, %s) returning *""",
-                (comercio_id, datos.codigo.strip(), datos.nombre.strip(), datos.categoria.strip(), datos.precioVenta,
-                 datos.costo, datos.stock, datos.stockMinimo, datos.diasDuracion),
+                """insert into public.productos (comercio_id, huella_codigo, stock, stock_minimo, dias_duracion, sobre)
+                   values (%s, %s, %s, %s, %s, %s) returning *""",
+                (comercio_id, huella_codigo(cofre, comercio_id, codigo), datos.stock, datos.stockMinimo,
+                 datos.diasDuracion, sobre),
             ).fetchone()
+            return a_camel(cofre.abrir("productos", fila))
     except errors.UniqueViolation as error:
         raise _codigo_repetido() from error
-    return a_camel(fila)
 
 
 @router.patch("/productos/{producto_id}")
-def actualizar(producto_id: int, cambios: CambiosProducto, usuario: Usuario = Depends(usuario_actual)):
+def actualizar(producto_id: int, cambios: CambiosProducto, usuario: Usuario = Depends(usuario_actual),
+               llave: Llave = Depends(llave_requerida)):
     # null solo vale para "Dura X días" (sacarle el vencimiento); en lo demás se ignora.
     valores = {k: v for k, v in cambios.model_dump(exclude_unset=True).items() if v is not None or k == "diasDuracion"}
+    if "nombre" in valores:
+        valores["nombre"] = _limpio(valores["nombre"])
+    for k in ("codigo", "categoria"):
+        if k in valores:
+            valores[k] = valores[k].strip()
     try:
         with como_usuario(usuario) as con:
-            actual = con.execute("select * from public.productos where id = %s", (producto_id,)).fetchone()
+            cofre = Cofre(con, llave)
+            actual = cofre.abrir(
+                "productos", con.execute("select * from public.productos where id = %s for update", (producto_id,)).fetchone()
+            )
             if actual is None:
                 raise HTTPException(404, "No existe ese producto.")
             if not valores:
                 return a_camel(actual)
-            sets = ", ".join(f"{_COLUMNAS[k]} = %s" for k in valores)
+            sets = [f"{_A_LA_VISTA[k]} = %s" for k in valores if k in _A_LA_VISTA]
+            params = [v for k, v in valores.items() if k in _A_LA_VISTA]
+            del_sobre = {_EN_EL_SOBRE[k]: v for k, v in valores.items() if k in _EN_EL_SOBRE}
+            if del_sobre:
+                sets.append("sobre = %s")
+                params.append(cofre.actualizar("productos", actual, **del_sobre))
+            if "codigo" in del_sobre:
+                sets.append("huella_codigo = %s")
+                params.append(huella_codigo(cofre, actual["comercio_id"], del_sobre["codigo"]))
             fila = con.execute(
-                f"update public.productos set {sets} where id = %s returning *", (*valores.values(), producto_id)
+                f"update public.productos set {', '.join(sets)} where id = %s returning *", (*params, producto_id)
             ).fetchone()
+            return a_camel(cofre.abrir("productos", fila))
     except errors.UniqueViolation as error:
         raise _codigo_repetido() from error
-    return a_camel(fila)
 
 
 @router.post("/comercios/{comercio_id}/productos/importar")
-def importar(comercio_id: int, datos: Importacion, usuario: Usuario = Depends(usuario_actual)):
+def importar(comercio_id: int, datos: Importacion, usuario: Usuario = Depends(usuario_actual),
+             llave: Llave = Depends(llave_requerida)):
     """La lista de productos del Excel: si el código ya existe se actualiza, si no se crea. Todo o nada."""
     nuevos = actualizados = 0
     productos = []
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id)
+        cofre = Cofre(con, llave)
+        cofre.comercio(comercio_id, bloquear=True)  # que otra compu no cargue el mismo código en el medio
         for f in datos.filas:
-            fila = con.execute(
-                """insert into public.productos
-                     (comercio_id, codigo, nombre, categoria, precio_venta, costo, stock, stock_minimo)
-                   values (%s, %s, %s, %s, %s, %s, %s, %s)
-                   on conflict (comercio_id, codigo) where codigo <> '' do update set
-                     nombre = excluded.nombre, categoria = excluded.categoria, precio_venta = excluded.precio_venta,
-                     costo = excluded.costo, stock = excluded.stock, stock_minimo = excluded.stock_minimo
-                   returning (xmax = 0) as es_nuevo, *""",
-                (comercio_id, f.codigo.strip(), f.nombre.strip(), f.categoria.strip(), f.precioVenta, f.costo,
-                 f.stock, f.stockMinimo),
+            codigo = f.codigo.strip()
+            if not codigo:
+                raise HTTPException(422, "Hay una fila del Excel sin código.")
+            valores = {"codigo": codigo, "nombre": _limpio(f.nombre), "categoria": f.categoria.strip(),
+                       "precio_venta": f.precioVenta, "costo": f.costo}
+            huella = huella_codigo(cofre, comercio_id, codigo)
+            existe = con.execute(
+                "select id from public.productos where comercio_id = %s and huella_codigo = %s for update", (comercio_id, huella)
             ).fetchone()
-            if fila.pop("es_nuevo"):
-                nuevos += 1
-            else:
+            sobre = cofre.cerrar("productos", comercio_id, valores)
+            if existe:
+                fila = con.execute(
+                    "update public.productos set sobre = %s, stock = %s, stock_minimo = %s where id = %s returning *",
+                    (sobre, f.stock, f.stockMinimo, existe["id"]),
+                ).fetchone()
                 actualizados += 1
-            productos.append(a_camel(fila))
+            else:
+                fila = con.execute(
+                    """insert into public.productos (comercio_id, huella_codigo, stock, stock_minimo, sobre)
+                       values (%s, %s, %s, %s, %s) returning *""",
+                    (comercio_id, huella, f.stock, f.stockMinimo, sobre),
+                ).fetchone()
+                nuevos += 1
+            productos.append(a_camel(cofre.abrir("productos", fila)))
     return {"nuevos": nuevos, "actualizados": actualizados, "productos": productos}

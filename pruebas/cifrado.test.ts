@@ -93,7 +93,7 @@ describe("la nube con cifrado", () => {
 
   it("activar el cifrado pide la frase completa y guarda la llave", async () => {
     datos().usarNube({ ...NUBE, dueno: { ...NUBE.dueno, cifradoActivo: false }, codigos: [] });
-    await expect(activarCifrado("4826", "K7QX-M2PA")).rejects.toThrow("frase completa");
+    await expect(activarCifrado("4826", "K7QX-M2PA")).rejects.toThrow("código de recuperación completo");
     expect(api.activarCifrado).not.toHaveBeenCalled();
     api.activarCifrado.mockResolvedValueOnce({ ok: true, llave: "llave-jefe", vence: MAÑANA });
     await activarCifrado("4826", FRASE);
@@ -126,7 +126,7 @@ describe("la nube con cifrado", () => {
   it("me olvidé el PIN: con la frase y un PIN nuevo que cumpla las reglas", async () => {
     datos().usarNube({ ...NUBE, dueno: { ...NUBE.dueno, pinConfigurado: false } });
     await expect(recuperarPin(FRASE, "1234", "1234")).rejects.toThrow("muy fácil");
-    await expect(recuperarPin("K7QX", "6184", "6184")).rejects.toThrow("frase completa");
+    await expect(recuperarPin("K7QX", "6184", "6184")).rejects.toThrow("código de recuperación completo");
     api.recuperarPin.mockResolvedValueOnce({ ok: true, llave: "llave-jefe", vence: MAÑANA });
     await recuperarPin(FRASE.toLowerCase(), "6184", "6184");
     expect(datos().pinConfigurado).toBe(true);

@@ -24,14 +24,33 @@ o la **frase de recuperación** que el dueño anotó en papel. Todo el detalle e
 - Si faltan los secretos en Render, lo del cifrado contesta **503** y lo demás sigue andando.
 - **Si el dueño pierde el PIN y la frase, pierde los datos.** Por eso al activar tiene que marcar la casilla que lo dice. Las copias de la base tienen que incluir `cifrado_duenos` y `claves_comercio`.
 - Con el cifrado activado, borrar el PIN desde Supabase ya no alcanza: el dueño elige uno nuevo con su frase ("Me olvidé el PIN").
-- Lo que todavía no se cifra (parte 3): los datos de los comercios (ventas, productos, socios...).
+- En pantalla a la frase se le dice **código de recuperación** (en el código y en la API sigue llamándose `frase`).
+
+## Cifrado (etapa 5, parte 3: los datos)
+
+Desde la migración `20261101120000_cifrado_datos.sql`, los datos del negocio se guardan en una columna **`sobre`** por fila:
+un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.py` (el **Cofre** de cada pedido).
+
+- Qué va en el sobre: precios, costos, totales, montos y notas; nombres de productos, categorías y proveedores; los datos
+  de los socios (nombre, DNI, teléfono, email); nombres y precios de los planes; nombres y porcentajes de las promos.
+- Qué queda a la vista (la base lo necesita para trabajar): a qué comercio es cada fila, fechas, cantidades de stock,
+  medio de pago, estados, y los nombres de quien atendió (empleados, responsable de la caja, profesor).
+- El **código** de un producto y el **DNI** de un socio tienen además una **huella** (HMAC con la clave del comercio): no deja
+  ver el dato, pero la base no deja repetirlo en el mismo comercio y sirve para buscarlo.
+- El sobre lleva pegado de qué tabla y de qué comercio es: un sobre copiado a otro comercio no abre (409). Y la base no
+  acepta nada que no sea un sobre (`check sobre ~ '^v1:...'`).
+- **Todos los pedidos de datos piden la llave** (423 sin ella). La del jefe abre todos sus comercios; la de un empleado,
+  solo el suyo (403 en otro). `/inicio` sin llave manda solo el dueño, sus comercios, los empleados y qué comercios tienen
+  código (lo que necesita la pantalla de ingreso); con llave, los datos de los comercios que abre.
+- Las sumas que antes hacía la base (efectivo del arqueo, del relevo) y los "ordenar por nombre" ahora los hace la API,
+  porque la base ya no ve esos números.
 
 ## Qué hace
 
 | Pedido | Para qué |
 |---|---|
 | `GET /salud` | Ver si la API está viva y llega a la base |
-| `GET /inicio` | Todo lo que la página necesita al entrar, en un solo pedido (comercios, empleados, productos, promos, proveedores, tandas con stock, y cajas, relevos, ajustes, ventas, compras, gastos y retiros de los últimos 62 días; del gimnasio: actividades, planes, grilla, reglas, socios, reservas y entradas de 62 días y cuotas del último año) |
+| `GET /inicio` | Todo lo que la página necesita al entrar, en un solo pedido. Sin llave, solo lo de la pantalla de ingreso; con llave (comercios, empleados, productos, promos, proveedores, tandas con stock, y cajas, relevos, ajustes, ventas, compras, gastos y retiros de los últimos 62 días; del gimnasio: actividades, planes, grilla, reglas, socios, reservas y entradas de 62 días y cuotas del último año) |
 | `GET /yo` | La ficha del dueño conectado (403 si no fue invitado) |
 | `POST /yo/pin/verificar`, `PUT /yo/pin` | Comprobar el PIN de jefe (con cifrado, devuelve la llave de sesión); elegirlo la primera vez o cambiarlo (pide el actual) |
 | `GET /yo/cifrado`, `GET /yo/cifrado/frase-nueva`, `POST /yo/cifrado/activar` | Cifrado: ver si está activado, la frase para anotar y activarlo (PIN + frase + casilla; crea las claves de todos sus comercios) |

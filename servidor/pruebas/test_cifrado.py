@@ -92,8 +92,8 @@ def _con(quien: dict, llave: str) -> dict:
 
 
 def test_activar_entrar_codigo_cambiar_y_recuperar(cliente):
-    ana = crear_usuario("ana.cifrado@gmail.com")
-    beto = crear_usuario("beto.cifrado@gmail.com")
+    ana = crear_usuario("ana.cifrado@gmail.com", cifrado=False)
+    beto = crear_usuario("beto.cifrado@gmail.com", cifrado=False)
     assert cliente.put("/yo/pin", json={"nuevo": "4826"}, headers=ana).status_code == 200
     kiosco = cliente.post("/comercios", json={"nombre": "Kiosco", "rubro": "kiosco"}, headers=ana).json()["id"]
     gym = cliente.post("/comercios", json={"nombre": "Gym", "rubro": "gimnasio"}, headers=ana).json()["id"]
@@ -203,7 +203,7 @@ def test_activar_entrar_codigo_cambiar_y_recuperar(cliente):
 
 
 def test_codigo_y_frase_se_traban(cliente):
-    ana = crear_usuario("ana.cifrado.traba@gmail.com")
+    ana = crear_usuario("ana.cifrado.traba@gmail.com", cifrado=False)
     cliente.put("/yo/pin", json={"nuevo": "4826"}, headers=ana)
     tienda = cliente.post("/comercios", json={"nombre": "Tienda", "rubro": "ropa"}, headers=ana).json()["id"]
     frase = cliente.get("/yo/cifrado/frase-nueva", headers=ana).json()["frase"]
@@ -223,8 +223,8 @@ def test_codigo_y_frase_se_traban(cliente):
 
 
 def test_sin_secretos_en_render_lo_demas_sigue_andando(cliente, monkeypatch):
-    con_cifrado = crear_usuario("ana.cifrado.sin@gmail.com")
-    sin_cifrado = crear_usuario("beto.cifrado.sin@gmail.com")
+    con_cifrado = crear_usuario("ana.cifrado.sin@gmail.com", cifrado=False)
+    sin_cifrado = crear_usuario("beto.cifrado.sin@gmail.com", cifrado=False)
     for quien in (con_cifrado, sin_cifrado):
         cliente.put("/yo/pin", json={"nuevo": "4826"}, headers=quien)
     frase = cliente.get("/yo/cifrado/frase-nueva", headers=con_cifrado).json()["frase"]

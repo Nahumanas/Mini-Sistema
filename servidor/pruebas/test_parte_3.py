@@ -192,22 +192,28 @@ def test_ajustes_de_caja_cerrada(cliente):
 
 
 def test_anular_la_cuota_de_un_socio_lo_deja_como_estaba(cliente):
-    """El gimnasio llega a la nube en la parte 4, pero la base ya lo tiene: anular la venta de una cuota
-    tiene que devolver al socio a su vencimiento y sus clases de antes."""
+    """Anular la venta de una cuota tiene que devolver al socio a su vencimiento y sus clases de antes."""
+    from datetime import timedelta
+
+    from app import gimnasio as g
+
     ana = crear_usuario("ana.cuota@gmail.com")
     gym = cliente.post("/comercios", json={"nombre": "Gym de Ana", "rubro": "gimnasio"}, headers=ana).json()
     gid = gym["id"]
     caja = cliente.post(f"/comercios/{gid}/caja/abrir", json={"responsable": "Ana"}, headers=ana).json()
-    plan = _sql(f"insert into public.planes (comercio_id, nombre, precio, duracion_meses, cantidad_clases) values ({gid}, 'Mensual', 20000, 1, 8) returning id")
-    socio = _sql(f"""insert into public.socios (comercio_id, nombre, dni, plan_id, vence, clases_restantes)
-                     values ({gid}, 'Juan', '30111222', {plan}, '2026-12-01', 10) returning id""")
-    venta = _sql(f"""insert into public.ventas (comercio_id, numero, caja_id, subtotal, total, medio_pago, vendido_por)
-                     values ({gid}, 1, {caja['id']}, 20000, 20000, 'efectivo', 'Ana') returning id""")
-    _sql(f"""insert into public.cuotas (comercio_id, socio_id, plan_id, venta_id, caja_id, monto, medio_pago, cobrada_por,
-                                       vence_antes, vence_nuevo, clases_cargadas, clases_despues)
-             values ({gid}, {socio}, {plan}, {venta}, {caja['id']}, 20000, 'efectivo', 'Ana', '2026-11-01', '2026-12-01', 8, 10)""")
+    plan = cliente.post(f"/comercios/{gid}/planes", json={"nombre": "Mensual", "precio": 20000, "duracionMeses": 1,
+                                                          "cantidadClases": 8}, headers=ana).json()
+    # Juan ya venía con el plan (cargado del Excel): vence en 10 días y tiene las 8 clases del mes
+    antes = str(g.hoy() + timedelta(days=10))
+    juan = cliente.post(f"/comercios/{gid}/socios/importar", json={"filas": [
+        {"nombre": "Juan", "dni": "30111222", "planId": plan["id"], "vence": antes}]}, headers=ana).json()["socios"][0]
+    assert juan["clasesRestantes"] == 8
+    r = cliente.post(f"/comercios/{gid}/cuotas", json={"socioId": juan["id"], "planId": plan["id"], "medioPago": "efectivo",
+                                                       "monto": 20000, "vence": str(g.hoy() + timedelta(days=40)),
+                                                       "cobradaPor": "Ana"}, headers=ana).json()
+    venta = r["venta"]["id"]
     cliente.post(f"/comercios/{gid}/caja/cerrar", json={"efectivoContado": 20000}, headers=ana)
 
-    r = cliente.post(f"/cajas/{caja['id']}/anular-venta", json={"ventaId": int(venta), "hechoPor": "Ana", "motivo": "Pagó dos veces"}, headers=ana).json()
-    assert r["cuota"]["anulada"] is not None
-    assert r["socio"]["vence"] == "2026-11-01" and r["socio"]["clasesRestantes"] == 2
+    r = cliente.post(f"/cajas/{caja['id']}/anular-venta", json={"ventaId": venta, "hechoPor": "Ana", "motivo": "Pagó dos veces"}, headers=ana).json()
+    assert r["cuota"]["anulada"] is not None and r["ajuste"]["monto"] == 20000
+    assert r["socio"]["vence"] == antes and r["socio"]["clasesRestantes"] == 0 and r["socio"]["nombre"] == "Juan"

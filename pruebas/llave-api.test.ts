@@ -49,3 +49,39 @@ describe("la llave viaja en cada pedido", () => {
     expect(aviso).toHaveBeenCalledOnce();
   });
 });
+
+describe("los datos del negocio llegan recién con la llave", () => {
+  const SOLO_INGRESO = {
+    dueno: { nombre: "Ana", email: "ana@gmail.com", pinConfigurado: true, cifradoActivo: true },
+    codigos: [],
+    comercios: [{ id: 50, nombre: "Kiosco de Ana", rubro: "kiosco", direccion: "", usaTicket: false, permisosEmpleado: [], combinarPromos: "mejor", horaApertura: null, horaCierre: null, turnos: [] }],
+    empleados: [],
+    productos: [],
+  };
+
+  it("al entrar con el PIN se vuelven a pedir los datos, ya con la llave", async () => {
+    const { traerDatosConLlave } = await import("@/store/nube");
+    const { useDatos } = await import("@/store/datos");
+    guardarLlave("llave-jefe", MAÑANA);
+    const alfajor = { id: 1, comercioId: 50, codigo: "779001", nombre: "Alfajor", categoria: "", precioVenta: 1500, costo: 900, stock: 10, stockMinimo: 0, diasDuracion: null, activo: true };
+    const pedido = contesta(200, { ...SOLO_INGRESO, productos: [alfajor] });
+    await traerDatosConLlave();
+    expect((pedido.mock.calls[0][1].headers as Record<string, string>)["X-Llave"]).toBe("llave-jefe");
+    expect(useDatos.getState().productos.map((p) => p.nombre)).toEqual(["Alfajor"]);
+    await useDatos.getState().volverALaDemo();
+  });
+
+  it("si la llave guardada ya no sirve (423), se pide de nuevo sin ella (para la pantalla de ingreso)", async () => {
+    const { traerDatosConLlave } = await import("@/store/nube");
+    const { useDatos } = await import("@/store/datos");
+    guardarLlave("llave-vieja", MAÑANA);
+    const respuestas = [new Response(JSON.stringify({ detail: "Por seguridad, volvé a poner tu PIN" }), { status: 423 }), new Response(JSON.stringify(SOLO_INGRESO), { status: 200 })];
+    const pedido = vi.fn<(url: string, opciones: RequestInit) => Promise<Response>>(async () => respuestas.shift()!);
+    vi.stubGlobal("fetch", pedido);
+    await traerDatosConLlave();
+    expect(pedido).toHaveBeenCalledTimes(2);
+    expect(pedido.mock.calls[1][1].headers).not.toHaveProperty("X-Llave");
+    expect(useDatos.getState().comercios.map((c) => c.nombre)).toEqual(["Kiosco de Ana"]);
+    await useDatos.getState().volverALaDemo();
+  });
+});

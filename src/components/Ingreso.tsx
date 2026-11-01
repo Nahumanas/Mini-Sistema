@@ -12,7 +12,7 @@ import { entrarConCodigo, recuperarPin } from "@/store/cifrado";
 import { useCuenta } from "@/store/cuenta";
 import { useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
-import { useConexion } from "@/store/nube";
+import { traerDatosConLlave, useConexion } from "@/store/nube";
 import { Conectando, SinConexion, useDatosListos } from "./layout/Marco";
 import { RUBROS } from "./layout/Topbar";
 import { ActivarCifrado } from "./seguridad/ActivarCifrado";
@@ -28,8 +28,10 @@ const ESPERA_SEGUNDOS = 30; // ...y hay que esperar 30 segundos para probar de n
 // 2. Cada turno: elegir el comercio y entrar como empleado (con su nombre) o como jefe (con PIN).
 //    En la nube, la primera vez el dueño crea su primer comercio y elige su PIN de jefe.
 //    El jefe también puede crear otro comercio desde acá ("+ Crear un comercio nuevo"), con su PIN.
-// 3. Cifrado (en la nube): la primera vez que el jefe entra, activa el cifrado anotando su frase de recuperación.
-//    Después, el empleado entra con su nombre y el código de empleados del comercio, y "Me olvidé el PIN" usa la frase.
+// 3. Cifrado (en la nube): la primera vez que el jefe entra, activa el cifrado anotando su código de recuperación.
+//    Después, el empleado entra con su nombre y el código de empleados del comercio, y "Me olvidé el PIN" usa el
+//    código de recuperación. Hasta que no se pone el PIN o el código, la API no manda los datos del negocio (están
+//    cifrados): al entrar se vuelven a pedir, ya con la llave.
 export function Ingreso() {
   const listos = useDatosListos();
   const conexion = useConexion(listos);
@@ -165,15 +167,20 @@ export function Ingreso() {
   const bloqueado = restante > 0;
   const deEste = empleados.filter((e) => e.comercioId === elegido && e.activo);
   const nombreJefe = enNube ? cuenta?.nombre || "Jefe" : DUENO.nombre;
-  // Con el cifrado, si Nahuel borró el PIN desde Supabase, el PIN nuevo se elige con la frase (no alcanza con elegir uno)
+  // Con el cifrado, si Nahuel borró el PIN desde Supabase, el PIN nuevo se elige con el código de recuperación
   const sinPinConCifrado = enNube && cifrado && !pinCambiado;
   const eligePin = enNube && !pinCambiado && !cifrado; // en la nube no hay PIN de demo: la primera vez se elige
   const recuperando = quien === "jefe" && enNube && cifrado && (olvido || sinPinConCifrado);
-  const sinCodigo = quien === "empleado" && cifrado && !codigos[elegido]; // el jefe todavía no eligió el código de este comercio
+  // En la nube el empleado entra con el código del comercio: sin cifrado activado o sin código elegido, todavía no puede
+  const sinCodigo = quien === "empleado" && enNube && (!cifrado || !codigos[elegido]);
+  const porQueNoEntra = !cifrado
+    ? "Primero tiene que entrar el jefe con su PIN: la primera vez protege los datos del negocio. Después elige el código de empleados en Mis comercios."
+    : "El jefe todavía no eligió el código de empleados de este comercio. Pedile que entre como jefe y lo elija en Mis comercios.";
 
   /** Con el PIN bien (o recién elegido): si eligió crear un comercio se crea, y se entra directo. */
   async function entrarComoJefe() {
     const id = creando ? await crearComercio({ ...nuevo, nombre: nuevo.nombre.trim(), direccion: nuevo.direccion.trim() }) : elegido;
+    if (enNube) await traerDatosConLlave(); // con la llave del jefe, la API ya abre los datos de todos sus comercios
     ingresar({ rol: "jefe", nombre: nombreJefe, comercioId: id, enNube });
   }
 
@@ -196,20 +203,19 @@ export function Ingreso() {
     setError("");
     if (quien === "empleado") {
       if (!nombre.trim()) return setError("Escribí tu nombre: queda anotado en la caja que abras.");
-      if (cifrado) {
-        if (sinCodigo) return setError("El jefe todavía no eligió el código de empleados de este comercio.");
+      if (sinCodigo) return setError(porQueNoEntra);
+      if (enNube) {
         if (bloqueado || enviando) return;
         setEnviando(true);
-        let correcto: boolean;
         try {
-          correcto = await entrarConCodigo(elegido, codigo);
+          if (!(await entrarConCodigo(elegido, codigo))) return fallo("código");
+          await traerDatosConLlave(); // con la llave del empleado, la API abre los datos de SU comercio
         } catch (err) {
           setCodigo("");
           return setError((err as Error).message);
         } finally {
           setEnviando(false);
         }
-        if (!correcto) return fallo("código");
       }
       ingresar({ rol: "empleado", nombre: nombre.trim(), comercioId: elegido, enNube });
       return;
@@ -223,7 +229,7 @@ export function Ingreso() {
       if (eligePin) await cambiarPin("", pin, pinRepetido);
       else correcto = await pinCorrecto(pin);
       if (!correcto) return fallo("PIN");
-      // En la nube, la primera vez que entra el jefe se activa el cifrado (con la frase de recuperación)
+      // En la nube, la primera vez que entra el jefe se activa el cifrado (con el código de recuperación)
       if (enNube && !cifrado) return setActivando(pin);
       await entrarComoJefe();
     } catch (err) {
@@ -236,7 +242,7 @@ export function Ingreso() {
     }
   }
 
-  /** "Me olvidé el PIN" con el cifrado: con la frase se elige un PIN nuevo y se entra. */
+  /** "Me olvidé el PIN" con el cifrado: con el código de recuperación se elige un PIN nuevo y se entra. */
   async function recuperar() {
     setError("");
     if (creando && !nuevo.nombre.trim()) return setError("Escribí el nombre del comercio nuevo.");
@@ -367,10 +373,10 @@ export function Ingreso() {
               {sinCodigo ? (
                 <p className="flex gap-2.5 rounded-md border border-borde bg-superficie-suave p-3 text-sm">
                   <Info className="mt-0.5 size-4 shrink-0 text-texto-suave" />
-                  <span>El jefe todavía no eligió el código de empleados de este comercio. Pedile que entre como jefe y lo elija en Mis comercios.</span>
+                  <span>{porQueNoEntra}</span>
                 </p>
               ) : (
-                cifrado && (
+                enNube && (
                   <Campo etiqueta="Código de empleados" ayuda="Los 6 números que te pasó el jefe.">
                     <input
                       id="codigo"
@@ -390,10 +396,10 @@ export function Ingreso() {
           ) : recuperando ? (
             <div className="flex flex-col gap-4 rounded-md border border-borde p-4">
               <p className="flex items-center gap-2 text-sm font-medium">
-                <LifeBuoy className="size-4 text-primary" /> {sinPinConCifrado ? "Tu PIN se borró: elegí uno nuevo con tu frase" : "Me olvidé el PIN"}
+                <LifeBuoy className="size-4 text-primary" /> {sinPinConCifrado ? "Tu PIN se borró: elegí uno nuevo con tu código de recuperación" : "Me olvidé el PIN"}
               </p>
-              <p className="text-sm text-texto-suave">Escribí la frase de recuperación que anotaste en papel y elegí un PIN nuevo. Tus datos siguen todos.</p>
-              <Campo etiqueta="Frase de recuperación">
+              <p className="text-sm text-texto-suave">Escribí el código de recuperación que anotaste en papel y elegí un PIN nuevo. Tus datos siguen todos.</p>
+              <Campo etiqueta="Código de recuperación" ayuda="Las 24 letras y números, con o sin guiones.">
                 <input
                   id="frase-recuperar"
                   value={recupero.frase}
@@ -490,7 +496,7 @@ export function Ingreso() {
           )}
 
           {!recuperando && (
-            <Boton type="submit" variante="primario" icono={quien === "jefe" ? KeyRound : User} disabled={sinCodigo || ((quien === "jefe" || cifrado) && (bloqueado || enviando))} className="h-11">
+            <Boton type="submit" variante="primario" icono={quien === "jefe" ? KeyRound : User} disabled={sinCodigo || ((quien === "jefe" || enNube) && (bloqueado || enviando))} className="h-11">
               {enviando ? "Comprobando…" : creando ? "Crear comercio y entrar" : eligePin && quien === "jefe" ? "Guardar PIN y entrar" : "Entrar"}
             </Boton>
           )}

@@ -47,7 +47,7 @@ Crea una base de prueba, imita lo mínimo de Supabase, carga las tablas, corre l
 
 - Con `NEXT_PUBLIC_API_URL` cargada en Vercel, el dueño que entra con Gmail trabaja con sus datos de la base (por la API de `servidor/`). Sin ella, sigue viendo la demo.
 - La primera vez, la página le pide **crear su primer comercio** y **elegir su PIN de jefe** (en la nube no existe el 1234 de la demo).
-- **Si un dueño se olvida el PIN** (y todavía no activó el cifrado): en el SQL Editor, `update public.duenos set pin_sal = null, pin_huella = null where email = 'su@gmail.com';`. La próxima vez que entre como jefe elige uno nuevo. Con el cifrado activado eso ya no alcanza: elige el PIN nuevo con su frase de recuperación.
+- **Si un dueño se olvida el PIN** (y todavía no activó el cifrado): en el SQL Editor, `update public.duenos set pin_sal = null, pin_huella = null where email = 'su@gmail.com';`. La próxima vez que entre como jefe elige uno nuevo. Con el cifrado activado eso ya no alcanza: elige el PIN nuevo con su código de recuperación.
 
 ## Cifrado: las llaves (etapa 5, parte 1)
 
@@ -64,4 +64,15 @@ Crea una base de prueba, imita lo mínimo de Supabase, carga las tablas, corre l
 - **Me olvidé el PIN**: con la frase se elige un PIN nuevo y se entra. Los datos siguen todos.
 - Al entrar, la página guarda la **llave del turno** (vence a las 12 horas, se borra al cerrar sesión). Si falta o venció, vuelve a pedir el PIN o el código.
 - La demo no cambia: no tiene cifrado.
+- En pantalla, a la frase se le dice **código de recuperación** ("Anotá tu código de recuperación único"), como pidió Nahuel.
+
+## Cifrado: los datos (etapa 5, parte 3)
+
+- `20261101120000_cifrado_datos.sql` saca de las tablas las columnas con datos del negocio (precios, montos, nombres de
+  productos, datos de los socios...) y pone en su lugar una columna **`sobre`** cifrada por la API. El código de los productos
+  y el DNI de los socios quedan como **huella** (sirve para que no se repitan, pero no se puede leer).
+- **Borra los datos de prueba** que había en la nube (productos, ventas, cajas, compras, gastos, socios, planes, clases...).
+  Quedan la cuenta, los comercios, los empleados y las llaves del cifrado. La demo de la página no cambia.
+- La base no acepta un dato a la vista donde va el sobre (`check`): solo lo que cifró la API.
+- Para pasarla a Supabase: después del merge, SQL Editor → New query → pegar el archivo (botón *Copy raw file* en GitHub) → Run.
 

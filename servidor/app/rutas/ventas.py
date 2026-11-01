@@ -1,16 +1,18 @@
 from collections import defaultdict
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from psycopg.types.json import Jsonb
 
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario
+from ..cifrado import Llave
 from ..formato import a_camel
-from .comun import HOY_ARGENTINA, comercio_mio
+from ..llaves import llave_requerida
+from ..sobres import CENTAVOS, Cofre
+from .comun import HOY_ARGENTINA
 
 router = APIRouter(tags=["Ventas"])
 
@@ -34,32 +36,64 @@ class NuevaVenta(BaseModel):
     promos: list[PromoAplicada] = Field(default_factory=list, max_length=50)
 
 
-def con_items(con, ventas: list[dict]) -> list[dict]:
-    """Las ventas con lo que se vendió en cada una (items), como las usa la página."""
+def con_items(con, cofre: Cofre, ventas: list[dict]) -> list[dict]:
+    """Las ventas (ya abiertas) con lo que se vendió en cada una (items), como las usa la página."""
     if not ventas:
         return []
     por_venta: dict[int, list[dict]] = defaultdict(list)
     # La cuota de un socio no es un producto: como en la página, va con el id del plan en negativo
     for d in con.execute(
-        """select d.venta_id, coalesce(d.producto_id, -c.plan_id) as producto_id, d.nombre, d.categoria, d.cantidad,
-                  d.precio_unitario, d.costo_unitario
+        """select d.comercio_id, d.venta_id, coalesce(d.producto_id, -c.plan_id) as producto_id, d.cantidad, d.sobre
            from public.ventas_detalle d left join public.cuotas c on c.venta_id = d.venta_id and d.producto_id is null
            where d.venta_id = any(%s) order by d.id""",
         ([v["id"] for v in ventas],),
     ).fetchall():
-        por_venta[d.pop("venta_id")].append(a_camel(d))
+        d = cofre.abrir("ventas_detalle", d)
+        por_venta[d["venta_id"]].append(a_camel({
+            "producto_id": d["producto_id"], "nombre": d["nombre"], "categoria": d["categoria"], "cantidad": d["cantidad"],
+            "precio_unitario": d["precio_unitario"], "costo_unitario": d["costo_unitario"],
+        }))
     return [{**a_camel(v), "items": por_venta[v["id"]]} for v in ventas]
 
 
+def insertar_venta(con, cofre: Cofre, comercio_id: int, caja_id: int, medio_pago: str, vendido_por: str,
+                   subtotal: Decimal, descuento: Decimal, total: Decimal, promos: list[dict]) -> dict:
+    """Guarda la venta con el número que sigue (el comercio tiene que estar trabado) y la devuelve abierta."""
+    numero = con.execute(
+        "select coalesce(max(numero), 0) + 1 as n from public.ventas where comercio_id = %s", (comercio_id,)
+    ).fetchone()["n"]
+    sobre = cofre.cerrar("ventas", comercio_id, {"subtotal": subtotal, "descuento": descuento, "total": total, "promos": promos})
+    fila = con.execute(
+        """insert into public.ventas (comercio_id, numero, caja_id, medio_pago, vendido_por, sobre)
+           values (%s, %s, %s, %s, %s, %s) returning *""",
+        (comercio_id, numero, caja_id, medio_pago, vendido_por, sobre),
+    ).fetchone()
+    return cofre.abrir("ventas", fila)
+
+
+def insertar_detalle(con, cofre: Cofre, comercio_id: int, venta_id: int, producto_id: int | None, cantidad,
+                     nombre: str, categoria: str, precio_unitario, costo_unitario) -> None:
+    sobre = cofre.cerrar("ventas_detalle", comercio_id, {
+        "nombre": nombre, "categoria": categoria, "precio_unitario": precio_unitario, "costo_unitario": costo_unitario,
+    })
+    con.execute(
+        """insert into public.ventas_detalle (comercio_id, venta_id, producto_id, cantidad, sobre)
+           values (%s, %s, %s, %s, %s)""",
+        (comercio_id, venta_id, producto_id, cantidad, sobre),
+    )
+
+
 @router.post("/comercios/{comercio_id}/ventas", status_code=201)
-def registrar(comercio_id: int, venta: NuevaVenta, usuario: Usuario = Depends(usuario_actual)):
+def registrar(comercio_id: int, venta: NuevaVenta, usuario: Usuario = Depends(usuario_actual),
+              llave: Llave = Depends(llave_requerida)):
     """Cobra una venta de una vez (todo o nada): la guarda, baja el stock y saca de las tandas más viejas.
 
     Los precios y costos salen de la base, no de la página. El comercio se "traba" mientras se cobra,
     así dos compus del mismo local nunca sacan el mismo número de venta.
     """
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id, bloquear=True)
+        cofre = Cofre(con, llave)
+        cofre.comercio(comercio_id, bloquear=True)
         caja = con.execute(
             "select id from public.cajas where comercio_id = %s and cerrada is null", (comercio_id,)
         ).fetchone()
@@ -69,42 +103,32 @@ def registrar(comercio_id: int, venta: NuevaVenta, usuario: Usuario = Depends(us
         ids = list({i.productoId for i in venta.items})
         productos = {
             p["id"]: p
-            for p in con.execute(
-                "select id, nombre, categoria, precio_venta, costo from public.productos where comercio_id = %s and id = any(%s)",
+            for p in cofre.abrir_todas("productos", con.execute(
+                "select id, comercio_id, sobre from public.productos where comercio_id = %s and id = any(%s)",
                 (comercio_id, ids),
-            ).fetchall()
+            ).fetchall())
         }
         if len(productos) != len(ids):
             raise HTTPException(404, "Algún producto de la venta no existe en este comercio.")
 
         subtotal = sum(Decimal(str(i.cantidad)) * productos[i.productoId]["precio_venta"] for i in venta.items)
+        subtotal = subtotal.quantize(CENTAVOS, rounding=ROUND_HALF_UP)
         descuento = Decimal(str(venta.descuento))
         if descuento > subtotal:
             raise HTTPException(422, "El descuento no puede ser mayor que el total de la venta.")
 
-        numero = con.execute(
-            "select coalesce(max(numero), 0) + 1 as n from public.ventas where comercio_id = %s", (comercio_id,)
-        ).fetchone()["n"]
-        fila = con.execute(
-            """insert into public.ventas
-                 (comercio_id, numero, caja_id, subtotal, descuento, total, medio_pago, vendido_por, promos)
-               values (%s, %s, %s, %s, %s, %s, %s, %s, %s) returning *""",
-            (comercio_id, numero, caja["id"], subtotal, descuento, subtotal - descuento, venta.medioPago,
-             venta.vendidoPor.strip(), Jsonb([p.model_dump() for p in venta.promos if p.monto > 0])),
-        ).fetchone()
+        fila = insertar_venta(con, cofre, comercio_id, caja["id"], venta.medioPago, venta.vendidoPor.strip(),
+                              subtotal, descuento, subtotal - descuento,
+                              [p.model_dump() for p in venta.promos if p.monto > 0])
 
         for item in venta.items:
             p = productos[item.productoId]
-            con.execute(
-                """insert into public.ventas_detalle
-                     (comercio_id, venta_id, producto_id, nombre, categoria, cantidad, precio_unitario, costo_unitario)
-                   values (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                (comercio_id, fila["id"], p["id"], p["nombre"], p["categoria"], item.cantidad, p["precio_venta"], p["costo"]),
-            )
+            insertar_detalle(con, cofre, comercio_id, fila["id"], p["id"], item.cantidad, p["nombre"], p["categoria"],
+                             p["precio_venta"], p["costo"])
             con.execute("update public.productos set stock = stock - %s where id = %s", (item.cantidad, p["id"]))
             _consumir_tandas(con, p["id"], Decimal(str(item.cantidad)))
 
-        return con_items(con, [fila])[0]
+        return con_items(con, cofre, [fila])[0]
 
 
 def _consumir_tandas(con, producto_id: int, cantidad: Decimal) -> None:
@@ -122,10 +146,12 @@ def _consumir_tandas(con, producto_id: int, cantidad: Decimal) -> None:
 
 
 @router.get("/comercios/{comercio_id}/ventas")
-def listar(comercio_id: int, desde: date | None = None, hasta: date | None = None, usuario: Usuario = Depends(usuario_actual)):
+def listar(comercio_id: int, desde: date | None = None, hasta: date | None = None,
+           usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
     """Las ventas entre dos fechas (hora argentina). Sin fechas: las de hoy."""
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id)
+        cofre = Cofre(con, llave)
+        cofre.comercio(comercio_id)
         ventas = con.execute(
             f"""select * from public.ventas
                 where comercio_id = %s
@@ -134,4 +160,4 @@ def listar(comercio_id: int, desde: date | None = None, hasta: date | None = Non
                 order by fecha""",
             (comercio_id, desde, hasta),
         ).fetchall()
-        return con_items(con, ventas)
+        return con_items(con, cofre, cofre.abrir_todas("ventas", ventas))
