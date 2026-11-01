@@ -13,7 +13,7 @@ from ..sobres import Cofre
 
 router = APIRouter(tags=["Promos"])
 
-MedioDePago = Literal["efectivo", "debito", "credito", "transferencia"]
+MedioDePago = Literal["efectivo", "debito", "credito", "transferencia", "mercadopago"]
 
 
 class Promo(BaseModel):

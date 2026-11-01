@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 from collections import defaultdict
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
@@ -29,9 +30,17 @@ class PromoAplicada(BaseModel):
     monto: float = Field(ge=0)
 
 
+class CobroNuevo(BaseModel):
+    """Lo que la Caja manda para cobrar con el QR de Mercado Pago: como una venta, sin el medio de pago."""
+    items: list[Item] = Field(min_length=1, max_length=500)
+    vendidoPor: str = Field(min_length=1, max_length=100)
+    descuento: float = Field(default=0, ge=0)
+    promos: list[PromoAplicada] = Field(default_factory=list, max_length=50)
+
+
 class NuevaVenta(BaseModel):
     items: list[Item] = Field(min_length=1, max_length=500)
-    medioPago: Literal["efectivo", "debito", "credito", "transferencia"]
+    medioPago: Literal["efectivo", "debito", "credito", "transferencia", "mercadopago"]
     vendidoPor: str = Field(min_length=1, max_length=100)
     # Las promos las calcula la Caja (lib/promos.ts); acá se controla que el descuento tenga sentido.
     descuento: float = Field(default=0, ge=0)
@@ -153,6 +162,8 @@ def registrar(comercio_id: int, venta: NuevaVenta, tareas: BackgroundTasks, usua
 
     Va en DOS viajes a la base (leer todo y guardar todo), porque la base está lejos del servidor.
     """
+    if venta.medioPago == "mercadopago":
+        raise HTTPException(422, "Con Mercado Pago se cobra con el QR (la venta se guarda sola cuando el cliente paga).")
     ids = sorted({i.productoId for i in venta.items})
     with en_viajes(usuario) as viaje:
         comercios, claves, cajas, filas, fichas = viaje(
@@ -164,30 +175,56 @@ def registrar(comercio_id: int, venta: NuevaVenta, tareas: BackgroundTasks, usua
         cofre.comercio_ya_leido(comercio_id)
         if not cajas:
             raise HTTPException(409, "La caja está cerrada. Abrila para poder cobrar.")
-        productos = {p["id"]: p for p in cofre.abrir_todas("productos", filas)}
-        if len(productos) != len(ids):
-            raise HTTPException(404, "Algún producto de la venta no existe en este comercio.")
+        productos = abrir_productos(cofre, filas, ids)
+        preparada = preparar(cofre, comercio_id, productos, venta)
+        return guardar(viaje, cofre, comercio, cajas[0]["id"], productos, preparada.renglones, preparada.sobre,
+                       venta.medioPago, venta.vendidoPor, fichas, tareas)
 
-        subtotal = sum(Decimal(str(i.cantidad)) * productos[i.productoId]["precio_venta"] for i in venta.items)
-        subtotal = subtotal.quantize(CENTAVOS, rounding=ROUND_HALF_UP)
-        descuento = Decimal(str(venta.descuento))
-        if descuento > subtotal:
-            raise HTTPException(422, "El descuento no puede ser mayor que el total de la venta.")
 
-        promos = [p.model_dump() for p in venta.promos if p.monto > 0]
-        renglones = []
-        for item in venta.items:
-            p = productos[item.productoId]
-            renglones.append({"producto_id": p["id"], "cantidad": str(item.cantidad), "sobre": cofre.cerrar(
-                "ventas_detalle", comercio_id, {"nombre": p["nombre"], "categoria": p["categoria"],
-                                                "precio_unitario": p["precio_venta"], "costo_unitario": p["costo"]})})
-        chat = avisos.chat_de(fichas[0] if fichas else None, "stock_bajo")
-        (guardado,) = viaje((_GUARDAR, {
-            "comercio": comercio_id, "caja": cajas[0]["id"], "medio": venta.medioPago, "por": venta.vendidoPor.strip(),
-            "sobre": cofre.cerrar("ventas", comercio_id, {"subtotal": subtotal, "descuento": descuento,
-                                                          "total": subtotal - descuento, "promos": promos}),
-            "detalle": json.dumps(renglones), "avisar": chat is not None,
-        }), terminar=True)
+def abrir_productos(cofre: Cofre, filas: list[dict], ids: list[int]) -> dict[int, dict]:
+    productos = {p["id"]: p for p in cofre.abrir_todas("productos", filas)}
+    if len(productos) != len(ids):
+        raise HTTPException(404, "Algún producto de la venta no existe en este comercio.")
+    return productos
+
+
+@dataclass
+class Preparada:
+    renglones: list[dict]  # [{producto_id, cantidad, sobre}] listos para ventas_detalle
+    sobre: str  # el sobre de la venta (subtotal, descuento, total y promos)
+    total: Decimal
+
+
+def preparar(cofre: Cofre, comercio_id: int, productos: dict[int, dict], venta: "NuevaVenta | CobroNuevo") -> Preparada:
+    """Las cuentas de una venta con los precios de la base, ya cifradas para guardarlas."""
+    subtotal = sum(Decimal(str(i.cantidad)) * productos[i.productoId]["precio_venta"] for i in venta.items)
+    subtotal = subtotal.quantize(CENTAVOS, rounding=ROUND_HALF_UP)
+    descuento = Decimal(str(venta.descuento))
+    if descuento > subtotal:
+        raise HTTPException(422, "El descuento no puede ser mayor que el total de la venta.")
+    promos = [p.model_dump() for p in venta.promos if p.monto > 0]
+    renglones = []
+    for item in venta.items:
+        p = productos[item.productoId]
+        renglones.append({"producto_id": p["id"], "cantidad": str(item.cantidad), "sobre": cofre.cerrar(
+            "ventas_detalle", comercio_id, {"nombre": p["nombre"], "categoria": p["categoria"],
+                                            "precio_unitario": p["precio_venta"], "costo_unitario": p["costo"]})})
+    sobre = cofre.cerrar("ventas", comercio_id, {"subtotal": subtotal, "descuento": descuento,
+                                                 "total": subtotal - descuento, "promos": promos})
+    return Preparada(renglones=renglones, sobre=sobre, total=subtotal - descuento)
+
+
+def guardar(viaje, cofre: Cofre, comercio: dict, caja_id: int, productos: dict[int, dict], renglones: list[dict],
+            sobre: str, medio_pago: str, vendido_por: str, fichas: list[dict], tareas: BackgroundTasks,
+            ademas: tuple = ()) -> dict:
+    """Guarda la venta (ya preparada) en un viaje y cierra la transacción. El comercio y los productos tienen
+    que estar trabados. "ademas": consultas que van en el mismo viaje, después de la venta (todo o nada)."""
+    comercio_id = comercio["id"]
+    chat = avisos.chat_de(fichas[0] if fichas else None, "stock_bajo")
+    guardado, *_ = viaje((_GUARDAR, {
+        "comercio": comercio_id, "caja": caja_id, "medio": medio_pago, "por": vendido_por.strip(),
+        "sobre": sobre, "detalle": json.dumps(renglones), "avisar": chat is not None,
+    }), *ademas, terminar=True)
 
     fila = next(_de_json(g["fila"]) for g in guardado if g["que"] == "venta")
     abierta = cofre.abrir("ventas", fila)
@@ -197,11 +234,11 @@ def registrar(comercio_id: int, venta: NuevaVenta, tareas: BackgroundTasks, usua
     avisos.mandar_despues(tareas, chat, lambda: avisos.mensaje_stock_bajo(cofre, comercio, recien), "stock_bajo")
 
     items = []
-    for item, r in zip(venta.items, renglones, strict=True):
+    for r in renglones:
         d = cofre.abrir("ventas_detalle", {"comercio_id": comercio_id, "sobre": r["sobre"]})
         items.append(a_camel({
-            "producto_id": item.productoId, "nombre": d["nombre"], "categoria": d["categoria"],
-            "cantidad": Decimal(str(item.cantidad)).quantize(MILESIMAS), "precio_unitario": d["precio_unitario"],
+            "producto_id": r["producto_id"], "nombre": d["nombre"], "categoria": d["categoria"],
+            "cantidad": Decimal(str(r["cantidad"])).quantize(MILESIMAS), "precio_unitario": d["precio_unitario"],
             "costo_unitario": d["costo_unitario"],
         }))
     return {**a_camel(abierta), "items": items}

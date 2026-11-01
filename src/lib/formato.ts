@@ -10,6 +10,8 @@ export const MEDIOS_DE_PAGO = {
   debito: "Débito",
   credito: "Crédito",
   transferencia: "Transferencia / QR",
+  // El QR de Mercado Pago que arma Mantenete (la venta se guarda sola cuando el cliente paga). Etapa 8.
+  mercadopago: "Mercado Pago",
 } as const;
 
 export type MedioDePago = keyof typeof MEDIOS_DE_PAGO;

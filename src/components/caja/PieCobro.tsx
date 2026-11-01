@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Banknote, CreditCard, Printer, QrCode, WalletCards } from "lucide-react";
+import { Banknote, CreditCard, Printer, QrCode, ScanLine, WalletCards } from "lucide-react";
 import { MEDIOS_DE_PAGO, type MedioDePago, pesos } from "@/lib/formato";
 import type { Cuenta } from "@/lib/promos";
 import { descargarTicket } from "@/lib/ticket";
@@ -10,14 +10,23 @@ import { useCarrito, useItemsDe } from "@/store/carrito";
 import { useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
+import { CobroConQr } from "./CobroConQr";
 
-const ICONO_MEDIO = { efectivo: Banknote, debito: WalletCards, credito: CreditCard, transferencia: QrCode };
+const ICONO_MEDIO = { efectivo: Banknote, debito: WalletCards, credito: CreditCard, transferencia: QrCode, mercadopago: ScanLine };
 
-type Props = { comercioId: number; cuenta: Cuenta; medio: MedioDePago; setMedio: (m: MedioDePago) => void; alCobrar: () => void };
+type Props = {
+  comercioId: number;
+  cuenta: Cuenta;
+  medio: MedioDePago;
+  setMedio: (m: MedioDePago) => void;
+  alCobrar: () => void;
+  /** Si el comercio conectó su cuenta de Mercado Pago (en la demo, siempre: es de prueba). */
+  conMercadoPago: boolean;
+};
 
 // Abajo de la tabla: a la izquierda cómo paga (y el vuelto si es en efectivo),
 // a la derecha el total (con las promos ya descontadas) y el botón Cobrar, bien grande y en verde.
-export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Props) {
+export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar, conMercadoPago }: Props) {
   const items = useItemsDe(comercioId);
   const vaciar = useCarrito((s) => s.vaciar);
   const registrarVenta = useDatos((s) => s.registrarVenta);
@@ -28,6 +37,7 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
   const [conTicket, setConTicket] = useState(false);
   const [ultima, setUltima] = useState<Venta | null>(null); // para volver a bajar el ticket de la última venta
   const [cobrando, setCobrando] = useState(false); // en la nube la venta tarda un momento: no se cobra dos veces
+  const [conQr, setConQr] = useState(false); // se está mostrando el QR de Mercado Pago
 
   const total = cuenta.total;
   // "Paga con" es opcional: si se completa, el sistema calcula el vuelto (así no se da de más ni de menos)
@@ -36,8 +46,15 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
   const vuelto = paga !== null && paga >= total ? paga - total : null;
   const vacio = items.length === 0;
 
+  const medios = (Object.keys(MEDIOS_DE_PAGO) as MedioDePago[]).filter((m) => m !== "mercadopago" || conMercadoPago);
+
   async function cobrar() {
-    if (cobrando) return;
+    if (cobrando || conQr) return;
+    if (medio === "mercadopago") {
+      // La venta se guarda cuando el cliente paga el QR (ver CobroConQr)
+      setConQr(true);
+      return;
+    }
     setCobrando(true);
     let venta: Venta;
     try {
@@ -49,8 +66,13 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
     } finally {
       setCobrando(false);
     }
+    terminar(venta);
+  }
+
+  /** Lo que se hace con cada venta cobrada: avisar, vaciar el carrito y el ticket si lo pidió. */
+  function terminar(venta: Venta) {
     avisar(
-      `Venta N° ${venta.numero} cobrada: ${pesos(venta.total)} en ${MEDIOS_DE_PAGO[medio].toLowerCase()}.` +
+      `Venta N° ${venta.numero} cobrada: ${pesos(venta.total)} ${venta.medioPago === "mercadopago" ? "con Mercado Pago" : `en ${MEDIOS_DE_PAGO[venta.medioPago].toLowerCase()}`}.` +
         (vuelto ? ` Vuelto: ${pesos(vuelto)}.` : "") +
         (venta.descuento ? ` El cliente ahorró ${pesos(venta.descuento)} con las promos.` : ""),
     );
@@ -73,7 +95,7 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
         <fieldset>
           <legend className="mb-2 text-sm text-texto-suave">Medio de pago</legend>
           <div className="flex flex-wrap gap-2">
-            {(Object.keys(MEDIOS_DE_PAGO) as MedioDePago[]).map((m) => {
+            {medios.map((m) => {
               const Icono = ICONO_MEDIO[m];
               const elegido = m === medio;
               return (
@@ -174,10 +196,27 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
             disabled={vacio || falta > 0 || cobrando}
             className="flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-8 py-3 text-lg font-semibold text-primary-texto shadow-sm hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
           >
-            {cobrando ? "Cobrando…" : "Cobrar"}
+            {cobrando ? "Cobrando…" : medio === "mercadopago" ? "Mostrar QR" : "Cobrar"}
           </button>
         </div>
       </div>
+
+      {conQr && (
+        <CobroConQr
+          comercioId={comercioId}
+          items={items}
+          cuenta={cuenta}
+          vendidoPor={sesion?.nombre ?? ""}
+          alPagar={(venta) => {
+            setConQr(false);
+            terminar(venta);
+          }}
+          alCerrar={(motivo) => {
+            setConQr(false);
+            if (motivo) avisar(motivo, "error");
+          }}
+        />
+      )}
     </div>
   );
 }
