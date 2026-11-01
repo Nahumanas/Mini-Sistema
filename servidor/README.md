@@ -1,4 +1,4 @@
-# API de Mantenete (paso 5, etapa 4)
+# API de Mantenete (paso 5)
 
 La página (Vercel) le pide los datos a esta API y la API los guarda en Supabase.
 Hecha con **FastAPI** (Python). Está publicada en **Render** (plan gratis para probar).
@@ -11,6 +11,21 @@ Hecha con **FastAPI** (Python). Está publicada en **Render** (plan gratis para 
 4. Los precios y costos de una venta salen de la base, no de la página.
 5. El **PIN de jefe** se comprueba acá: su huella (PBKDF2) nunca sale de la base, y después de 5 errores seguidos se traba un minuto.
 
+## Cifrado (etapa 5, parte 1: las llaves)
+
+Ni Supabase ni alguien con una copia de la base pueden abrir las llaves: falta la **pimienta** (solo en Render) y el PIN,
+o la **frase de recuperación** que el dueño anotó en papel. Todo el detalle está en `app/cifrado.py` y en la migración
+`20261101000000_cifrado_llaves.sql`.
+
+- Cada dueño tiene una **clave al azar**, guardada envuelta dos veces: con su PIN (+ pimienta) y con su frase. Cambiar el PIN solo la vuelve a envolver.
+- Cada comercio tiene **su propia clave**, envuelta con la del dueño y, si el jefe lo eligió, con el **código de empleados** (6 números, + pimienta).
+- Al poner el PIN (o el código) la API devuelve una **llave de sesión**: esas claves dentro de un sobre que solo la API puede abrir (`SECRETO_SESION`). La página la manda en el encabezado `X-Llave`. Vence a las 12 horas y no sirve con otra cuenta de Gmail.
+- Sin llave, o con una vencida, la API contesta **423** y la página tiene que volver a pedir el PIN o el código.
+- Si faltan los secretos en Render, lo del cifrado contesta **503** y lo demás sigue andando.
+- **Si el dueño pierde el PIN y la frase, pierde los datos.** Por eso al activar tiene que marcar la casilla que lo dice. Las copias de la base tienen que incluir `cifrado_duenos` y `claves_comercio`.
+- Con el cifrado activado, borrar el PIN desde Supabase ya no alcanza: el dueño elige uno nuevo con su frase ("Me olvidé el PIN").
+- Lo que todavía no se cifra (parte 3): los datos de los comercios (ventas, productos, socios...).
+
 ## Qué hace
 
 | Pedido | Para qué |
@@ -18,8 +33,12 @@ Hecha con **FastAPI** (Python). Está publicada en **Render** (plan gratis para 
 | `GET /salud` | Ver si la API está viva y llega a la base |
 | `GET /inicio` | Todo lo que la página necesita al entrar, en un solo pedido (comercios, empleados, productos, promos, proveedores, tandas con stock, y cajas, relevos, ajustes, ventas, compras, gastos y retiros de los últimos 62 días; del gimnasio: actividades, planes, grilla, reglas, socios, reservas y entradas de 62 días y cuotas del último año) |
 | `GET /yo` | La ficha del dueño conectado (403 si no fue invitado) |
-| `POST /yo/pin/verificar`, `PUT /yo/pin` | Comprobar el PIN de jefe; elegirlo la primera vez o cambiarlo (pide el actual) |
-| `GET/POST /comercios`, `PATCH /comercios/{id}` | Mis comercios (datos, permisos de empleados, horarios y turnos) |
+| `POST /yo/pin/verificar`, `PUT /yo/pin` | Comprobar el PIN de jefe (con cifrado, devuelve la llave de sesión); elegirlo la primera vez o cambiarlo (pide el actual) |
+| `GET /yo/cifrado`, `GET /yo/cifrado/frase-nueva`, `POST /yo/cifrado/activar` | Cifrado: ver si está activado, la frase para anotar y activarlo (PIN + frase + casilla; crea las claves de todos sus comercios) |
+| `POST /yo/pin/recuperar` | "Me olvidé el PIN": con la frase elige uno nuevo (la frase también se traba con 5 errores) |
+| `GET /yo/llave` | Si la llave de sesión todavía sirve y qué comercios abre |
+| `PUT /comercios/{id}/codigo-empleados`, `POST /comercios/{id}/llave-empleado` | El jefe elige el código de empleados de un comercio (pide el PIN otra vez); el empleado pone el código y recibe la llave de ese comercio solo |
+| `GET/POST /comercios`, `PATCH /comercios/{id}` | Mis comercios (datos, permisos de empleados, horarios y turnos). Con cifrado, crear uno pide la llave del jefe |
 | `POST /comercios/{id}/empleados`, `DELETE /empleados/{id}` | Empleados (quitar = queda inactivo, no se borra) |
 | `GET/POST /comercios/{id}/productos`, `PATCH /productos/{id}` | Productos |
 | `POST /comercios/{id}/productos/importar` | La lista del Excel: crea o actualiza por código, todo o nada |
@@ -51,6 +70,8 @@ Con la API corriendo, la lista completa está en `/docs`.
 | `SUPABASE_URL` | Supabase → Project URL (`https://xxxx.supabase.co`) | No |
 | `PYTHON_VERSION` | `3.13.1` (Render) | No |
 | `SUPABASE_JWT_SECRET` | Solo si el proyecto firma con el secreto viejo (HS256): Supabase → Project Settings → JWT Keys | **Sí** |
+| `PIMIENTA_CIFRADO` | Botón **Generate** de Render (32 caracteres o más). **No se cambia nunca** y se guarda una copia en papel: si se pierde, los PIN dejan de abrir los datos y cada dueño tiene que usar su frase | **Sí** |
+| `SECRETO_SESION` | Botón **Generate** de Render. Si se cambia no se pierde nada: todos vuelven a poner su PIN o código | **Sí** |
 
 Y en **Vercel**, para que la página use la API: `NEXT_PUBLIC_API_URL` = la dirección de la API (no es secreta).
 Sin esa variable la página sigue como demo aunque el dueño entre con Gmail.

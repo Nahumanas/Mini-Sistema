@@ -42,6 +42,10 @@ insert into public.ventas_detalle (comercio_id, venta_id, producto_id, nombre, c
   select v.comercio_id, v.id, p.id, 'Alfajor', 1, 1500, 900 from public.ventas v join public.productos p on p.comercio_id = v.comercio_id;
 insert into public.gastos (comercio_id, fecha, categoria, monto) select id, current_date, 'Luz', 20000 from public.comercios;
 insert into public.socios (comercio_id, nombre, dni) select id, 'Lucía', '30000000' from public.comercios;
+-- Las llaves del cifrado de Ana (envueltas: acá van textos de ejemplo).
+insert into public.cifrado_duenos (dueno_id, sal_pin, clave_pin, sal_frase, clave_frase, aceptado_en)
+  select id, 'sal', 'v1:envuelta', 'sal', 'v1:envuelta', now() from public.duenos;
+insert into public.claves_comercio (comercio_id, clave_dueno) select id, 'v1:envuelta' from public.comercios;
 
 do $$ begin
   if (select count(*) from public.ventas) <> 1 then raise exception 'FALLA: Ana no ve su propia venta'; end if;
@@ -77,7 +81,7 @@ begin
   -- 1) Beto no ve NADA de Ana en ninguna tabla.
   if (select count(*) from public.duenos) <> 1 then raise exception 'FALLA: Beto ve fichas de otros dueños'; end if;
   if (select count(*) from public.comercios) <> 1 then raise exception 'FALLA: Beto ve comercios ajenos'; end if;
-  foreach t in array array['productos','cajas','ventas','ventas_detalle','gastos','socios'] loop
+  foreach t in array array['productos','cajas','ventas','ventas_detalle','gastos','socios','cifrado_duenos','claves_comercio'] loop
     execute format('select count(*) from public.%I', t) into n;
     if n <> 0 then raise exception 'FALLA: Beto ve % filas de % de Ana', n, t; end if;
   end loop;
@@ -92,6 +96,26 @@ do $$ begin
   begin
     insert into public.gastos (comercio_id, fecha, categoria, monto) values (1, current_date, 'Otro', 1);
     raise exception 'FALLA: Beto pudo cargar un gasto en el comercio de Ana';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
+-- 3b) Beto no puede pisar las llaves de Ana (ni la del dueño ni la del comercio).
+do $$
+declare n bigint;
+begin
+  update public.claves_comercio set clave_dueno = 'v1:trucha' where comercio_id = 1;
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FALLA: Beto pudo cambiar la llave del comercio de Ana'; end if;
+  begin
+    insert into public.cifrado_duenos (dueno_id, sal_pin, clave_pin, sal_frase, clave_frase, aceptado_en)
+      values (1, 's', 'v1:trucha', 's', 'v1:trucha', now());
+    raise exception 'FALLA: Beto pudo cargar llaves a nombre de Ana';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.claves_comercio;
+    raise exception 'FALLA: se pudieron borrar llaves desde la web';
   exception when insufficient_privilege then null;
   end;
 end $$;

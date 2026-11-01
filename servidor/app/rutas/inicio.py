@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario
 from ..formato import a_camel
-from .cuenta import SIN_CUENTA
+from ..llaves import SIN_CUENTA
 from .compras import con_items as compras_con_items
 from .ventas import con_items
 
@@ -22,7 +22,9 @@ def inicio(usuario: Usuario = Depends(usuario_actual)):
     cada pedido de más se nota). El RLS hace que cada dueño reciba solo lo suyo."""
     with como_usuario(usuario) as con:
         dueno = con.execute(
-            "select nombre, email, pin_huella is not null as pin_configurado from public.duenos"
+            """select nombre, email, pin_huella is not null as pin_configurado,
+                      exists (select 1 from public.cifrado_duenos) as cifrado_activo
+               from public.duenos"""
         ).fetchone()
         if dueno is None:
             raise HTTPException(403, SIN_CUENTA)

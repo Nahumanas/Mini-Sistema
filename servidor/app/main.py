@@ -6,12 +6,14 @@ Documentación automática:   http://localhost:8000/docs
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from . import config
 from .base import cerrar_pool, pool
-from .rutas import caja, clases, comercios, compras, cuenta, inicio, productos, promos, socios, vencimientos, ventas
+from .cifrado import FaltaConfigurar
+from .rutas import caja, clases, comercios, compras, cuenta, inicio, productos, promos, seguridad, socios, vencimientos, ventas
 
 
 @asynccontextmanager
@@ -27,8 +29,15 @@ app.add_middleware(
     allow_origins=config.ORIGENES_PERMITIDOS,
     allow_origin_regex=config.ORIGENES_VISTA_PREVIA,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-Llave"],
 )
+
+
+@app.exception_handler(FaltaConfigurar)
+def cifrado_sin_configurar(_pedido: Request, error: FaltaConfigurar):
+    """Faltan PIMIENTA_CIFRADO o SECRETO_SESION en Render: lo demás de la API sigue andando."""
+    print(f"Cifrado sin configurar: {error}", flush=True)
+    return JSONResponse(status_code=503, content={"detail": "El cifrado todavía no está listo en el servidor. Avisale a Nahuel."})
 
 
 @app.get("/salud", tags=["Salud"])
@@ -39,5 +48,5 @@ def salud():
     return {"ok": True}
 
 
-for modulo in (inicio, cuenta, comercios, productos, caja, ventas, compras, vencimientos, promos, socios, clases):
+for modulo in (inicio, cuenta, seguridad, comercios, productos, caja, ventas, compras, vencimientos, promos, socios, clases):
     app.include_router(modulo.router)

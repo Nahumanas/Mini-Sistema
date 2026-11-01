@@ -47,4 +47,12 @@ Crea una base de prueba, imita lo mínimo de Supabase, carga las tablas, corre l
 
 - Con `NEXT_PUBLIC_API_URL` cargada en Vercel, el dueño que entra con Gmail trabaja con sus datos de la base (por la API de `servidor/`). Sin ella, sigue viendo la demo.
 - La primera vez, la página le pide **crear su primer comercio** y **elegir su PIN de jefe** (en la nube no existe el 1234 de la demo).
-- **Si un dueño se olvida el PIN**: en el SQL Editor, `update public.duenos set pin_sal = null, pin_huella = null where email = 'su@gmail.com';`. La próxima vez que entre como jefe elige uno nuevo.
+- **Si un dueño se olvida el PIN** (y todavía no activó el cifrado): en el SQL Editor, `update public.duenos set pin_sal = null, pin_huella = null where email = 'su@gmail.com';`. La próxima vez que entre como jefe elige uno nuevo. Con el cifrado activado eso ya no alcanza: elige el PIN nuevo con su frase de recuperación.
+
+## Cifrado: las llaves (etapa 5, parte 1)
+
+- `20261101000000_cifrado_llaves.sql` agrega dos tablas: `cifrado_duenos` (la clave de cada dueño, envuelta con su PIN y con su frase) y `claves_comercio` (la clave de cada comercio, envuelta con la del dueño y con el código de empleados).
+- Ahí **no hay ninguna clave que sirva sola**: para abrirlas falta la pimienta, que vive solo en Render (`PIMIENTA_CIFRADO`).
+- Tienen RLS como todas: cada dueño ve y cambia solo las suyas, y no se pueden borrar desde la web.
+- **Las copias de la base tienen que incluir estas dos tablas.** Sin ellas, los datos cifrados no se abren ni con la frase.
+- Para pasarla a Supabase: después del merge, SQL Editor → New query → pegar el archivo → Run.
