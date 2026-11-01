@@ -98,7 +98,7 @@ def activar(datos: Activacion, usuario: Usuario = Depends(usuario_actual)):
     if not correcto:
         raise HTTPException(403, "El PIN de jefe no es correcto.")
     if not cifrado.frase_valida(datos.frase):
-        raise HTTPException(422, "La frase de recuperación no es válida: copiala tal cual te la mostramos.")
+        raise HTTPException(422, "El código de recuperación no es válido: copialo tal cual te lo mostramos.")
 
     clave_dueno = cifrado.nueva_clave()
     sal_pin, clave_pin = cifrado.envolver_con_secreto(clave_dueno, datos.pin, cifrado.contexto_dueno(ficha["id"], "pin"))
@@ -124,12 +124,12 @@ def activar(datos: Activacion, usuario: Usuario = Depends(usuario_actual)):
 def recuperar(datos: Recuperacion, usuario: Usuario = Depends(usuario_actual)):
     """"Me olvidé el PIN": con la frase de recuperación se abre la clave del dueño y se envuelve con un PIN nuevo."""
     traba = f"{usuario.id}|frase"
-    revisar_traba(traba, "la frase")
+    revisar_traba(traba, "el código de recuperación")
     validar_pin_nuevo(datos.nuevo)
     with como_usuario(usuario) as con:
         ficha = ficha_del_dueno(con)
     if ficha["clave_frase"] is None:
-        raise HTTPException(409, "Tu cuenta todavía no tiene frase de recuperación. Para cambiar el PIN avisale a Nahuel.")
+        raise HTTPException(409, "Tu cuenta todavía no tiene código de recuperación. Para cambiar el PIN avisale a Nahuel.")
     frase = cifrado.normalizar_frase(datos.frase)
     try:
         if len(frase) != cifrado.LARGO_FRASE:
@@ -139,7 +139,7 @@ def recuperar(datos: Recuperacion, usuario: Usuario = Depends(usuario_actual)):
         )
     except ClaveIncorrecta as error:
         anotar_intento(traba, False)
-        raise HTTPException(403, "La frase no es correcta. Revisá que esté igual a la que anotaste.") from error
+        raise HTTPException(403, "El código de recuperación no es correcto. Revisá que esté igual al que anotaste.") from error
     anotar_intento(traba, True)
 
     sal_pin, clave_pin = cifrado.envolver_con_secreto(clave_dueno, datos.nuevo, cifrado.contexto_dueno(ficha["id"], "pin"))

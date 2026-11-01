@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import { api, hayApi } from "@/lib/api";
+import { api, ErrorDeApi, hayApi } from "@/lib/api";
 import { llaveGuardada } from "@/lib/llave";
 import { hayNube } from "@/lib/supabase";
 import { useCarrito } from "./carrito";
@@ -13,6 +13,26 @@ import { useDatos } from "./datos";
 // Sin cuenta (o sin API), todo sigue como demo con los datos del navegador.
 //
 // apagada: demo · cargando: pidiendo los datos · lista: trabajando con la nube · error: no se pudo
+
+/**
+ * Lo que trae /inicio. Los datos del negocio vienen cifrados en la base: la API los abre solo si la página
+ * manda la llave (la que da el PIN de jefe o el código de empleados). Sin llave vienen solo los comercios y
+ * los empleados (lo que hace falta para la pantalla de ingreso). Si la llave guardada ya no sirve (423),
+ * pedir() la borra sola y se pide de nuevo sin ella.
+ */
+async function traerInicio() {
+  try {
+    return await api.inicio();
+  } catch (err) {
+    if (err instanceof ErrorDeApi && err.estado === 423) return api.inicio();
+    throw err;
+  }
+}
+
+/** Después de poner el PIN o el código (ya hay llave): se traen los datos del negocio, ahora abiertos. */
+export async function traerDatosConLlave() {
+  useDatos.getState().usarNube(await traerInicio());
+}
 
 type EstadoNube = {
   estado: "apagada" | "cargando" | "lista" | "error";
@@ -31,7 +51,7 @@ export const useNube = create<EstadoNube>()((set, get) => ({
     try {
       // Primero se lee la demo guardada (si no, se leería después y pisaría los datos de la nube)
       if (!useDatos.persist.hasHydrated()) await useDatos.persist.rehydrate();
-      const datos = await api.inicio();
+      const datos = await traerInicio();
       const cambiaDeModo = useDatos.getState().modo !== "nube";
       useDatos.getState().usarNube(datos);
       if (cambiaDeModo) useCarrito.setState({ carritos: {} }); // lo que se estaba vendiendo en la demo no sigue

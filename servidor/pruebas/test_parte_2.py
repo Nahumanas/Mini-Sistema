@@ -23,7 +23,7 @@ def test_inicio_trae_todo_lo_del_dueno_y_nada_de_otro(cliente):
     cliente.post(f"/comercios/{cid}/empleados", json={"nombre": "Martina"}, headers=ana)
 
     datos = cliente.get("/inicio", headers=ana).json()
-    assert datos["dueno"] == {"nombre": "", "email": "ana.inicio@gmail.com", "pinConfigurado": False, "cifradoActivo": False}
+    assert datos["dueno"] == {"nombre": "", "email": "ana.inicio@gmail.com", "pinConfigurado": True, "cifradoActivo": True}
     assert [c["nombre"] for c in datos["comercios"]] == ["Kiosco de Ana"]
     assert [e["nombre"] for e in datos["empleados"]] == ["Martina"]
     assert datos["productos"][0]["stock"] == 8
@@ -43,8 +43,8 @@ def test_inicio_trae_todo_lo_del_dueno_y_nada_de_otro(cliente):
 
 
 def test_pin_de_jefe(cliente):
-    ana = crear_usuario("ana.pin@gmail.com")
-    beto = crear_usuario("beto.pin@gmail.com")
+    ana = crear_usuario("ana.pin@gmail.com", cifrado=False)
+    beto = crear_usuario("beto.pin@gmail.com", cifrado=False)
     # Sin PIN elegido no hay PIN correcto (en la nube no existe el 1234 de la demo)
     assert cliente.post("/yo/pin/verificar", json={"pin": "1234"}, headers=ana).json() == {"ok": False}
 
@@ -71,7 +71,7 @@ def test_pin_de_jefe(cliente):
 
 
 def test_pin_se_traba_despues_de_varios_errores(cliente):
-    ana = crear_usuario("ana.traba@gmail.com")
+    ana = crear_usuario("ana.traba@gmail.com", cifrado=False)
     cliente.put("/yo/pin", json={"nuevo": "4826"}, headers=ana)
     for _ in range(5):
         assert cliente.post("/yo/pin/verificar", json={"pin": "0001"}, headers=ana).json() == {"ok": False}

@@ -11,10 +11,12 @@ from pydantic import BaseModel, Field
 from .. import gimnasio as g
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario
+from ..cifrado import Llave
 from ..formato import a_camel
+from ..llaves import llave_requerida
+from ..sobres import Cofre
 from .clases import Cambios, DatosClase, cancelar_las_que_vienen, plan_de, reglas_de, revisar_disciplina
-from .comun import comercio_mio
-from .ventas import con_items
+from .ventas import con_items, insertar_detalle, insertar_venta
 
 router = APIRouter(tags=["Gimnasio: socios, cuotas y planes"])
 
@@ -100,76 +102,91 @@ def _validar_socio(d: DatosSocio) -> dict:
     return {"nombre": nombre[:100], "dni": dni, "telefono": d.telefono.strip()[:30], "email": email, "nota": d.nota.strip()[:200]}
 
 
-def _socio_trabado(con, socio_id: int) -> dict:
+def _socio_trabado(con, cofre: Cofre, socio_id: int) -> dict:
     socio = con.execute("select comercio_id from public.socios where id = %s", (socio_id,)).fetchone()
     if socio is None:
         raise HTTPException(404, "No se encontró el socio.")
-    comercio_mio(con, socio["comercio_id"], bloquear=True)
-    return con.execute("select * from public.socios where id = %s for update", (socio_id,)).fetchone()
+    cofre.comercio(socio["comercio_id"], bloquear=True)
+    return cofre.abrir("socios", con.execute("select * from public.socios where id = %s for update", (socio_id,)).fetchone())
+
+
+def _con_dni(con, cofre: Cofre, comercio_id: int, dni: str, sin_id: int | None = None) -> dict | None:
+    """El socio de ese comercio con ese DNI (por la huella: el DNI está cifrado), ya abierto."""
+    return cofre.abrir("socios", con.execute(
+        "select * from public.socios where comercio_id = %s and huella_dni = %s and id is distinct from %s",
+        (comercio_id, cofre.huella(comercio_id, "socios.dni", dni), sin_id),
+    ).fetchone())
+
+
+def _sobre_socio(cofre: Cofre, comercio_id: int, d: dict) -> tuple[str, str]:
+    """(huella del DNI, sobre) de un socio."""
+    return cofre.huella(comercio_id, "socios.dni", d["dni"]), cofre.cerrar("socios", comercio_id, d)
 
 
 @router.post("/comercios/{comercio_id}/socios", status_code=201)
-def crear_socio(comercio_id: int, datos: DatosSocio, usuario: Usuario = Depends(usuario_actual)):
+def crear_socio(comercio_id: int, datos: DatosSocio, usuario: Usuario = Depends(usuario_actual),
+                llave: Llave = Depends(llave_requerida)):
     d = _validar_socio(datos)
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id, bloquear=True)
-        repetido = con.execute(
-            "select nombre from public.socios where comercio_id = %s and dni = %s", (comercio_id, d["dni"])
-        ).fetchone()
+        cofre = Cofre(con, llave)
+        cofre.comercio(comercio_id, bloquear=True)
+        repetido = _con_dni(con, cofre, comercio_id, d["dni"])
         if repetido:
             raise HTTPException(409, f"Ya hay un socio con el DNI {d['dni']}: {repetido['nombre']}.")
         fila = con.execute(
-            """insert into public.socios (comercio_id, nombre, dni, telefono, email, nota, alta)
-               values (%s, %s, %s, %s, %s, %s, %s) returning *""",
-            (comercio_id, d["nombre"], d["dni"], d["telefono"], d["email"], d["nota"], g.hoy()),
+            "insert into public.socios (comercio_id, huella_dni, sobre, alta) values (%s, %s, %s, %s) returning *",
+            (comercio_id, *_sobre_socio(cofre, comercio_id, d), g.hoy()),
         ).fetchone()
-    return a_camel(fila)
+        return a_camel(cofre.abrir("socios", fila))
 
 
 @router.patch("/socios/{socio_id}")
-def actualizar_socio(socio_id: int, datos: DatosSocio, usuario: Usuario = Depends(usuario_actual)):
+def actualizar_socio(socio_id: int, datos: DatosSocio, usuario: Usuario = Depends(usuario_actual),
+                     llave: Llave = Depends(llave_requerida)):
     d = _validar_socio(datos)
     with como_usuario(usuario) as con:
-        socio = _socio_trabado(con, socio_id)
-        otro = con.execute(
-            "select nombre from public.socios where comercio_id = %s and dni = %s and id <> %s",
-            (socio["comercio_id"], d["dni"], socio_id),
-        ).fetchone()
+        cofre = Cofre(con, llave)
+        socio = _socio_trabado(con, cofre, socio_id)
+        otro = _con_dni(con, cofre, socio["comercio_id"], d["dni"], socio_id)
         if otro:
             raise HTTPException(409, f"Ese DNI ya es de otro socio: {otro['nombre']}.")
         fila = con.execute(
-            "update public.socios set nombre = %s, dni = %s, telefono = %s, email = %s, nota = %s where id = %s returning *",
-            (d["nombre"], d["dni"], d["telefono"], d["email"], d["nota"], socio_id),
+            "update public.socios set huella_dni = %s, sobre = %s where id = %s returning *",
+            (*_sobre_socio(cofre, socio["comercio_id"], d), socio_id),
         ).fetchone()
-    return a_camel(fila)
+        return a_camel(cofre.abrir("socios", fila))
 
 
 @router.post("/socios/{socio_id}/baja")
-def dar_de_baja(socio_id: int, datos: HechaPor, usuario: Usuario = Depends(usuario_actual)):
+def dar_de_baja(socio_id: int, datos: HechaPor, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
     """No se borra nada: deja de figurar entre los activos y sus reservas que vienen se cancelan."""
     with como_usuario(usuario) as con:
-        _socio_trabado(con, socio_id)
+        cofre = Cofre(con, llave)
+        _socio_trabado(con, cofre, socio_id)
         cambios = Cambios()
-        canceladas = cancelar_las_que_vienen(con, "socio_id", socio_id, datos.hechaPor, False, cambios)
+        canceladas = cancelar_las_que_vienen(con, cofre, "socio_id", socio_id, datos.hechaPor, False, cambios)
         con.execute("update public.socios set activo = false where id = %s", (socio_id,))
         cambios.socios.add(socio_id)
-        return {"canceladas": canceladas, **cambios.respuesta(con)}
+        return {"canceladas": canceladas, **cambios.respuesta(con, cofre)}
 
 
 @router.post("/socios/{socio_id}/reactivar")
-def reactivar_socio(socio_id: int, usuario: Usuario = Depends(usuario_actual)):
+def reactivar_socio(socio_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
     with como_usuario(usuario) as con:
-        _socio_trabado(con, socio_id)
+        cofre = Cofre(con, llave)
+        _socio_trabado(con, cofre, socio_id)
         fila = con.execute("update public.socios set activo = true where id = %s returning *", (socio_id,)).fetchone()
-    return a_camel(fila)
+        return a_camel(cofre.abrir("socios", fila))
 
 
 @router.post("/comercios/{comercio_id}/socios/importar")
-def importar_socios(comercio_id: int, datos: Importacion, usuario: Usuario = Depends(usuario_actual)):
+def importar_socios(comercio_id: int, datos: Importacion, usuario: Usuario = Depends(usuario_actual),
+                    llave: Llave = Depends(llave_requerida)):
     """El Excel de socios, todo o nada. Si el DNI ya está, se actualizan sus datos (sin borrar lo que venga
     vacío). Si trae plan y vencimiento, se le cargan las clases de un mes de ese plan."""
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id, bloquear=True)
+        cofre = Cofre(con, llave)
+        cofre.comercio(comercio_id, bloquear=True)
         planes = {p["id"]: p for p in con.execute("select * from public.planes where comercio_id = %s", (comercio_id,)).fetchall()}
         nuevos = actualizados = 0
         ids = []
@@ -182,29 +199,27 @@ def importar_socios(comercio_id: int, datos: Importacion, usuario: Usuario = Dep
                 raise HTTPException(422, f"Fila {i}: ese plan no es de este gimnasio.")
             plan = planes.get(fila.planId)
             clases = plan["cantidad_clases"] if plan and plan["cantidad_clases"] is not None and fila.vence else None
-            existe = con.execute(
-                "select id from public.socios where comercio_id = %s and dni = %s", (comercio_id, d["dni"])
-            ).fetchone()
+            existe = _con_dni(con, cofre, comercio_id, d["dni"])
             if existe:
+                # Lo que viene vacío en el Excel no borra lo que ya estaba
+                d = {**d, **{k: existe[k] for k in ("nombre", "telefono", "email") if not d[k]}, "nota": existe["nota"]}
                 con.execute(
-                    """update public.socios set
-                         nombre = coalesce(nullif(%s, ''), nombre), telefono = coalesce(nullif(%s, ''), telefono),
-                         email = coalesce(nullif(%s, ''), email), plan_id = coalesce(%s, plan_id), vence = coalesce(%s, vence),
+                    """update public.socios set sobre = %s, plan_id = coalesce(%s, plan_id), vence = coalesce(%s, vence),
                          clases_restantes = coalesce(%s, clases_restantes), activo = true
                        where id = %s""",
-                    (d["nombre"], d["telefono"], d["email"], fila.planId, fila.vence, clases, existe["id"]),
+                    (cofre.cerrar("socios", comercio_id, d), fila.planId, fila.vence, clases, existe["id"]),
                 )
                 ids.append(existe["id"])
                 actualizados += 1
             else:
                 ids.append(con.execute(
-                    """insert into public.socios (comercio_id, nombre, dni, telefono, email, plan_id, vence, clases_restantes, alta)
-                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s) returning id""",
-                    (comercio_id, d["nombre"], d["dni"], d["telefono"], d["email"], fila.planId, fila.vence, clases or 0, g.hoy()),
+                    """insert into public.socios (comercio_id, huella_dni, sobre, plan_id, vence, clases_restantes, alta)
+                       values (%s, %s, %s, %s, %s, %s, %s) returning id""",
+                    (comercio_id, *_sobre_socio(cofre, comercio_id, {**d, "nota": ""}), fila.planId, fila.vence, clases or 0, g.hoy()),
                 ).fetchone()["id"])
                 nuevos += 1
         socios = con.execute("select * from public.socios where id = any(%s) order by id", (ids,)).fetchall()
-        return {"nuevos": nuevos, "actualizados": actualizados, "socios": [a_camel(s) for s in socios]}
+        return {"nuevos": nuevos, "actualizados": actualizados, "socios": [a_camel(s) for s in cofre.abrir_todas("socios", socios)]}
 
 
 # -----------------------------------------------------------------------------
@@ -213,11 +228,13 @@ def importar_socios(comercio_id: int, datos: Importacion, usuario: Usuario = Dep
 
 
 @router.post("/comercios/{comercio_id}/cuotas", status_code=201)
-def cobrar_cuota(comercio_id: int, datos: NuevaCuota, usuario: Usuario = Depends(usuario_actual)):
+def cobrar_cuota(comercio_id: int, datos: NuevaCuota, usuario: Usuario = Depends(usuario_actual),
+                 llave: Llave = Depends(llave_requerida)):
     """La cuota entra a la caja abierta como una venta (suma en el arqueo y en el cierre), y el socio queda
     con el plan, el vencimiento y las clases nuevas. Todo junto o nada."""
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id, bloquear=True)
+        cofre = Cofre(con, llave)
+        cofre.comercio(comercio_id, bloquear=True)
         caja = con.execute(
             """select id, (abierta at time zone 'America/Argentina/Buenos_Aires')::date as dia
                from public.cajas where comercio_id = %s and cerrada is null""",
@@ -232,45 +249,36 @@ def cobrar_cuota(comercio_id: int, datos: NuevaCuota, usuario: Usuario = Depends
         ).fetchone()
         if socio is None:
             raise HTTPException(404, "No se encontró el socio.")
-        plan = con.execute(
+        plan = cofre.abrir("planes", con.execute(
             "select * from public.planes where id = %s and comercio_id = %s", (datos.planId, comercio_id)
-        ).fetchone()
+        ).fetchone())
         if plan is None or not plan["activo"]:
             raise HTTPException(409, "Ese plan ya no se ofrece.")
         if datos.vence < g.hoy():
             raise HTTPException(422, "La fecha de vencimiento no puede ser anterior a hoy.")
-        c = g.calcular_cuota(reglas_de(con, comercio_id), plan, socio, plan_de(con, socio["plan_id"]), g.hoy())
+        c = g.calcular_cuota(reglas_de(con, comercio_id), plan, socio, plan_de(con, cofre, socio["plan_id"]), g.hoy())
 
         precio = plan["precio"]
         monto = Decimal(str(datos.monto))
-        numero = con.execute(
-            "select coalesce(max(numero), 0) + 1 as n from public.ventas where comercio_id = %s", (comercio_id,)
-        ).fetchone()["n"]
-        venta = con.execute(
-            """insert into public.ventas (comercio_id, numero, caja_id, subtotal, descuento, total, medio_pago, vendido_por)
-               values (%s, %s, %s, %s, %s, %s, %s, %s) returning *""",
-            (comercio_id, numero, caja["id"], precio, max(precio - monto, 0), monto, datos.medioPago, datos.cobradaPor.strip()),
-        ).fetchone()
-        con.execute(
-            """insert into public.ventas_detalle (comercio_id, venta_id, nombre, categoria, cantidad, precio_unitario, costo_unitario)
-               values (%s, %s, %s, 'Cuotas', 1, %s, 0)""",
-            (comercio_id, venta["id"], f"Cuota {plan['nombre']}", precio),
-        )
+        venta = insertar_venta(con, cofre, comercio_id, caja["id"], datos.medioPago, datos.cobradaPor.strip(),
+                               precio, max(precio - monto, Decimal(0)), monto, [])
+        insertar_detalle(con, cofre, comercio_id, venta["id"], None, 1, f"Cuota {plan['nombre']}", "Cuotas", precio, 0)
         cuota = con.execute(
-            """insert into public.cuotas (comercio_id, socio_id, plan_id, venta_id, caja_id, fecha, monto, medio_pago, cobrada_por,
-                                         vence_antes, vence_nuevo, clases_cargadas, clases_despues)
+            """insert into public.cuotas (comercio_id, socio_id, plan_id, venta_id, caja_id, fecha, medio_pago, cobrada_por,
+                                         vence_antes, vence_nuevo, clases_cargadas, clases_despues, sobre)
                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) returning *""",
-            (comercio_id, socio["id"], plan["id"], venta["id"], caja["id"], venta["fecha"], monto, datos.medioPago,
-             datos.cobradaPor.strip(), socio["vence"], datos.vence, c["clases_cargadas"], c["clases"]),
+            (comercio_id, socio["id"], plan["id"], venta["id"], caja["id"], venta["fecha"], datos.medioPago,
+             datos.cobradaPor.strip(), socio["vence"], datos.vence, c["clases_cargadas"], c["clases"],
+             cofre.cerrar("cuotas", comercio_id, {"monto": monto})),
         ).fetchone()
         socio = con.execute(
             "update public.socios set plan_id = %s, vence = %s, clases_restantes = %s, activo = true where id = %s returning *",
             (plan["id"], datos.vence, c["clases"], socio["id"]),
         ).fetchone()
         return {
-            "cuota": a_camel(cuota),
-            "venta": con_items(con, [venta])[0],
-            "socio": a_camel(socio),
+            "cuota": a_camel(cofre.abrir("cuotas", cuota)),
+            "venta": con_items(con, cofre, [venta])[0],
+            "socio": a_camel(cofre.abrir("socios", socio)),
             "clases": c["clases"],
             "clasesQueSePierden": c["se_pierden"],
         }
@@ -292,9 +300,10 @@ def _nombre_disciplina(con, comercio_id: int, nombre: str, sin_id: int | None = 
 
 
 @router.post("/comercios/{comercio_id}/disciplinas", status_code=201)
-def crear_disciplina(comercio_id: int, datos: DatosDisciplina, usuario: Usuario = Depends(usuario_actual)):
+def crear_disciplina(comercio_id: int, datos: DatosDisciplina, usuario: Usuario = Depends(usuario_actual),
+                     llave: Llave = Depends(llave_requerida)):
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id, bloquear=True)
+        Cofre(con, llave).comercio(comercio_id, bloquear=True)
         nombre = _nombre_disciplina(con, comercio_id, datos.nombre)
         fila = con.execute(
             "insert into public.disciplinas (comercio_id, nombre) values (%s, %s) returning *", (comercio_id, nombre)
@@ -303,12 +312,13 @@ def crear_disciplina(comercio_id: int, datos: DatosDisciplina, usuario: Usuario 
 
 
 @router.patch("/disciplinas/{disciplina_id}")
-def actualizar_disciplina(disciplina_id: int, datos: DatosDisciplina, usuario: Usuario = Depends(usuario_actual)):
+def actualizar_disciplina(disciplina_id: int, datos: DatosDisciplina, usuario: Usuario = Depends(usuario_actual),
+                          llave: Llave = Depends(llave_requerida)):
     with como_usuario(usuario) as con:
         d = con.execute("select comercio_id from public.disciplinas where id = %s", (disciplina_id,)).fetchone()
         if d is None:
             raise HTTPException(404, "No se encontró la actividad.")
-        comercio_mio(con, d["comercio_id"], bloquear=True)
+        Cofre(con, llave).comercio(d["comercio_id"], bloquear=True)
         nombre = _nombre_disciplina(con, d["comercio_id"], datos.nombre, disciplina_id)
         fila = con.execute(
             "update public.disciplinas set nombre = %s, activa = %s where id = %s returning *", (nombre, datos.activa, disciplina_id)
@@ -316,7 +326,8 @@ def actualizar_disciplina(disciplina_id: int, datos: DatosDisciplina, usuario: U
     return a_camel(fila)
 
 
-def _revisar_plan(con, comercio_id: int, plan: DatosPlan) -> tuple:
+def _revisar_plan(con, comercio_id: int, plan: DatosPlan) -> tuple[tuple, dict]:
+    """(lo que queda a la vista, lo que va en el sobre: nombre y precio)."""
     nombre = plan.nombre.strip()
     if not nombre:
         raise HTTPException(422, "Escribí el nombre del plan (por ejemplo: 8 clases por mes).")
@@ -331,47 +342,51 @@ def _revisar_plan(con, comercio_id: int, plan: DatosPlan) -> tuple:
         "select count(*) as n from public.disciplinas where comercio_id = %s and id = any(%s)", (comercio_id, actividades)
     ).fetchone()["n"] != len(actividades):
         raise HTTPException(422, "Alguna actividad del plan no es de este gimnasio.")
-    return (nombre[:100], plan.precio, plan.duracionMeses, None if plan.duracionMeses else plan.duracionDias,
-            plan.cantidadClases, actividades, plan.activo)
+    return ((plan.duracionMeses, None if plan.duracionMeses else plan.duracionDias, plan.cantidadClases, actividades, plan.activo),
+            {"nombre": nombre[:100], "precio": plan.precio})
 
 
-def _insertar_plan(con, comercio_id: int, plan: DatosPlan) -> dict:
-    return con.execute(
+def _insertar_plan(con, cofre: Cofre, comercio_id: int, plan: DatosPlan) -> dict:
+    vista, del_sobre = _revisar_plan(con, comercio_id, plan)
+    return cofre.abrir("planes", con.execute(
         """insert into public.planes
-             (comercio_id, nombre, precio, duracion_meses, duracion_dias, cantidad_clases, actividades, activo)
-           values (%s, %s, %s, %s, %s, %s, %s, %s) returning *""",
-        (comercio_id, *_revisar_plan(con, comercio_id, plan)),
-    ).fetchone()
+             (comercio_id, duracion_meses, duracion_dias, cantidad_clases, actividades, activo, sobre)
+           values (%s, %s, %s, %s, %s, %s, %s) returning *""",
+        (comercio_id, *vista, cofre.cerrar("planes", comercio_id, del_sobre)),
+    ).fetchone())
 
 
 @router.post("/comercios/{comercio_id}/planes", status_code=201)
-def crear_plan(comercio_id: int, plan: DatosPlan, usuario: Usuario = Depends(usuario_actual)):
+def crear_plan(comercio_id: int, plan: DatosPlan, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id)
-        fila = _insertar_plan(con, comercio_id, plan)
-    return a_camel(fila)
+        cofre = Cofre(con, llave)
+        cofre.comercio(comercio_id)
+        return a_camel(_insertar_plan(con, cofre, comercio_id, plan))
 
 
 @router.put("/planes/{plan_id}")
-def guardar_plan(plan_id: int, plan: DatosPlan, usuario: Usuario = Depends(usuario_actual)):
+def guardar_plan(plan_id: int, plan: DatosPlan, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
     """Los socios que ya tienen el plan lo siguen teniendo (también si se deja de ofrecer)."""
     with como_usuario(usuario) as con:
-        antes = con.execute("select comercio_id from public.planes where id = %s", (plan_id,)).fetchone()
+        cofre = Cofre(con, llave)
+        antes = con.execute("select comercio_id from public.planes where id = %s for update", (plan_id,)).fetchone()
         if antes is None:
             raise HTTPException(404, "No se encontró el plan.")
+        vista, del_sobre = _revisar_plan(con, antes["comercio_id"], plan)
         fila = con.execute(
-            """update public.planes set nombre = %s, precio = %s, duracion_meses = %s, duracion_dias = %s,
-                                        cantidad_clases = %s, actividades = %s, activo = %s
+            """update public.planes set duracion_meses = %s, duracion_dias = %s, cantidad_clases = %s, actividades = %s,
+                                        activo = %s, sobre = %s
                where id = %s returning *""",
-            (*_revisar_plan(con, antes["comercio_id"], plan), plan_id),
+            (*vista, cofre.cerrar("planes", antes["comercio_id"], del_sobre), plan_id),
         ).fetchone()
-    return a_camel(fila)
+        return a_camel(cofre.abrir("planes", fila))
 
 
 @router.put("/comercios/{comercio_id}/reglas-gimnasio")
-def guardar_reglas(comercio_id: int, reglas: Reglas, usuario: Usuario = Depends(usuario_actual)):
+def guardar_reglas(comercio_id: int, reglas: Reglas, usuario: Usuario = Depends(usuario_actual),
+                   llave: Llave = Depends(llave_requerida)):
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id)
+        Cofre(con, llave).comercio(comercio_id)
         fila = con.execute(
             """insert into public.reglas_gimnasio (comercio_id, horas_cancelacion, clases_sobrantes, vencimiento, dias_aviso)
                values (%s, %s, %s, %s, %s)
@@ -384,11 +399,13 @@ def guardar_reglas(comercio_id: int, reglas: Reglas, usuario: Usuario = Depends(
 
 
 @router.post("/comercios/{comercio_id}/gimnasio/ejemplo", status_code=201)
-def cargar_ejemplo(comercio_id: int, ejemplo: Ejemplo, usuario: Usuario = Depends(usuario_actual)):
+def cargar_ejemplo(comercio_id: int, ejemplo: Ejemplo, usuario: Usuario = Depends(usuario_actual),
+                   llave: Llave = Depends(llave_requerida)):
     """"¿Arrancás de cero?": actividades, planes, grilla y reglas de ejemplo, todo junto o nada.
     En la nube no se cargan socios ni cuotas inventadas (ensuciarían la caja y los reportes de verdad)."""
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id, bloquear=True)
+        cofre = Cofre(con, llave)
+        cofre.comercio(comercio_id, bloquear=True)
         ids: dict[int, int] = {}
         disciplinas = []
         for d in ejemplo.disciplinas:
@@ -399,7 +416,7 @@ def cargar_ejemplo(comercio_id: int, ejemplo: Ejemplo, usuario: Usuario = Depend
             ids[int(d["id"])] = fila["id"]
             disciplinas.append(fila)
         # Las actividades que el gimnasio ya tenía (ids positivos) quedan igual
-        planes = [_insertar_plan(con, comercio_id, p.model_copy(update={"actividades": [ids.get(a, a) for a in p.actividades]}))
+        planes = [_insertar_plan(con, cofre, comercio_id, p.model_copy(update={"actividades": [ids.get(a, a) for a in p.actividades]}))
                   for p in ejemplo.planes]
         clases = []
         for c in ejemplo.clases:

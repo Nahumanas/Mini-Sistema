@@ -72,7 +72,7 @@ def cambiar_pin(datos: CambioDePin, usuario: Usuario = Depends(usuario_actual)):
     with como_usuario(usuario) as con:
         ficha = ficha_del_dueno(con)
     if ficha["clave_pin"] is not None and ficha["pin_huella"] is None:
-        raise HTTPException(409, "Tus datos están cifrados: para elegir un PIN nuevo usá tu frase de recuperación.")
+        raise HTTPException(409, "Tus datos están cifrados: para elegir un PIN nuevo usá tu código de recuperación.")
     if ficha["pin_huella"] is not None:
         correcto = coincide(datos.actual, ficha["pin_sal"], ficha["pin_huella"])
         anotar_intento(usuario.id, correcto)

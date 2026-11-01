@@ -8,8 +8,8 @@ from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario
 from ..cifrado import Llave
 from ..formato import a_camel
-from ..llaves import VOLVER_A_PONER, crear_clave_comercio, llave_opcional
-from .comun import comercio_mio
+from ..llaves import VOLVER_A_PONER, crear_clave_comercio, llave_opcional, llave_requerida
+from ..sobres import Cofre
 
 router = APIRouter(tags=["Comercios"])
 
@@ -86,12 +86,13 @@ def crear(datos: NuevoComercio, usuario: Usuario = Depends(usuario_actual), llav
 
 
 @router.patch("/comercios/{comercio_id}")
-def actualizar(comercio_id: int, cambios: CambiosComercio, usuario: Usuario = Depends(usuario_actual)):
+def actualizar(comercio_id: int, cambios: CambiosComercio, usuario: Usuario = Depends(usuario_actual),
+               llave: Llave = Depends(llave_requerida)):
     valores = cambios.model_dump(exclude_none=True)
     if "turnos" in valores:
         valores["turnos"] = Jsonb(valores["turnos"])
     with como_usuario(usuario) as con:
-        comercio = comercio_mio(con, comercio_id)
+        comercio = Cofre(con, llave).comercio(comercio_id)
         if not valores:
             return a_camel(comercio)
         sets = ", ".join(f"{_COLUMNAS[k]} = %s" for k in valores)
@@ -110,11 +111,12 @@ class NuevoEmpleado(BaseModel):
 
 
 @router.post("/comercios/{comercio_id}/empleados", status_code=201, tags=["Empleados"])
-def agregar_empleado(comercio_id: int, datos: NuevoEmpleado, usuario: Usuario = Depends(usuario_actual)):
+def agregar_empleado(comercio_id: int, datos: NuevoEmpleado, usuario: Usuario = Depends(usuario_actual),
+                     llave: Llave = Depends(llave_requerida)):
     if not datos.nombre.strip():
         raise HTTPException(422, "Escribí el nombre del empleado.")
     with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id)
+        Cofre(con, llave).comercio(comercio_id)
         fila = con.execute(
             "insert into public.empleados (comercio_id, nombre) values (%s, %s) returning *",
             (comercio_id, datos.nombre.strip()),
@@ -123,9 +125,13 @@ def agregar_empleado(comercio_id: int, datos: NuevoEmpleado, usuario: Usuario = 
 
 
 @router.delete("/empleados/{empleado_id}", tags=["Empleados"])
-def quitar_empleado(empleado_id: int, usuario: Usuario = Depends(usuario_actual)):
+def quitar_empleado(empleado_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
     """No se borra: queda inactivo (su nombre sigue en las ventas y cajas que hizo)."""
     with como_usuario(usuario) as con:
+        empleado = con.execute("select comercio_id from public.empleados where id = %s", (empleado_id,)).fetchone()
+        if empleado is None:
+            raise HTTPException(404, "No existe ese empleado.")
+        Cofre(con, llave).comercio(empleado["comercio_id"])  # la llave tiene que abrir ese comercio
         fila = con.execute(
             "update public.empleados set activo = false where id = %s returning *", (empleado_id,)
         ).fetchone()

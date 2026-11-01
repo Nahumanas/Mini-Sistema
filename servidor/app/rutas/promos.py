@@ -6,8 +6,10 @@ from pydantic import BaseModel, Field
 
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario
+from ..cifrado import Llave
 from ..formato import a_camel
-from .comun import comercio_mio
+from ..llaves import llave_requerida
+from ..sobres import Cofre
 
 router = APIRouter(tags=["Promos"])
 
@@ -27,21 +29,24 @@ class Promo(BaseModel):
     activa: bool = True
 
 
-def _revisar(promo: Promo) -> tuple:
+def _revisar(promo: Promo) -> tuple[dict, dict]:
+    """(lo que queda a la vista, lo que va en el sobre)."""
     nombre = promo.nombre.strip()
     if not nombre:
         raise HTTPException(422, "Escribí el nombre de la promo (es lo que sale en el ticket).")
     if promo.tipo == "medio_pago":
         if promo.medioPago is None:
             raise HTTPException(422, "Elegí el medio de pago de la promo.")
-        return (nombre, promo.tipo, promo.porcentaje, None, None, None, promo.medioPago, promo.activa)
+        return ({"tipo": promo.tipo, "cada": None, "producto_id": None, "medio_pago": promo.medioPago, "activa": promo.activa},
+                {"nombre": nombre, "porcentaje": promo.porcentaje, "categoria": None})
     if promo.tipo == "combo" and promo.cada is None:
         raise HTTPException(422, "Elegí el combo (2x1, 3x2...).")
     categoria = (promo.categoria or "").strip() or None
     if (promo.productoId is None) == (categoria is None):
         raise HTTPException(422, "Elegí a qué producto o categoría se aplica.")
     cada = promo.cada if promo.tipo == "combo" else None
-    return (nombre, promo.tipo, promo.porcentaje, cada, promo.productoId, categoria, None, promo.activa)
+    return ({"tipo": promo.tipo, "cada": cada, "producto_id": promo.productoId, "medio_pago": None, "activa": promo.activa},
+            {"nombre": nombre, "porcentaje": promo.porcentaje, "categoria": categoria})
 
 
 def _producto_ajeno() -> HTTPException:
@@ -49,45 +54,49 @@ def _producto_ajeno() -> HTTPException:
 
 
 @router.post("/comercios/{comercio_id}/promos", status_code=201)
-def crear(comercio_id: int, promo: Promo, usuario: Usuario = Depends(usuario_actual)):
-    valores = _revisar(promo)
+def crear(comercio_id: int, promo: Promo, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
+    vista, del_sobre = _revisar(promo)
     try:
         with como_usuario(usuario) as con:
-            comercio_mio(con, comercio_id)
+            cofre = Cofre(con, llave)
+            cofre.comercio(comercio_id)
             fila = con.execute(
-                """insert into public.promos
-                     (comercio_id, nombre, tipo, porcentaje, cada, producto_id, categoria, medio_pago, activa)
-                   values (%s, %s, %s, %s, %s, %s, %s, %s, %s) returning *""",
-                (comercio_id, *valores),
+                """insert into public.promos (comercio_id, tipo, cada, producto_id, medio_pago, activa, sobre)
+                   values (%s, %s, %s, %s, %s, %s, %s) returning *""",
+                (comercio_id, *vista.values(), cofre.cerrar("promos", comercio_id, del_sobre)),
             ).fetchone()
+            return a_camel(cofre.abrir("promos", fila))
     except errors.ForeignKeyViolation as error:
         raise _producto_ajeno() from error
-    return a_camel(fila)
 
 
 @router.put("/promos/{promo_id}")
-def actualizar(promo_id: int, promo: Promo, usuario: Usuario = Depends(usuario_actual)):
+def actualizar(promo_id: int, promo: Promo, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
     """Guarda la promo entera (también para prenderla o apagarla)."""
-    valores = _revisar(promo)
+    vista, del_sobre = _revisar(promo)
     try:
         with como_usuario(usuario) as con:
+            cofre = Cofre(con, llave)
+            antes = con.execute("select comercio_id from public.promos where id = %s for update", (promo_id,)).fetchone()
+            if antes is None:
+                raise HTTPException(404, "No existe esa promo.")
             fila = con.execute(
-                """update public.promos set nombre = %s, tipo = %s, porcentaje = %s, cada = %s, producto_id = %s,
-                                            categoria = %s, medio_pago = %s, activa = %s
+                """update public.promos set tipo = %s, cada = %s, producto_id = %s, medio_pago = %s, activa = %s, sobre = %s
                    where id = %s returning *""",
-                (*valores, promo_id),
+                (*vista.values(), cofre.cerrar("promos", antes["comercio_id"], del_sobre), promo_id),
             ).fetchone()
+            return a_camel(cofre.abrir("promos", fila))
     except errors.ForeignKeyViolation as error:
         raise _producto_ajeno() from error
-    if fila is None:
-        raise HTTPException(404, "No existe esa promo.")
-    return a_camel(fila)
 
 
 @router.delete("/promos/{promo_id}")
-def borrar(promo_id: int, usuario: Usuario = Depends(usuario_actual)):
+def borrar(promo_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
     with como_usuario(usuario) as con:
-        fila = con.execute("delete from public.promos where id = %s returning id", (promo_id,)).fetchone()
-    if fila is None:
-        raise HTTPException(404, "No existe esa promo.")
+        cofre = Cofre(con, llave)
+        promo = con.execute("select comercio_id from public.promos where id = %s", (promo_id,)).fetchone()
+        if promo is None:
+            raise HTTPException(404, "No existe esa promo.")
+        cofre.comercio(promo["comercio_id"])  # la llave tiene que abrir ese comercio
+        con.execute("delete from public.promos where id = %s", (promo_id,))
     return {"ok": True}

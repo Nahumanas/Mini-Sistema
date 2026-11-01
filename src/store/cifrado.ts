@@ -4,20 +4,20 @@ import { fraseCompleta, validarCodigoNuevo, validarPinNuevo } from "@/lib/pin";
 import { useDatos } from "./datos";
 
 // El cifrado de los datos en la nube (paso 5, etapa 5). Solo existe en la nube: la demo guarda todo en el
-// navegador y no tiene frase ni código de empleados. Las cuentas las hace la API (servidor/app/cifrado.py);
+// navegador y no tiene código de recuperación ni código de empleados. Las cuentas las hace la API (servidor/app/cifrado.py);
 // acá se guarda la llave de sesión que devuelve y se anota en pantalla lo que cambió.
 
-/** Activa el cifrado con el PIN de jefe y la frase que anotó en papel. Devuelve la llave del jefe ya guardada. */
+/** Activa el cifrado con el PIN de jefe y el código de recuperación que anotó en papel (en la API se llama "frase"). Devuelve la llave del jefe ya guardada. */
 export async function activarCifrado(pin: string, frase: string) {
-  if (!fraseCompleta(frase)) throw new Error("Escribí la frase completa: son 24 letras y números.");
+  if (!fraseCompleta(frase)) throw new Error("Escribí el código de recuperación completo: son 24 letras y números.");
   const r = await api.activarCifrado(pin, frase);
   guardarLlave(r.llave, r.vence);
   useDatos.setState({ cifradoActivo: true });
 }
 
-/** "Me olvidé el PIN": con la frase de recuperación se elige un PIN nuevo (los datos siguen todos). */
+/** "Me olvidé el PIN": con el código de recuperación se elige un PIN nuevo (los datos siguen todos). */
 export async function recuperarPin(frase: string, nuevo: string, repetido: string) {
-  if (!fraseCompleta(frase)) throw new Error("Escribí la frase completa: son 24 letras y números.");
+  if (!fraseCompleta(frase)) throw new Error("Escribí el código de recuperación completo: son 24 letras y números.");
   validarPinNuevo(nuevo, repetido);
   const r = await api.recuperarPin(frase, nuevo);
   guardarLlave(r.llave, r.vence);

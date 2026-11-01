@@ -12,7 +12,7 @@ from .cifrado import ClaveIncorrecta, Llave
 SIN_CUENTA = "Ese Gmail todavía no tiene cuenta en Mantenete."
 VOLVER_A_PONER = "Por seguridad, volvé a poner tu PIN de jefe (o el código de empleados)."
 NO_ABRE = (
-    "Tu PIN es correcto pero no abre tus datos cifrados. Entrá con tu frase de recuperación "
+    "Tu PIN es correcto pero no abre tus datos cifrados. Entrá con tu código de recuperación "
     "(\"Me olvidé el PIN\") y elegí un PIN nuevo."
 )
 

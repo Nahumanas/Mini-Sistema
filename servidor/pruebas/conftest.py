@@ -71,9 +71,32 @@ def token_para(usuario_id: str, email: str, llave=LLAVE, vence_en: int = 3600, *
     return jwt.encode(claims, llave, algorithm="ES256")
 
 
-def crear_usuario(email: str, invitado: bool = True) -> dict:
-    """Como cuando Nahuel invita un Gmail (o alguien se cuela sin invitación)."""
+PIN_DE_PRUEBA = "4826"
+
+
+def crear_usuario(email: str, invitado: bool = True, cifrado: bool = True) -> dict:
+    """Como cuando Nahuel invita un Gmail (o alguien se cuela sin invitación).
+
+    Con cifrado (lo normal desde la parte 3), el dueño ya eligió su PIN (PIN_DE_PRUEBA), activó el cifrado
+    y entró como jefe: los encabezados llevan su llave de sesión (X-Llave), como los manda la página."""
     uid = str(uuid.uuid4())
     sql = f"insert into auth.users (id, email, invited_at) values ('{uid}', '{email}', {'now()' if invitado else 'null'})"
     _psql("-d", BASE, "-c", sql)
-    return {"Authorization": f"Bearer {token_para(uid, email)}"}
+    encabezados = {"Authorization": f"Bearer {token_para(uid, email)}"}
+    if invitado and cifrado:
+        encabezados["X-Llave"] = activar_cifrado(encabezados)
+    return encabezados
+
+
+def activar_cifrado(encabezados: dict, pin: str = PIN_DE_PRUEBA) -> str:
+    """Elige el PIN, activa el cifrado con una frase nueva y devuelve la llave de jefe."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    cliente = TestClient(app)
+    assert cliente.put("/yo/pin", json={"nuevo": pin}, headers=encabezados).status_code == 200
+    frase = cliente.get("/yo/cifrado/frase-nueva", headers=encabezados).json()["frase"]
+    r = cliente.post("/yo/cifrado/activar", json={"pin": pin, "frase": frase, "acepto": True}, headers=encabezados)
+    assert r.status_code == 200, r.text
+    return r.json()["llave"]
