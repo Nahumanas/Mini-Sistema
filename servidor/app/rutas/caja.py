@@ -6,11 +6,12 @@ from pydantic import BaseModel, Field
 
 from .. import avisos
 from ..autenticacion import Usuario, usuario_actual
-from ..base import como_usuario
+from ..base import como_usuario, en_viajes
 from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import llave_requerida
 from ..sobres import Cofre
+from .comun import LEER_CLAVES, LEER_COMERCIO, existe
 from .ventas import con_items
 
 router = APIRouter(tags=["Caja"])
@@ -35,35 +36,38 @@ class Relevo(BaseModel):
 
 @router.get("/comercios/{comercio_id}/caja")
 def caja_abierta(comercio_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
-    """La caja abierta del comercio, o null si está cerrada."""
-    with como_usuario(usuario) as con:
-        cofre = Cofre(con, llave)
-        cofre.comercio(comercio_id)
-        fila = con.execute(
-            "select * from public.cajas where comercio_id = %s and cerrada is null", (comercio_id,)
-        ).fetchone()
-        return a_camel(cofre.abrir("cajas", fila))
+    """La caja abierta del comercio, o null si está cerrada. En un solo viaje a la base."""
+    with en_viajes(usuario) as viaje:
+        comercios, claves, cajas = viaje(
+            (LEER_COMERCIO, (comercio_id,)), (LEER_CLAVES, None),
+            ("select * from public.cajas where comercio_id = %s and cerrada is null", (comercio_id,)), terminar=True,
+        )
+    cofre = Cofre(viaje.con, llave, claves)
+    cofre.comercio_ya_leido(existe(comercios)["id"])
+    return a_camel(cofre.abrir("cajas", cajas[0] if cajas else None))
 
 
 @router.post("/comercios/{comercio_id}/caja/abrir", status_code=201)
 def abrir(comercio_id: int, datos: AbrirCaja, tareas: BackgroundTasks, usuario: Usuario = Depends(usuario_actual),
           llave: Llave = Depends(llave_requerida)):
+    """En dos viajes a la base: leer (comercio, claves y la ficha para el aviso) y guardar."""
     try:
-        with como_usuario(usuario) as con:
-            cofre = Cofre(con, llave)
-            comercio = cofre.comercio(comercio_id)
+        with en_viajes(usuario) as viaje:
+            comercios, claves, fichas = viaje((LEER_COMERCIO, (comercio_id,)), (LEER_CLAVES, None), (avisos.FICHA, None))
+            comercio = existe(comercios)
+            cofre = Cofre(viaje.con, llave, claves)
+            cofre.comercio_ya_leido(comercio_id)
             sobre = cofre.cerrar("cajas", comercio_id, {"monto_inicial": datos.montoInicial, "efectivo_esperado": None,
                                                         "efectivo_contado": None, "nota": ""})
-            fila = con.execute(
-                "insert into public.cajas (comercio_id, responsable, sobre) values (%s, %s, %s) returning *",
-                (comercio_id, datos.responsable.strip(), sobre),
-            ).fetchone()
-            caja = cofre.abrir("cajas", fila)
-            avisos.avisar(con, tareas, "apertura", lambda: avisos.apertura(comercio, caja))
-            return a_camel(caja)
+            (filas,) = viaje(("insert into public.cajas (comercio_id, responsable, sobre) values (%s, %s, %s) returning *",
+                              (comercio_id, datos.responsable.strip(), sobre)), terminar=True)
     except errors.UniqueViolation as error:
         # Otra compu del mismo local ya la abrió (la base solo deja UNA caja abierta por comercio)
         raise HTTPException(409, "La caja ya está abierta (quizás desde otra compu). Actualizá la pantalla.") from error
+    caja = cofre.abrir("cajas", filas[0])
+    avisos.mandar_despues(tareas, avisos.chat_de(fichas[0] if fichas else None, "apertura"),
+                          lambda: avisos.apertura(comercio, caja), "apertura")
+    return a_camel(caja)
 
 
 def _efectivo(cofre: Cofre, ventas: list[dict]) -> Decimal:
@@ -76,26 +80,32 @@ def cerrar(comercio_id: int, datos: CerrarCaja, tareas: BackgroundTasks, usuario
            llave: Llave = Depends(llave_requerida)):
     """Cierra con arqueo: esperado = con lo que abrió + lo cobrado en efectivo (sin las ventas anuladas).
     Si el jefe tiene los avisos prendidos, le llega el arqueo con el resumen del día."""
-    with como_usuario(usuario) as con:
-        cofre = Cofre(con, llave)
-        comercio = cofre.comercio(comercio_id, bloquear=True)  # que no se cuele una venta mientras se cuenta
-        caja = cofre.abrir("cajas", con.execute(
-            "select * from public.cajas where comercio_id = %s and cerrada is null for update", (comercio_id,)
-        ).fetchone())
-        if caja is None:
+    with en_viajes(usuario) as viaje:
+        # Primer viaje: todo lo que hace falta leer (el comercio trabado: que no se cuele una venta mientras se cuenta)
+        comercios, claves, cajas, ventas, fichas = viaje(
+            (LEER_COMERCIO + " for no key update", (comercio_id,)), (LEER_CLAVES, None),
+            ("select * from public.cajas where comercio_id = %s and cerrada is null for update", (comercio_id,)),
+            ("""select v.comercio_id, v.medio_pago, v.sobre from public.ventas v
+                join public.cajas c on c.id = v.caja_id and c.comercio_id = %s and c.cerrada is null
+                where v.medio_pago = 'efectivo' and v.anulada is null""", (comercio_id,)),
+            (avisos.FICHA, None),
+        )
+        comercio = existe(comercios)
+        cofre = Cofre(viaje.con, llave, claves)
+        cofre.comercio_ya_leido(comercio_id)
+        if not cajas:
             raise HTTPException(409, "La caja ya está cerrada.")
-        efectivo = _efectivo(cofre, con.execute(
-            """select comercio_id, medio_pago, sobre from public.ventas
-               where caja_id = %s and medio_pago = 'efectivo' and anulada is null""",
-            (caja["id"],),
-        ).fetchall())
+        caja = cofre.abrir("cajas", cajas[0])
+        efectivo = _efectivo(cofre, ventas)
         sobre = cofre.actualizar("cajas", caja, efectivo_esperado=caja["monto_inicial"] + efectivo,
                                  efectivo_contado=datos.efectivoContado, nota=datos.nota.strip())
-        fila = con.execute(
-            "update public.cajas set cerrada = now(), sobre = %s where id = %s returning *", (sobre, caja["id"])
-        ).fetchone()
-        cerrada = cofre.abrir("cajas", fila)
-        avisos.avisar(con, tareas, "cierre", lambda: avisos.cierre(con, cofre, comercio, cerrada))
+        chat = avisos.chat_de(fichas[0] if fichas else None, "cierre")
+        # Segundo viaje: guardar (y cerrar la transacción, salvo que haya que armar el aviso con más datos)
+        (filas,) = viaje(("update public.cajas set cerrada = now(), sobre = %s where id = %s returning *", (sobre, caja["id"])),
+                         terminar=chat is None)
+        cerrada = cofre.abrir("cajas", filas[0])
+        if chat is not None:
+            avisos.avisar(viaje.con, tareas, "cierre", lambda: avisos.cierre(viaje.con, cofre, comercio, cerrada))
         return a_camel(cerrada)
 
 

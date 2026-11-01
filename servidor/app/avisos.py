@@ -34,14 +34,34 @@ def cantidad(valor) -> str:
     return f"{numero:f}".replace(".", ",")
 
 
-def destino(con: Connection, tipo: str) -> int | None:
-    """El chat del jefe, si conectó su Telegram y tiene prendido ese aviso (el RLS deja ver solo su ficha)."""
-    if not telegram.configurado():
-        return None
-    ficha = con.execute("select telegram_chat_id, avisos from public.duenos").fetchone()
-    if ficha is None or ficha["telegram_chat_id"] is None or tipo not in ficha["avisos"]:
+# La ficha del jefe para los avisos (el RLS deja ver solo la suya). Las rutas rápidas la piden junto con lo demás.
+FICHA = "select telegram_chat_id, avisos from public.duenos"
+
+
+def chat_de(ficha: dict | None, tipo: str) -> int | None:
+    """El chat del jefe, si conectó su Telegram y tiene prendido ese aviso."""
+    if not telegram.configurado() or ficha is None or ficha["telegram_chat_id"] is None or tipo not in ficha["avisos"]:
         return None
     return ficha["telegram_chat_id"]
+
+
+def destino(con: Connection, tipo: str) -> int | None:
+    if not telegram.configurado():
+        return None
+    return chat_de(con.execute(FICHA).fetchone(), tipo)
+
+
+def mandar_despues(tareas: BackgroundTasks, chat: int | None, armar: Callable[[], str | None], tipo: str) -> None:
+    """Como avisar, para cuando ya se sabe el chat y el mensaje se arma sin consultar la base."""
+    if chat is None:
+        return
+    try:
+        mensaje = armar()
+    except Exception as error:  # noqa: BLE001 (a propósito: el aviso es lo de menos)
+        print(f"No se pudo armar el aviso de Telegram ({tipo}): {type(error).__name__}", flush=True)
+        return
+    if mensaje:
+        tareas.add_task(_mandar, chat, mensaje)
 
 
 def _mandar(chat_id: int, mensaje: str) -> None:
@@ -154,6 +174,11 @@ def stock_bajo(con: Connection, cofre: Cofre, comercio: dict, producto_ids: list
            returning id, comercio_id, stock, stock_minimo, sobre""",
         (comercio["id"], producto_ids),
     ).fetchall()
+    return mensaje_stock_bajo(cofre, comercio, filas)
+
+
+def mensaje_stock_bajo(cofre: Cofre, comercio: dict, filas: list[dict]) -> str | None:
+    """El aviso con los productos que se acaban de marcar como avisados (id, comercio_id, stock, stock_minimo, sobre)."""
     if not filas:
         return None
     lineas = [f"📦 <b>Se está terminando</b> en {texto(comercio['nombre'])}"]

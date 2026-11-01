@@ -5,6 +5,8 @@ import os
 # Conexión a la base de Supabase (Project Settings → Database → Connection string, modo "Transaction pooler").
 # Lleva la contraseña de la base: es SECRETA, solo va en Render.
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
+# Cuántas conexiones a la base a la vez, como máximo (ver base.py). No es secreta.
+POOL_MAXIMO = int(os.environ.get("POOL_MAXIMO", "20"))
 
 # La dirección del proyecto de Supabase (no es secreta). Con ella se bajan las llaves públicas
 # que firman los tokens de los usuarios, para comprobar que un token es de verdad.

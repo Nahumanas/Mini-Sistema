@@ -65,6 +65,10 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 - Reglas para que no se trabe: el comercio se traba con `for no key update` (no `for update`) y los productos se
   traban siempre ordenados por id. Editar el stock manda `stockAntes`: si otra compu vendió en el medio, da 409.
 - `carga/`: prueba de 100 comercios a la vez con Locust (ver `carga/README.md`). Nunca contra producción.
+- Pocos viajes a la base: Render está en Virginia y Supabase en São Paulo (unos 0,12 s cada ida y vuelta), así que
+  cobrar, abrir y cerrar la caja van en 2 viajes y ver el stock, las ventas y la caja en 1 (`base.Viaje`: varias
+  consultas juntas, con los valores puestos por `ClientCursor.mogrify`). `pruebas/test_viajes.py` los cuenta.
+  Conexiones a la base: `POOL_MAXIMO` (20 por defecto).
 
 ## Qué hace
 
