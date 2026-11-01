@@ -39,9 +39,12 @@ def con_items(con, ventas: list[dict]) -> list[dict]:
     if not ventas:
         return []
     por_venta: dict[int, list[dict]] = defaultdict(list)
+    # La cuota de un socio no es un producto: como en la página, va con el id del plan en negativo
     for d in con.execute(
-        """select venta_id, producto_id, nombre, categoria, cantidad, precio_unitario, costo_unitario
-           from public.ventas_detalle where venta_id = any(%s) order by id""",
+        """select d.venta_id, coalesce(d.producto_id, -c.plan_id) as producto_id, d.nombre, d.categoria, d.cantidad,
+                  d.precio_unitario, d.costo_unitario
+           from public.ventas_detalle d left join public.cuotas c on c.venta_id = d.venta_id and d.producto_id is null
+           where d.venta_id = any(%s) order by d.id""",
         ([v["id"] for v in ventas],),
     ).fetchall():
         por_venta[d.pop("venta_id")].append(a_camel(d))

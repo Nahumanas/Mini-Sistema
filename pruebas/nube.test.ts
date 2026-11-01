@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DatosDeInicio } from "@/lib/api";
 import { calcular } from "@/lib/promos";
-import type { Caja, Lote, Producto, Promo, Venta } from "@/lib/tipos";
+import type { Caja, Clase, Lote, Plan, Producto, Promo, Reserva, Socio, Venta } from "@/lib/tipos";
+import { ACCIONES_EN_LA_NUBE } from "@/store/acciones-nube";
 import { useDatos } from "@/store/datos";
 import { item } from "./ayuda";
 
 // El modo nube sin servidor: la API se reemplaza por una de mentira (vi.mock) que contesta como la de verdad.
 // Se prueba que las pantallas reciban lo que dice la API, que la demo guardada en el navegador no se pise,
-// y que lo que todavía no está en la nube avise en vez de guardar a medias.
+// y que lo que no existe en la nube (reiniciar la demo) avise en vez de tocar los datos de verdad.
 
 const api = vi.hoisted(() => ({
   registrarVenta: vi.fn(),
@@ -19,6 +20,14 @@ const api = vi.hoisted(() => ({
   crearPromo: vi.fn(),
   actualizarPromo: vi.fn(),
   anularVenta: vi.fn(),
+  crearSocio: vi.fn(),
+  cobrarCuota: vi.fn(),
+  reservar: vi.fn(),
+  cancelarReserva: vi.fn(),
+  cerrarClasesPasadas: vi.fn(),
+  registrarIngreso: vi.fn(),
+  cargarEjemplo: vi.fn(),
+  actualizarClase: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), api }));
@@ -42,6 +51,14 @@ const DE_LA_NUBE: DatosDeInicio = {
   gastos: [],
   lotes: [],
   retiros: [],
+  disciplinas: [],
+  planes: [],
+  clases: [],
+  reglasGimnasio: [],
+  socios: [],
+  reservas: [],
+  cuotas: [],
+  asistencias: [],
 };
 
 const ALFAJOR: Producto = DE_LA_NUBE.productos[0];
@@ -54,13 +71,20 @@ beforeEach(async () => {
 });
 
 describe("modo nube", () => {
-  it("las pantallas pasan a ver los datos de la nube, y lo que no está en la API queda vacío", () => {
+  it("las pantallas pasan a ver los datos de la nube", () => {
     datos().usarNube(DE_LA_NUBE);
     expect(datos().modo).toBe("nube");
     expect(datos().comercios.map((c) => c.nombre)).toEqual(["Kiosco de Ana"]);
     expect(datos().pinConfigurado).toBe(true);
     expect(datos().gastos).toEqual([]);
-    expect(datos().socios).toEqual([]); // el gimnasio llega en la parte 4
+    expect(datos().socios).toEqual([]);
+  });
+
+  it("si la API todavía no manda el gimnasio (versión vieja), las listas quedan vacías en vez de romper", () => {
+    const sinGimnasio = Object.fromEntries(Object.entries(DE_LA_NUBE).filter(([clave]) => clave !== "socios" && clave !== "reservas"));
+    datos().usarNube(sinGimnasio as DatosDeInicio);
+    expect(datos().socios).toEqual([]);
+    expect(datos().reservas).toEqual([]);
   });
 
   it("no pisa la demo guardada en el navegador, y al cerrar la cuenta vuelve la demo como estaba", async () => {
@@ -77,10 +101,16 @@ describe("modo nube", () => {
     expect(datos().comercios.some((c) => c.nombre === "Kiosco de Ana")).toBe(false);
   });
 
-  it("lo que todavía no está en la nube avisa en vez de guardar a medias", () => {
+  it("todas las acciones de la demo tienen su versión en la nube, menos reiniciar (que avisa y no borra nada)", () => {
+    const sinNube = Object.entries(datos())
+      .filter(([nombre, valor]) => typeof valor === "function" && !["usarNube", "volverALaDemo", "reiniciar"].includes(nombre))
+      .map(([nombre]) => nombre)
+      .filter((nombre) => !(ACCIONES_EN_LA_NUBE as readonly string[]).includes(nombre));
+    expect(sinNube).toEqual([]);
+
     datos().usarNube(DE_LA_NUBE);
-    expect(() => datos().crearSocio(50, { nombre: "Juan", dni: "30111222", telefono: "", email: "", nota: "" })).toThrow(/todavía no funciona en la nube/);
-    expect(datos().socios).toEqual([]);
+    expect(() => datos().reiniciar()).toThrow(/todavía no funciona en la nube/);
+    expect(datos().comercios.map((c) => c.nombre)).toEqual(["Kiosco de Ana"]);
   });
 
   it("una venta guarda lo que devolvió la API (número y total de la base) y baja el stock en pantalla", async () => {
@@ -181,6 +211,130 @@ describe("modo nube, parte 3", () => {
     expect(datos().ventas[0].anulada).toBe("2026-10-31T21:00");
     expect(datos().ajustes).toEqual([ajuste]);
     expect(datos().productos[0].stock).toBe(12);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Parte 4: el gimnasio
+// ---------------------------------------------------------------------------
+
+const GIMNASIO = { ...DE_LA_NUBE.comercios[0], id: 60, nombre: "Gimnasio de Ana", rubro: "gimnasio" as const };
+const SOCIO: Socio = { id: 400, comercioId: 60, nombre: "Juan Pérez", dni: "30111222", telefono: "1155", email: "", nota: "", planId: 21, vence: "2999-12-31", clasesRestantes: 3, alta: "2026-10-01", activo: true };
+const PLAN: Plan = { id: 21, comercioId: 60, nombre: "8 clases", precio: 20000, duracionMeses: 1, duracionDias: null, cantidadClases: 8, actividades: [], activo: true };
+const CLASE: Clase = { id: 300, comercioId: 60, disciplinaId: 11, diaSemana: 0, horaInicio: "19:00", duracionMinutos: 60, profesor: "", cupoMaximo: 1, activa: true };
+const reserva = (id: number, cambios: Partial<Reserva> = {}): Reserva => ({ id, comercioId: 60, claseId: 300, socioId: 400, fecha: "2999-01-05", estado: "reservado", creada: "2026-10-31T09:00", hechaPor: "Ana", claseDescontada: true, claseDevuelta: false, ...cambios });
+const GIM: DatosDeInicio = { ...DE_LA_NUBE, comercios: [GIMNASIO], socios: [SOCIO], planes: [PLAN], clases: [CLASE] };
+
+describe("modo nube, parte 4 (gimnasio)", () => {
+  it("un socio nuevo se manda ya ordenado; con DNI mal escrito ni se pregunta a la API", async () => {
+    datos().usarNube({ ...GIM, socios: [] });
+    await expect(datos().crearSocio(60, { nombre: "Ana", dni: "12", telefono: "", email: "", nota: "" })).rejects.toThrow(/DNI completo/);
+    expect(api.crearSocio).not.toHaveBeenCalled();
+
+    api.crearSocio.mockResolvedValue(SOCIO);
+    expect(await datos().crearSocio(60, { nombre: "  Juan   Pérez ", dni: "30.111.222", telefono: "1155", email: "", nota: "" })).toBe(400);
+    expect(api.crearSocio).toHaveBeenCalledWith(60, { nombre: "Juan Pérez", dni: "30111222", telefono: "1155", email: "", nota: "" });
+    expect(datos().socios).toEqual([SOCIO]);
+  });
+
+  it("cobrar la cuota suma la venta a la caja, la cuota y el socio como quedó en la base", async () => {
+    datos().usarNube(GIM);
+    const venta: Venta = { id: 77, numero: 5, comercioId: 60, cajaId: 70, fecha: "2026-10-31T10:00", items: [{ productoId: -21, nombre: "Cuota 8 clases", categoria: "Cuotas", cantidad: 1, precioUnitario: 20000, costoUnitario: 0 }], subtotal: 20000, descuento: 0, total: 20000, medioPago: "efectivo", vendidoPor: "Ana", promos: [], anulada: null };
+    const cuota = { id: 9, comercioId: 60, socioId: 400, planId: 21, ventaId: 77, cajaId: 70, fecha: "2026-10-31T10:00", monto: 20000, medioPago: "efectivo" as const, cobradaPor: "Ana", venceAntes: null, venceNuevo: "2026-11-30", clasesCargadas: 8, clasesDespues: 8 };
+    api.cobrarCuota.mockResolvedValue({ cuota, venta, socio: { ...SOCIO, vence: "2026-11-30", clasesRestantes: 8 }, clases: 8, clasesQueSePierden: 3 });
+
+    const cobrada = await datos().cobrarCuota({ comercioId: 60, socioId: 400, planId: 21, medioPago: "efectivo", monto: 20000, vence: "2026-11-30", cobradaPor: "Ana" });
+    expect(api.cobrarCuota).toHaveBeenCalledWith(60, { socioId: 400, planId: 21, medioPago: "efectivo", monto: 20000, vence: "2026-11-30", cobradaPor: "Ana" });
+    expect(cobrada).toMatchObject({ socio: "Juan Pérez", plan: "8 clases", clases: 8, clasesQueSePierden: 3 });
+    expect(datos().ventas).toEqual([venta]);
+    expect(datos().cuotas).toEqual([cuota]);
+    expect(datos().socios[0]).toMatchObject({ vence: "2026-11-30", clasesRestantes: 8 });
+  });
+
+  it("al cancelar, en pantalla quedan la reserva cancelada, la clase devuelta y el que entró de la lista de espera", async () => {
+    const otro: Socio = { ...SOCIO, id: 401, nombre: "Luz", dni: "30999888", clasesRestantes: 2 };
+    datos().usarNube({ ...GIM, socios: [SOCIO, otro], reservas: [reserva(1), reserva(2, { socioId: 401, estado: "espera", claseDescontada: false })] });
+    api.cancelarReserva.mockResolvedValue({
+      devuelta: true, aTiempo: true, eraEspera: false, planLibre: false,
+      entraron: [{ socio: "Luz", telefono: "1155" }],
+      reservas: [reserva(1, { estado: "cancelado", claseDevuelta: true }), reserva(2, { socioId: 401, estado: "reservado" })],
+      socios: [{ ...SOCIO, clasesRestantes: 4 }, { ...otro, clasesRestantes: 1 }],
+    });
+
+    const r = await datos().cancelarReserva(1, "Ana");
+    expect(api.cancelarReserva).toHaveBeenCalledWith(1, "Ana", undefined);
+    expect(r).toEqual({ devuelta: true, aTiempo: true, eraEspera: false, planLibre: false, entraron: [{ socio: "Luz", telefono: "1155" }] });
+    expect(datos().reservas.map((x) => x.estado)).toEqual(["cancelado", "reservado"]);
+    expect(datos().socios.map((x) => x.clasesRestantes)).toEqual([4, 1]);
+  });
+
+  it("reservar guarda la reserva y el socio con una clase menos", async () => {
+    datos().usarNube(GIM);
+    api.reservar.mockResolvedValue({ reserva: reserva(5), estado: "reservado", posicion: null, clasesRestantes: 2, socio: { ...SOCIO, clasesRestantes: 2 } });
+    const r = await datos().reservarClase(60, 300, 400, "2999-01-05", "Ana");
+    expect(api.reservar).toHaveBeenCalledWith(60, { claseId: 300, socioId: 400, fecha: "2999-01-05", hechaPor: "Ana" });
+    expect(r).toMatchObject({ estado: "reservado", clasesRestantes: 2 });
+    expect(datos().reservas).toEqual([reserva(5)]);
+    expect(datos().socios[0].clasesRestantes).toBe(2);
+  });
+
+  it("cerrar las clases pasadas solo le pide a la API si hay alguna clase terminada con reservas abiertas", async () => {
+    datos().usarNube({ ...GIM, reservas: [reserva(1)] }); // la del año 2999 todavía no pasó
+    await datos().cerrarClasesPasadas(60);
+    expect(api.cerrarClasesPasadas).not.toHaveBeenCalled();
+
+    datos().usarNube({ ...GIM, reservas: [reserva(1, { fecha: "2026-01-05" })] }); // un lunes que ya pasó
+    api.cerrarClasesPasadas.mockResolvedValue({ reservas: [reserva(1, { fecha: "2026-01-05", estado: "falto" })] });
+    await datos().cerrarClasesPasadas(60);
+    expect(api.cerrarClasesPasadas).toHaveBeenCalledWith(60);
+    expect(datos().reservas[0].estado).toBe("falto");
+  });
+
+  it("la entrada por DNI suma la asistencia y deja la reserva en «vino»; si es repetida no cambia nada", async () => {
+    datos().usarNube({ ...GIM, reservas: [reserva(1)] });
+    const asistencia = { id: 8, comercioId: 60, socioId: 400, fechaHora: "2026-10-31T18:55", resultado: "paso" as const, motivo: "Crossfit 19:00", reservaId: 1, registradoPor: "Ana" };
+    api.registrarIngreso.mockResolvedValue({ repetido: false, asistencia, reserva: reserva(1, { estado: "vino" }) });
+    expect(await datos().registrarIngreso(60, 400, "Ana")).toEqual({ repetido: false });
+    expect(api.registrarIngreso).toHaveBeenCalledWith(60, { socioId: 400, registradoPor: "Ana", resultado: "paso", motivo: "" });
+    expect(datos().asistencias).toEqual([asistencia]);
+    expect(datos().reservas[0].estado).toBe("vino");
+
+    api.registrarIngreso.mockResolvedValue({ repetido: true, asistencia: null, reserva: null });
+    expect(await datos().registrarIngreso(60, 400, "Ana")).toEqual({ repetido: true });
+    expect(datos().asistencias).toHaveLength(1);
+  });
+
+  it("el ejemplo manda actividades, planes y grilla (sin socios inventados) y guarda lo que creó la base", async () => {
+    datos().usarNube({ ...GIM, planes: [], clases: [], socios: [] });
+    api.cargarEjemplo.mockImplementation(async (_id: number, ej: { disciplinas: { id: number; nombre: string }[]; planes: Omit<Plan, "id" | "comercioId">[]; clases: Omit<Clase, "id" | "comercioId">[] }) => ({
+      disciplinas: ej.disciplinas.map((d, i) => ({ id: 500 + i, comercioId: 60, nombre: d.nombre, activa: true })),
+      planes: ej.planes.map((p, i) => ({ ...p, id: 600 + i, comercioId: 60 })),
+      clases: [],
+      reglas: { comercioId: 60, horasCancelacion: 2, clasesSobrantes: "vencen", vencimiento: "dias_plan", diasAviso: 7 },
+    }));
+    await datos().cargarEjemploGimnasio(60, true); // aunque pida socios, en la nube no se inventan
+
+    const enviado = api.cargarEjemplo.mock.calls[0][1];
+    expect(enviado.disciplinas.length).toBeGreaterThan(0);
+    expect(enviado.disciplinas.every((d: { id: number }) => d.id < 0)).toBe(true); // ids provisorios
+    const provisorios = new Set(enviado.disciplinas.map((d: { id: number }) => d.id));
+    expect(enviado.clases.every((c: Clase) => provisorios.has(c.disciplinaId) && !("id" in c) && !("comercioId" in c))).toBe(true);
+    expect(enviado).not.toHaveProperty("socios");
+    expect(datos().socios).toEqual([]);
+    expect(datos().ventas).toEqual([]);
+    expect(datos().disciplinas.every((d) => d.id >= 500)).toBe(true);
+    expect(datos().reglasGimnasio).toHaveLength(1);
+  });
+
+  it("si al agrandar el cupo entra gente de la espera, la clase y las reservas quedan como en la base", async () => {
+    datos().usarNube({ ...GIM, reservas: [reserva(2, { estado: "espera", claseDescontada: false })] });
+    api.actualizarClase.mockResolvedValue({ clase: { ...CLASE, cupoMaximo: 2 }, entraron: [{ socio: "Juan Pérez", telefono: "1155" }], reservas: [reserva(2)], socios: [{ ...SOCIO, clasesRestantes: 2 }] });
+    const datosClase = { disciplinaId: 11, diaSemana: 0, horaInicio: "19:00", duracionMinutos: 60, profesor: "", cupoMaximo: 2, activa: true };
+    expect(await datos().guardarClase({ ...CLASE, cupoMaximo: 2 })).toEqual([{ socio: "Juan Pérez", telefono: "1155" }]);
+    expect(api.actualizarClase).toHaveBeenCalledWith(300, datosClase);
+    expect(datos().clases[0].cupoMaximo).toBe(2);
+    expect(datos().reservas[0].estado).toBe("reservado");
+    expect(datos().socios[0].clasesRestantes).toBe(2);
   });
 });
 

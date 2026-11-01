@@ -1,10 +1,13 @@
 import { api, ErrorDeApi } from "@/lib/api";
 import { sacarDeTandas } from "@/lib/calculos";
-import { hoy } from "@/lib/fechas";
+import { ahora, hoy } from "@/lib/fechas";
 import type { BaseDemo } from "@/lib/datos-demo";
+import { ejemploGimnasio } from "@/lib/demo-gimnasio";
+import { horarioDe } from "@/lib/gimnasio";
 import { validarHorarios } from "@/lib/horarios";
 import { validarPinNuevo } from "@/lib/pin";
-import type { Caja, Comercio, Empleado, Producto, Relevo, Venta } from "@/lib/tipos";
+import type { Caja, Comercio, Empleado, Producto, Relevo, Reserva, Socio, Venta } from "@/lib/tipos";
+import { validarSocio, type AccionesGimnasio } from "./acciones-gimnasio";
 import type { Acciones } from "./datos";
 
 // Las acciones de store/datos.ts cuando el sistema trabaja con la nube (la cuenta del dueño + la API).
@@ -12,7 +15,7 @@ import type { Acciones } from "./datos";
 // (con el número de venta, el stock y los ids de verdad). Si la API dice que no, tira el error con su motivo.
 //
 // Parte 2: caja, ventas, stock, comercios, empleados y PIN. Parte 3: ajustes de cajas cerradas, compras,
-// gastos, vencimientos y promos. El gimnasio llega en la parte 4.
+// gastos, vencimientos y promos. Parte 4: el gimnasio (socios, cuotas, planes, clases, reservas y entradas por DNI).
 
 export const ACCIONES_EN_LA_NUBE = [
   "registrarVenta",
@@ -41,9 +44,26 @@ export const ACCIONES_EN_LA_NUBE = [
   "quitarEmpleado",
   "pinCorrecto",
   "cambiarPin",
+  "crearSocio",
+  "actualizarSocio",
+  "darDeBaja",
+  "reactivarSocio",
+  "importarSocios",
+  "cobrarCuota",
+  "guardarDisciplina",
+  "guardarPlan",
+  "guardarReglas",
+  "guardarClase",
+  "desactivarClase",
+  "reservarClase",
+  "cancelarReserva",
+  "marcarAsistencia",
+  "cerrarClasesPasadas",
+  "registrarIngreso",
+  "cargarEjemploGimnasio",
 ] as const;
 
-export type AccionesNube = Pick<Acciones, (typeof ACCIONES_EN_LA_NUBE)[number]>;
+export type AccionesNube = Pick<Acciones & AccionesGimnasio, (typeof ACCIONES_EN_LA_NUBE)[number]>;
 
 type Estado = BaseDemo & { pinConfigurado: boolean };
 type Set = (cambio: Partial<Estado> | ((s: Estado) => Partial<Estado>)) => void;
@@ -248,6 +268,142 @@ export function accionesNube(set: Set, get: Get): AccionesNube {
       validarPinNuevo(nuevo, repetido);
       await api.cambiarPin(actual, nuevo);
       set({ pinConfigurado: true });
+    },
+
+    ...accionesGimnasioNube(set, get),
+  };
+}
+
+/** El gimnasio en la nube: las reglas (cupo, lista de espera, clases que se descuentan o se devuelven) las
+ * aplica la API; acá se guarda en pantalla cómo quedaron las reservas y los socios que tocó cada cambio. */
+function accionesGimnasioNube(set: Set, get: Get): AccionesGimnasio {
+  const juntar = (cambios: { reservas: Reserva[]; socios: Socio[] }) =>
+    set((s) => ({ reservas: cambios.reservas.reduce(conCambio, s.reservas), socios: cambios.socios.reduce(conCambio, s.socios) }));
+  const guardarSocio = (socio: Socio) => set((s) => ({ socios: conCambio(s.socios, socio) }));
+
+  return {
+    crearSocio: async (comercioId, datos) => {
+      const socio = await api.crearSocio(comercioId, validarSocio(datos));
+      guardarSocio(socio);
+      return socio.id;
+    },
+
+    actualizarSocio: async (socioId, datos) => {
+      guardarSocio(await api.actualizarSocio(socioId, validarSocio(datos)));
+    },
+
+    darDeBaja: async (socioId, hechaPor) => {
+      const r = await api.darDeBaja(socioId, hechaPor);
+      juntar(r);
+      return r.canceladas;
+    },
+
+    reactivarSocio: async (socioId) => {
+      guardarSocio(await api.reactivarSocio(socioId));
+    },
+
+    importarSocios: async (comercioId, filas) => {
+      const r = await api.importarSocios(comercioId, filas);
+      set((s) => ({ socios: r.socios.reduce(conCambio, s.socios) }));
+      return { nuevos: r.nuevos, actualizados: r.actualizados };
+    },
+
+    // La cuota entra a la caja abierta como una venta (la API revisa que la caja sea de hoy)
+    cobrarCuota: async ({ comercioId, ...datos }) => {
+      const r = await api.cobrarCuota(comercioId, datos);
+      set((s) => ({ ventas: [...s.ventas, r.venta], cuotas: [...s.cuotas, r.cuota], socios: conCambio(s.socios, r.socio) }));
+      const plan = get().planes.find((p) => p.id === r.cuota.planId)?.nombre ?? "";
+      return { ...r.cuota, socio: r.socio.nombre, plan, clases: r.clases, clasesQueSePierden: r.clasesQueSePierden };
+    },
+
+    guardarDisciplina: async (comercioId, nombre, id, activa = true) => {
+      const disciplina = id ? await api.actualizarDisciplina(id, nombre, activa) : await api.crearDisciplina(comercioId, nombre);
+      set((s) => ({ disciplinas: conCambio(s.disciplinas, disciplina) }));
+    },
+
+    guardarPlan: async ({ id, comercioId, ...plan }) => {
+      const guardado = id ? await api.actualizarPlan(id, plan) : await api.crearPlan(comercioId, plan);
+      set((s) => ({ planes: conCambio(s.planes, guardado) }));
+    },
+
+    guardarReglas: async ({ comercioId, ...reglas }) => {
+      const guardadas = await api.guardarReglas(comercioId, reglas);
+      set((s) => ({ reglasGimnasio: [...s.reglasGimnasio.filter((r) => r.comercioId !== comercioId), guardadas] }));
+    },
+
+    // Si se agranda el cupo, la API hace entrar a los de la lista de espera
+    guardarClase: async ({ id, comercioId, ...clase }) => {
+      const r = id ? await api.actualizarClase(id, clase) : await api.crearClase(comercioId, clase);
+      set((s) => ({ clases: conCambio(s.clases, r.clase) }));
+      juntar(r);
+      return r.entraron;
+    },
+
+    desactivarClase: async (claseId, hechaPor) => {
+      const r = await api.desactivarClase(claseId, hechaPor);
+      set((s) => ({ clases: conCambio(s.clases, r.clase) }));
+      juntar(r);
+      return r.canceladas;
+    },
+
+    reservarClase: async (comercioId, claseId, socioId, fecha, hechaPor) => {
+      const r = await api.reservar(comercioId, { claseId, socioId, fecha, hechaPor });
+      set((s) => ({ reservas: conCambio(s.reservas, r.reserva), socios: conCambio(s.socios, r.socio) }));
+      return { estado: r.estado, posicion: r.posicion, clasesRestantes: r.clasesRestantes, socio: r.socio };
+    },
+
+    cancelarReserva: async (reservaId, hechaPor, devolver) => {
+      const { reservas, socios, ...info } = await api.cancelarReserva(reservaId, hechaPor, devolver);
+      juntar({ reservas, socios });
+      return info;
+    },
+
+    marcarAsistencia: async (reservaId, vino) => {
+      const reserva = await api.marcarAsistencia(reservaId, vino);
+      set((s) => ({ reservas: conCambio(s.reservas, reserva) }));
+    },
+
+    // Se le pide a la API solo si en pantalla hay alguna clase que ya terminó con reservas abiertas
+    // (se llama cada vez que se abre Clases o la recepción: así no se hace un pedido de más cada vez)
+    cerrarClasesPasadas: async (comercioId) => {
+      const momento = ahora();
+      const clases = new Map(get().clases.map((c) => [c.id, c]));
+      const hayPasadas = get().reservas.some((r) => {
+        if (r.comercioId !== comercioId || (r.estado !== "reservado" && r.estado !== "espera") || r.fecha > momento.slice(0, 10)) return false;
+        const clase = clases.get(r.claseId);
+        return !!clase && horarioDe(clase, r.fecha).fin <= momento;
+      });
+      if (!hayPasadas) return;
+      const r = await api.cerrarClasesPasadas(comercioId);
+      set((s) => ({ reservas: r.reservas.reduce(conCambio, s.reservas) }));
+    },
+
+    registrarIngreso: async (comercioId, socioId, registradoPor, resultado = "paso", motivo = "") => {
+      const r = await api.registrarIngreso(comercioId, { socioId, registradoPor, resultado, motivo });
+      const { asistencia, reserva } = r;
+      set((s) => ({
+        asistencias: asistencia ? [...s.asistencias, asistencia] : s.asistencias,
+        reservas: reserva ? conCambio(s.reservas, reserva) : s.reservas,
+      }));
+      return { repetido: r.repetido };
+    },
+
+    // En la nube el ejemplo trae actividades, planes, grilla y reglas, pero no socios inventados:
+    // sus cuotas serían ventas falsas en la caja y en los reportes de verdad.
+    // Se arma igual que en la demo, con ids provisorios negativos que la API cambia por los de la base.
+    cargarEjemploGimnasio: async (comercioId) => {
+      const ej = ejemploGimnasio({ comercioId, idInicial: -1_000_000, conSocios: false, yaHay: get() });
+      const r = await api.cargarEjemplo(comercioId, {
+        disciplinas: ej.disciplinas.map((d) => ({ id: d.id, nombre: d.nombre })),
+        planes: ej.planes.map(({ nombre, precio, duracionMeses, duracionDias, cantidadClases, actividades, activo }) => ({ nombre, precio, duracionMeses, duracionDias, cantidadClases, actividades, activo })),
+        clases: ej.clases.map(({ disciplinaId, diaSemana, horaInicio, duracionMinutos, profesor, cupoMaximo, activa }) => ({ disciplinaId, diaSemana, horaInicio, duracionMinutos, profesor, cupoMaximo, activa })),
+      });
+      set((s) => ({
+        disciplinas: [...s.disciplinas, ...r.disciplinas],
+        planes: [...s.planes, ...r.planes],
+        clases: [...s.clases, ...r.clases],
+        reglasGimnasio: [...s.reglasGimnasio.filter((x) => x.comercioId !== comercioId), r.reglas],
+      }));
     },
   };
 }

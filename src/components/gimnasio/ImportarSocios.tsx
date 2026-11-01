@@ -9,6 +9,7 @@ import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { Boton, Campo, Chip, claseInput, Tabla, Tarjeta } from "../ui/base";
+import { useIntentar } from "./comun";
 
 // Importar: el jefe sube el Excel que ya tiene (o baja el modelo, lo completa y lo sube),
 // confirma qué columna es cada dato, mira la vista previa y recién ahí se guardan.
@@ -17,6 +18,7 @@ export function ImportarSocios({ alTerminar }: { alTerminar: () => void }) {
   const { socios, planes, importarSocios } = useDatos();
   const quien = useSesion((s) => s.sesion?.nombre);
   const avisar = useInterfaz((s) => s.avisar);
+  const intentar = useIntentar();
   const [leido, setLeido] = useState<{ archivo: string; planilla: Planilla; mapa: Mapa } | null>(null);
   const [error, setError] = useState("");
 
@@ -139,8 +141,9 @@ export function ImportarSocios({ alTerminar }: { alTerminar: () => void }) {
               <Boton
                 variante="primario"
                 disabled={faltan.length > 0 || !validas.length}
-                onClick={() => {
-                  const r = importarSocios(comercio.id, validas.map(({ nombre, dni, telefono, email, planId, vence }) => ({ nombre, dni, telefono, email, planId, vence })));
+                onClick={async () => {
+                  const r = await intentar(() => importarSocios(comercio.id, validas.map(({ nombre, dni, telefono, email, planId, vence }) => ({ nombre, dni, telefono, email, planId, vence }))));
+                  if (!r) return;
                   avisar(`Listo${quien ? `, ${quien.split(" ")[0]}` : ""}: ${r.nuevos} ${r.nuevos === 1 ? "socio nuevo" : "socios nuevos"} y ${r.actualizados} ${r.actualizados === 1 ? "actualizado" : "actualizados"}.`);
                   alTerminar();
                 }}

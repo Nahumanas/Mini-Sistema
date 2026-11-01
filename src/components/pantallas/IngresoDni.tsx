@@ -27,8 +27,19 @@ export function IngresoDni() {
   const campo = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    cerrarClasesPasadas(comercio.id);
+    cerrarClasesPasadas(comercio.id).catch(() => {}); // si falla (sin internet), se intenta la próxima vez
   }, [cerrarClasesPasadas, comercio.id]);
+
+  // Anota la entrada sin trabar el casillero: en recepción pasan DNIs seguidos y no se puede perder ninguno.
+  // El cartel dice "Entrada anotada" recién cuando quedó guardada (y solo si sigue mostrando a ese socio).
+  async function anotarEntrada(dniDelSocio: string, socioId: number, resultado?: "paso" | "rechazado", motivo?: string) {
+    try {
+      await registrarIngreso(comercio.id, socioId, quien, resultado, motivo);
+      if (resultado !== "rechazado") setActual((a) => (a && a.dni === dniDelSocio ? { ...a, anotado: hora(ahora()) } : a));
+    } catch (error) {
+      avisar(error instanceof Error ? error.message : String(error), "error");
+    }
+  }
 
   const r = actual ? verificarDni(datos, comercio.id, actual.dni, ahora()) : null;
 
@@ -36,20 +47,16 @@ export function IngresoDni() {
     e.preventDefault();
     if (!dni.trim()) return;
     const v = verificarDni(datos, comercio.id, dni, ahora());
-    let anotado: string | null = null;
-    if (v.socio && v.color === "verde" && !v.yaEntro) {
-      registrarIngreso(comercio.id, v.socio.id, quien);
-      anotado = hora(ahora());
-    } else if (v.socio && v.color === "rojo") registrarIngreso(comercio.id, v.socio.id, quien, "rechazado", v.titulo);
-    setActual({ dni: v.dni, anotado });
+    setActual({ dni: v.dni, anotado: null });
+    if (v.socio && v.color === "verde" && !v.yaEntro) void anotarEntrada(v.dni, v.socio.id);
+    else if (v.socio && v.color === "rojo") void anotarEntrada(v.dni, v.socio.id, "rechazado", v.titulo);
     setDni(""); // el casillero queda vacío para el próximo
     campo.current?.focus();
   }
 
   function dejarPasar(motivo: string) {
     if (!r?.socio) return;
-    registrarIngreso(comercio.id, r.socio.id, quien, "paso", motivo);
-    setActual({ dni: r.dni, anotado: hora(ahora()) });
+    void anotarEntrada(r.dni, r.socio.id, "paso", motivo);
   }
 
   const deHoy = asistencias.filter((a) => a.comercioId === comercio.id && a.fechaHora.slice(0, 10) === hoy()).sort((a, b) => b.fechaHora.localeCompare(a.fechaHora));
@@ -115,12 +122,12 @@ export function IngresoDni() {
                           .map((c) => (
                             <Boton
                               key={c.clase.id}
-                              onClick={() => {
-                                const hecho = intentar(() => reservarClase(comercio.id, c.clase.id, r.socio!.id, c.fecha, quien));
+                              onClick={async () => {
+                                const socio = r.socio!;
+                                const hecho = await intentar(() => reservarClase(comercio.id, c.clase.id, socio.id, c.fecha, quien));
                                 if (!hecho) return;
-                                avisar(`${r.socio!.nombre} quedó anotado en ${c.disciplina} de las ${c.clase.horaInicio}.`);
-                                registrarIngreso(comercio.id, r.socio!.id, quien);
-                                setActual({ dni: r.dni, anotado: hora(ahora()) });
+                                avisar(`${socio.nombre} quedó anotado en ${c.disciplina} de las ${c.clase.horaInicio}.`);
+                                await anotarEntrada(r.dni, socio.id);
                               }}
                             >
                               {c.clase.horaInicio} {c.disciplina} · {plural(c.libres, "lugar", "lugares")}
@@ -149,8 +156,7 @@ export function IngresoDni() {
                     alCobrar={() => {
                       const despues = verificarDni(useDatos.getState(), comercio.id, r.dni, ahora());
                       if (despues.socio && despues.color === "verde" && !despues.yaEntro) {
-                        registrarIngreso(comercio.id, despues.socio.id, quien);
-                        setActual({ dni: r.dni, anotado: hora(ahora()) });
+                        void anotarEntrada(r.dni, despues.socio.id);
                       }
                     }}
                   />

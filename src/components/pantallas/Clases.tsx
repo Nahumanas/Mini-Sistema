@@ -26,7 +26,8 @@ export function Clases() {
   const [vuelta, setVuelta] = useState(0); // para volver a leer la grilla después de guardarla
 
   useEffect(() => {
-    cerrarClasesPasadas(comercio.id);
+    // Si no se puede (por ejemplo, sin internet), se intenta de nuevo la próxima vez
+    cerrarClasesPasadas(comercio.id).catch(() => {});
   }, [cerrarClasesPasadas, comercio.id]);
 
   return (
@@ -178,9 +179,9 @@ function DetalleClase({ comercio, elegida, alCerrar }: { comercio: Comercio; ele
   const canceladas = anotados.filter((r) => r.estado === "cancelado");
   const socioDe = (r: Reserva) => socios.find((s) => s.id === r.socioId);
 
-  function anotar() {
+  async function anotar() {
     if (socioId === null) return;
-    const hecho = intentar(() => reservarClase(comercio.id, clase!.id, socioId, elegida.fecha, quien));
+    const hecho = await intentar(() => reservarClase(comercio.id, clase!.id, socioId, elegida.fecha, quien));
     if (!hecho) return;
     setSocioId(null);
     avisar(
@@ -240,10 +241,10 @@ function DetalleClase({ comercio, elegida, alCerrar }: { comercio: Comercio; ele
                         {r.estado === "falto" && <Chip tono="rojo">Faltó</Chip>}
                       </p>
                       <div className="flex flex-wrap gap-1.5">
-                        <Boton className="px-2.5 py-1.5 text-sm" disabled={r.estado === "vino"} onClick={() => marcarAsistencia(r.id, true)}>
+                        <Boton className="px-2.5 py-1.5 text-sm" disabled={r.estado === "vino"} onClick={() => void intentar(() => marcarAsistencia(r.id, true))}>
                           Vino
                         </Boton>
-                        <Boton className="px-2.5 py-1.5 text-sm" disabled={r.estado === "falto" || !empezo} title={empezo ? undefined : "Se marca cuando empieza la clase"} onClick={() => marcarAsistencia(r.id, false)}>
+                        <Boton className="px-2.5 py-1.5 text-sm" disabled={r.estado === "falto" || !empezo} title={empezo ? undefined : "Se marca cuando empieza la clase"} onClick={() => void intentar(() => marcarAsistencia(r.id, false))}>
                           Faltó
                         </Boton>
                         {!termino && r.estado === "reservado" && s && <AgregarCalendario comercio={comercio} evento={{ disciplina: c.disciplina, inicio: c.inicio, fin: c.fin, profesor: clase.profesor, socio: s.nombre, telefono: s.telefono, reservaId: r.id }} />}
@@ -260,10 +261,10 @@ function DetalleClase({ comercio, elegida, alCerrar }: { comercio: Comercio; ele
                         socio={s?.nombre ?? ""}
                         texto={`${c.disciplina} del ${ddmm(c.fecha)} ${clase.horaInicio}`}
                         limite={limite}
-                        alTerminar={(devolver) => {
+                        alTerminar={async (devolver) => {
                           setCancelando(null);
                           if (devolver === null) return;
-                          const hecho = intentar(() => cancelarReserva(r.id, quien, devolver));
+                          const hecho = await intentar(() => cancelarReserva(r.id, quien, devolver));
                           if (!hecho) return;
                           const texto = hecho.planLibre ? "" : hecho.devuelta ? "Se le devolvió la clase." : "No se le devolvió la clase.";
                           const entraron = hecho.entraron.length ? ` Entró de la lista de espera: ${hecho.entraron.map((e) => e.socio + (e.telefono ? ` (${e.telefono})` : "")).join(", ")}. Avisale.` : "";
@@ -293,8 +294,8 @@ function DetalleClase({ comercio, elegida, alCerrar }: { comercio: Comercio; ele
                       <Boton
                         variante="fantasma"
                         className="px-2.5 py-1.5 text-sm"
-                        onClick={() => {
-                          if (intentar(() => cancelarReserva(r.id, quien))) avisar(`${s?.nombre} salió de la lista de espera.`);
+                        onClick={async () => {
+                          if (await intentar(() => cancelarReserva(r.id, quien))) avisar(`${s?.nombre} salió de la lista de espera.`);
                         }}
                       >
                         Sacar
@@ -374,6 +375,7 @@ function ArmarGrilla({ comercio, alGuardar }: { comercio: Comercio; alGuardar: (
   const { clases, disciplinas, reservas, guardarClase, desactivarClase } = useDatos();
   const quien = useQuien();
   const avisar = useInterfaz((s) => s.avisar);
+  const intentar = useIntentar();
   const actividades = disciplinas.filter((d) => d.comercioId === comercio.id && d.activa);
   const antes = clases.filter((c) => c.comercioId === comercio.id).sort((a, b) => a.diaSemana - b.diaSemana || a.horaInicio.localeCompare(b.horaInicio));
   const [filas, setFilas] = useState<Fila[]>(() => antes.map(aFila));
@@ -395,7 +397,7 @@ function ArmarGrilla({ comercio, alGuardar }: { comercio: Comercio; alGuardar: (
   const nombreDe = (f: Fila) => `${actividades.find((a) => a.id === f.disciplinaId)?.nombre ?? "Clase"} ${DIAS_SEMANA[f.diaSemana]} ${f.horaInicio}`;
 
   // Primero se revisan todas las filas y, solo si están todas bien, se guarda (así no queda la mitad guardada)
-  function guardar() {
+  async function guardar() {
     const malas: string[] = [];
     const cambios: { fila: Fila; datos: Omit<Clase, "id" | "activa">; previa?: Clase }[] = [];
     for (const f of filas) {
@@ -414,22 +416,26 @@ function ArmarGrilla({ comercio, alGuardar }: { comercio: Comercio; alGuardar: (
     if (malas.length) return;
 
     const avisos: string[] = [];
-    for (const { fila, datos, previa } of cambios) {
-      if (!previa) {
-        if (fila.activa) guardarClase({ ...datos, activa: true });
-        continue;
+    // Se guarda clase por clase: si una falla (por ejemplo, sin internet), las anteriores ya quedaron guardadas
+    const salio = await intentar(async () => {
+      for (const { fila, datos, previa } of cambios) {
+        if (!previa) {
+          if (fila.activa) await guardarClase({ ...datos, activa: true });
+          continue;
+        }
+        const cambio = (Object.keys(datos) as (keyof typeof datos)[]).some((k) => previa[k] !== datos[k]);
+        if (cambio || (fila.activa && !previa.activa)) {
+          const entraron = await guardarClase({ ...datos, id: previa.id, activa: previa.activa || fila.activa });
+          if (entraron.length) avisos.push(`Entraron de la lista de espera: ${entraron.map((e) => e.socio).join(", ")}.`);
+        }
+        if (!fila.activa && previa.activa) {
+          const canceladas = await desactivarClase(previa.id, quien);
+          if (canceladas) avisos.push(`Se cancelaron ${plural(canceladas, "reserva", "reservas")} de ${nombreDe(fila)} (se devolvieron las clases).`);
+        }
       }
-      const cambio = (Object.keys(datos) as (keyof typeof datos)[]).some((k) => previa[k] !== datos[k]);
-      if (cambio || (fila.activa && !previa.activa)) {
-        const entraron = guardarClase({ ...datos, id: previa.id, activa: previa.activa || fila.activa });
-        if (entraron.length) avisos.push(`Entraron de la lista de espera: ${entraron.map((e) => e.socio).join(", ")}.`);
-      }
-      if (!fila.activa && previa.activa) {
-        const canceladas = desactivarClase(previa.id, quien);
-        if (canceladas) avisos.push(`Se cancelaron ${plural(canceladas, "reserva", "reservas")} de ${nombreDe(fila)} (se devolvieron las clases).`);
-      }
-    }
-    avisar(`Grilla guardada. ${avisos.join(" ")}`);
+      return true;
+    });
+    if (salio) avisar(`Grilla guardada. ${avisos.join(" ")}`);
     alGuardar();
   }
 

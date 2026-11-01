@@ -57,8 +57,8 @@ export function Ingreso() {
   useEffect(() => {
     // Se lee la sesión recién (la conexión pudo cerrarla en este mismo momento por ser de la demo)
     const actual = useSesion.getState().sesion;
-    if (listos && !conexion.esperando && sesion && actual) router.replace(pantallaDeEntrada(actual.rol === "jefe", comercios.find((c) => c.id === actual.comercioId), enNube));
-  }, [listos, conexion.esperando, sesion, router, comercios, enNube]);
+    if (listos && !conexion.esperando && sesion && actual) router.replace(pantallaDeEntrada(actual.rol === "jefe", comercios.find((c) => c.id === actual.comercioId)));
+  }, [listos, conexion.esperando, sesion, router, comercios]);
 
   // Mientras está bloqueado, la cuenta regresiva baja de a un segundo
   useEffect(() => {

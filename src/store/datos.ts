@@ -107,8 +107,9 @@ function baseNueva() {
   return { ...base, siguienteId: Math.max(...ids) + 1, pin: null };
 }
 
-/** En la nube, lo que todavía no está en la API arranca vacío (el gimnasio llega en la parte 4). */
-const SIN_DATOS_TODAVIA = {
+/** Por las dudas, si la API todavía no manda alguna lista del gimnasio (por ejemplo, mientras se publica
+ * la versión nueva), arranca vacía en vez de romper las pantallas. */
+const GIMNASIO_VACIO = {
   disciplinas: [],
   planes: [],
   clases: [],
@@ -425,7 +426,7 @@ export const useDatos = create<EstadoDatos>()(
         usarNube: (datos) => {
           guardarEnElNavegador = false; // antes de cambiar nada, así no se pisa la demo guardada
           const { dueno, ...base } = datos;
-          set({ ...SIN_DATOS_TODAVIA, ...base, modo: "nube", pinConfigurado: dueno.pinConfigurado });
+          set({ ...GIMNASIO_VACIO, ...base, modo: "nube", pinConfigurado: dueno.pinConfigurado });
         },
 
         volverALaDemo: async () => {
