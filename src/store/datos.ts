@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { DatosDeInicio } from "@/lib/api";
+import type { CambiosProducto, DatosDeInicio } from "@/lib/api";
 import { crearDatosDemo, DUENO, type BaseDemo } from "@/lib/datos-demo";
 import { sacarDeTandas } from "@/lib/calculos";
 import { ahora, hoy } from "@/lib/fechas";
@@ -40,7 +40,7 @@ export type Acciones = {
   retirarVencidos: (comercioId: number) => Promise<number>;
   sacarDeTanda: (loteId: number, cantidad: number, motivo: Retiro["motivo"] | "vendido") => Promise<void>;
   crearProducto: (producto: Omit<Producto, "id" | "activo">) => Promise<void>;
-  actualizarProducto: (id: number, cambios: Partial<Producto>) => Promise<void>;
+  actualizarProducto: (id: number, cambios: CambiosProducto) => Promise<void>;
   importarProductos: (comercioId: number, filas: Omit<Producto, "id" | "comercioId" | "activo" | "diasDuracion">[]) => Promise<{ nuevos: number; actualizados: number }>;
   crearComercio: (comercio: Omit<Comercio, "id" | "permisosEmpleado" | "combinarPromos" | "horaApertura" | "horaCierre" | "turnos">) => Promise<number>;
   actualizarComercio: (id: number, cambios: Partial<Comercio>) => Promise<void>;
@@ -333,7 +333,8 @@ export const useDatos = create<EstadoDatos>()(
 
         crearProducto: async (producto) => nuevoProducto(producto),
 
-        actualizarProducto: async (id, cambios) => {
+        actualizarProducto: async (id, { stockAntes, ...cambios }) => {
+          void stockAntes; // en la demo hay una sola compu: no hace falta comparar el stock
           cambiarProducto(id, cambios);
         },
 

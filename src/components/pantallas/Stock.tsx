@@ -21,7 +21,7 @@ export function Stock() {
   const avisar = useInterfaz((s) => s.avisar);
   const [buscar, setBuscar] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("todos");
-  const [editando, setEditando] = useState<{ id: number; codigo: string; precioVenta: string; stock: string; stockMinimo: string } | null>(null);
+  const [editando, setEditando] = useState<{ id: number; codigo: string; precioVenta: string; stock: string; stockAntes: number; stockMinimo: string } | null>(null);
   const [nuevo, setNuevo] = useState<typeof VACIO | null>(null);
   const [cargandoCodigos, setCargandoCodigos] = useState(false);
 
@@ -37,7 +37,10 @@ export function Stock() {
     if (!editando) return;
     try {
       await asignarCodigo(editando.id, editando.codigo);
-      await actualizarProducto(editando.id, { precioVenta: Number(editando.precioVenta), stock: Number(editando.stock), stockMinimo: Number(editando.stockMinimo) });
+      // El stock va solo si el jefe lo cambió, junto con el que veía: así no pisa lo que vendió otra compu mientras tanto.
+      const stock = Number(editando.stock);
+      const cambioStock = stock !== editando.stockAntes ? { stock, stockAntes: editando.stockAntes } : {};
+      await actualizarProducto(editando.id, { precioVenta: Number(editando.precioVenta), stockMinimo: Number(editando.stockMinimo), ...cambioStock });
     } catch (err) {
       return avisar((err as Error).message, "error");
     }
@@ -194,7 +197,7 @@ export function Stock() {
                     ) : (
                       <>
                         <button
-                          onClick={() => setEditando({ id: p.id, codigo: p.codigo, precioVenta: String(p.precioVenta), stock: String(p.stock), stockMinimo: String(p.stockMinimo) })}
+                          onClick={() => setEditando({ id: p.id, codigo: p.codigo, precioVenta: String(p.precioVenta), stock: String(p.stock), stockAntes: p.stock, stockMinimo: String(p.stockMinimo) })}
                           className="rounded-md p-1.5 text-texto-suave hover:bg-superficie-suave hover:text-texto"
                           aria-label={`Editar ${p.nombre}`}
                         >
