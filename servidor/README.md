@@ -58,6 +58,14 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
   lo vuelve a "sin avisar" sola (trigger). Sin mínimo cargado, avisa cuando se queda sin stock.
 - No hay avisos a hora fija: el servidor solo puede leer los datos cifrados mientras alguien usa el sistema.
 
+## Varias compus y prueba de carga (etapa 7)
+
+- `pruebas/test_concurrencia.py`: la API corre de verdad y 8 compus le pegan al mismo comercio a la vez (ventas,
+  última unidad, cierre y relevo mientras se vende, cambio de precio, compra y venta juntas). Corre con `pytest`.
+- Reglas para que no se trabe: el comercio se traba con `for no key update` (no `for update`) y los productos se
+  traban siempre ordenados por id. Editar el stock manda `stockAntes`: si otra compu vendió en el medio, da 409.
+- `carga/`: prueba de 100 comercios a la vez con Locust (ver `carga/README.md`). Nunca contra producción.
+
 ## Qué hace
 
 | Pedido | Para qué |
