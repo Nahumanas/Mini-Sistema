@@ -60,7 +60,9 @@ export function Planes() {
 
 function CargarEjemplo({ comercio }: { comercio: Comercio }) {
   const cargarEjemploGimnasio = useDatos((s) => s.cargarEjemploGimnasio);
+  const enNube = useDatos((s) => s.modo === "nube");
   const avisar = useInterfaz((s) => s.avisar);
+  const intentar = useIntentar();
   const [conSocios, setConSocios] = useState(false);
   return (
     <Tarjeta
@@ -72,16 +74,19 @@ function CargarEjemplo({ comercio }: { comercio: Comercio }) {
     >
       <div className="flex flex-col gap-3">
         <p>Cargá un ejemplo armado (4 actividades, 6 planes y la grilla de la semana) y después cambiá lo que quieras: nombres, precios, horarios y cupos.</p>
-        <label className="flex items-center gap-2 text-[15px]">
-          <input type="checkbox" checked={conSocios} onChange={(e) => setConSocios(e.target.checked)} className="size-4 accent-[var(--primary-color)]" />
-          Sumar también socios de prueba (con cuotas y reservas inventadas, para probar)
-        </label>
+        {/* En la nube no se inventan socios: sus cuotas serían ventas falsas en la caja y los reportes */}
+        {!enNube && (
+          <label className="flex items-center gap-2 text-[15px]">
+            <input type="checkbox" checked={conSocios} onChange={(e) => setConSocios(e.target.checked)} className="size-4 accent-[var(--primary-color)]" />
+            Sumar también socios de prueba (con cuotas y reservas inventadas, para probar)
+          </label>
+        )}
         <Boton
           variante="primario"
           className="self-start"
-          onClick={() => {
-            cargarEjemploGimnasio(comercio.id, conSocios);
-            avisar("Listo, cargaste el ejemplo. Revisalo y cambiale lo que quieras.");
+          onClick={async () => {
+            const hecho = await intentar(async () => (await cargarEjemploGimnasio(comercio.id, conSocios && !enNube), true));
+            if (hecho) avisar("Listo, cargaste el ejemplo. Revisalo y cambiale lo que quieras.");
           }}
         >
           Cargar el ejemplo
@@ -156,10 +161,10 @@ function FormPlan({ comercio, plan, alTerminar }: { comercio: Comercio; plan?: P
   return (
     <form
       className="flex flex-col gap-4"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        const hecho = intentar(() => {
-          guardarPlan({
+        const hecho = await intentar(async () => {
+          await guardarPlan({
             id: plan?.id,
             comercioId: comercio.id,
             nombre: f.nombre,
@@ -277,9 +282,9 @@ function PestanaActividades({ comercio }: { comercio: Comercio }) {
       <p className="text-texto-suave">Las actividades que da el gimnasio. Se usan para armar la grilla de clases y para los planes que incluyen solo algunas (por ejemplo, un plan de Pesas libres).</p>
       <form
         className="flex flex-wrap items-end gap-2"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          if (intentar(() => (guardarDisciplina(comercio.id, nueva), true))) {
+          if (await intentar(async () => (await guardarDisciplina(comercio.id, nueva), true))) {
             avisar(`Agregaste la actividad ${nueva.trim()}.`);
             setNueva("");
           }
@@ -310,9 +315,9 @@ function PestanaActividades({ comercio }: { comercio: Comercio }) {
           <Boton
             className="self-start"
             disabled={!hayCambios}
-            onClick={() => {
-              const hecho = intentar(() => {
-                for (const [id, c] of Object.entries(cambios)) guardarDisciplina(comercio.id, c.nombre, Number(id), c.activa);
+            onClick={async () => {
+              const hecho = await intentar(async () => {
+                for (const [id, c] of Object.entries(cambios)) await guardarDisciplina(comercio.id, c.nombre, Number(id), c.activa);
                 return true;
               });
               if (!hecho) return;
@@ -335,6 +340,7 @@ function PestanaActividades({ comercio }: { comercio: Comercio }) {
 function PestanaReglas({ comercio }: { comercio: Comercio }) {
   const { reglasGimnasio, guardarReglas } = useDatos();
   const avisar = useInterfaz((s) => s.avisar);
+  const intentar = useIntentar();
   const [r, setR] = useState<ReglasGimnasio>(() => reglasDe(reglasGimnasio, comercio.id));
   const [horas, setHoras] = useState(String(r.horasCancelacion));
   const [dias, setDias] = useState(String(r.diasAviso));
@@ -344,11 +350,11 @@ function PestanaReglas({ comercio }: { comercio: Comercio }) {
   return (
     <form
       className="flex flex-col gap-5"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
         if (!horasOk || !diasOk) return;
-        guardarReglas({ ...r, comercioId: comercio.id, horasCancelacion: Number(horas), diasAviso: Number(dias) });
-        avisar("Reglas guardadas.");
+        const hecho = await intentar(async () => (await guardarReglas({ ...r, comercioId: comercio.id, horasCancelacion: Number(horas), diasAviso: Number(dias) }), true));
+        if (hecho) avisar("Reglas guardadas.");
       }}
     >
       <p className="text-texto-suave">Las reglas se muestran en la pantalla al cobrar y al cancelar, así no hay discusiones con los socios.</p>

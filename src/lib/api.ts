@@ -1,6 +1,6 @@
 import type { MedioDePago } from "./formato";
 import { hayNube, supabase } from "./supabase";
-import type { AjusteCaja, Caja, Comercio, Compra, Empleado, Gasto, Lote, Producto, Promo, Proveedor, Relevo, Retiro, Socio, Venta } from "./tipos";
+import type { AjusteCaja, Asistencia, Caja, Clase, Comercio, Compra, Cuota as CuotaGimnasio, Disciplina, Empleado, Gasto, Lote, Plan, Producto, Promo, Proveedor, ReglasGimnasio, Relevo, Reserva, Retiro, Socio, Venta } from "./tipos";
 
 // La conexión con la API de Mantenete (FastAPI, en Render), que guarda todo en Supabase.
 //
@@ -58,7 +58,7 @@ export async function pedir<T>(ruta: string, metodo: Metodo = "GET", cuerpo?: un
 }
 
 /** Lo que trae /inicio: todo lo del dueño que la página necesita al entrar
- * (ventas, cajas, compras, gastos y retiros de los últimos 2 meses). */
+ * (ventas, cajas, compras, gastos, retiros, reservas y entradas de los últimos 2 meses; cuotas del último año). */
 export type DatosDeInicio = {
   dueno: { nombre: string; email: string; pinConfigurado: boolean };
   comercios: Comercio[];
@@ -74,6 +74,14 @@ export type DatosDeInicio = {
   gastos: Gasto[];
   lotes: Lote[];
   retiros: Retiro[];
+  disciplinas: Disciplina[];
+  planes: Plan[];
+  clases: Clase[];
+  reglasGimnasio: ReglasGimnasio[];
+  socios: Socio[];
+  reservas: Reserva[];
+  cuotas: CuotaGimnasio[];
+  asistencias: Asistencia[];
 };
 
 export type NuevoProducto = Omit<Producto, "id" | "comercioId" | "activo">;
@@ -88,6 +96,13 @@ export type NuevaVenta = {
 export type NuevaCompra = { proveedorId: number | null; items: { productoId: number; cantidad: number; costoUnitario: number }[]; cargadaPor: string };
 export type DatosPromo = Omit<Promo, "id" | "comercioId">;
 type Cuota = { id: number; anulada: string | null };
+export type DatosSocioApi = Pick<Socio, "nombre" | "dni" | "telefono" | "email" | "nota">;
+export type FilaSocioApi = Pick<Socio, "nombre" | "dni" | "telefono" | "email" | "planId" | "vence">;
+export type DatosPlan = Omit<Plan, "id" | "comercioId">;
+export type DatosClase = Omit<Clase, "id" | "comercioId">;
+/** Las reservas y socios que cambiaron (por ejemplo, los que entraron de la lista de espera). */
+type Cambios = { reservas: Reserva[]; socios: Socio[] };
+type Entraron = { socio: string; telefono: string }[];
 
 /** Cada cosa que la página le puede pedir a la API (ver servidor/README.md). */
 export const api = {
@@ -133,4 +148,36 @@ export const api = {
   crearPromo: (comercioId: number, promo: DatosPromo) => pedir<Promo>(`/comercios/${comercioId}/promos`, "POST", promo),
   actualizarPromo: (id: number, promo: DatosPromo) => pedir<Promo>(`/promos/${id}`, "PUT", promo),
   borrarPromo: (id: number) => pedir<{ ok: boolean }>(`/promos/${id}`, "DELETE"),
+
+  // Gimnasio: socios y cuotas
+  crearSocio: (comercioId: number, datos: DatosSocioApi) => pedir<Socio>(`/comercios/${comercioId}/socios`, "POST", datos),
+  actualizarSocio: (id: number, datos: DatosSocioApi) => pedir<Socio>(`/socios/${id}`, "PATCH", datos),
+  darDeBaja: (id: number, hechaPor: string) => pedir<{ canceladas: number } & Cambios>(`/socios/${id}/baja`, "POST", { hechaPor }),
+  reactivarSocio: (id: number) => pedir<Socio>(`/socios/${id}/reactivar`, "POST"),
+  importarSocios: (comercioId: number, filas: FilaSocioApi[]) =>
+    pedir<{ nuevos: number; actualizados: number; socios: Socio[] }>(`/comercios/${comercioId}/socios/importar`, "POST", { filas }),
+  cobrarCuota: (comercioId: number, datos: { socioId: number; planId: number; medioPago: MedioDePago; monto: number; vence: string; cobradaPor: string }) =>
+    pedir<{ cuota: CuotaGimnasio; venta: Venta; socio: Socio; clases: number; clasesQueSePierden: number }>(`/comercios/${comercioId}/cuotas`, "POST", datos),
+
+  // Gimnasio: actividades, planes, reglas y ejemplo
+  crearDisciplina: (comercioId: number, nombre: string) => pedir<Disciplina>(`/comercios/${comercioId}/disciplinas`, "POST", { nombre }),
+  actualizarDisciplina: (id: number, nombre: string, activa: boolean) => pedir<Disciplina>(`/disciplinas/${id}`, "PATCH", { nombre, activa }),
+  crearPlan: (comercioId: number, plan: DatosPlan) => pedir<Plan>(`/comercios/${comercioId}/planes`, "POST", plan),
+  actualizarPlan: (id: number, plan: DatosPlan) => pedir<Plan>(`/planes/${id}`, "PUT", plan),
+  guardarReglas: (comercioId: number, reglas: Omit<ReglasGimnasio, "comercioId">) => pedir<ReglasGimnasio>(`/comercios/${comercioId}/reglas-gimnasio`, "PUT", reglas),
+  cargarEjemplo: (comercioId: number, ejemplo: { disciplinas: { id: number; nombre: string }[]; planes: DatosPlan[]; clases: (DatosClase & { disciplinaId: number })[] }) =>
+    pedir<{ disciplinas: Disciplina[]; planes: Plan[]; clases: Clase[]; reglas: ReglasGimnasio }>(`/comercios/${comercioId}/gimnasio/ejemplo`, "POST", ejemplo),
+
+  // Gimnasio: clases, reservas y entradas por DNI
+  crearClase: (comercioId: number, clase: DatosClase) => pedir<{ clase: Clase; entraron: Entraron } & Cambios>(`/comercios/${comercioId}/clases`, "POST", clase),
+  actualizarClase: (id: number, clase: DatosClase) => pedir<{ clase: Clase; entraron: Entraron } & Cambios>(`/clases/${id}`, "PUT", clase),
+  desactivarClase: (id: number, hechaPor: string) => pedir<{ clase: Clase; canceladas: number } & Cambios>(`/clases/${id}/desactivar`, "POST", { hechaPor }),
+  reservar: (comercioId: number, datos: { claseId: number; socioId: number; fecha: string; hechaPor: string }) =>
+    pedir<{ reserva: Reserva; estado: "reservado" | "espera"; posicion: number | null; clasesRestantes: number | null; socio: Socio }>(`/comercios/${comercioId}/reservas`, "POST", datos),
+  cancelarReserva: (id: number, hechaPor: string, devolver?: boolean) =>
+    pedir<{ devuelta: boolean; aTiempo: boolean; eraEspera: boolean; planLibre: boolean; entraron: Entraron } & Cambios>(`/reservas/${id}/cancelar`, "POST", { hechaPor, devolver: devolver ?? null }),
+  marcarAsistencia: (id: number, vino: boolean) => pedir<Reserva>(`/reservas/${id}/asistencia`, "POST", { vino }),
+  cerrarClasesPasadas: (comercioId: number) => pedir<{ reservas: Reserva[] }>(`/comercios/${comercioId}/reservas/cerrar-pasadas`, "POST"),
+  registrarIngreso: (comercioId: number, datos: { socioId: number; registradoPor: string; resultado: "paso" | "rechazado"; motivo: string }) =>
+    pedir<{ repetido: boolean; asistencia: Asistencia | null; reserva: Reserva | null }>(`/comercios/${comercioId}/ingresos`, "POST", datos),
 };

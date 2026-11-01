@@ -27,6 +27,7 @@ export function FichaSocio({ comercio, socioId, alCerrar }: { comercio: Comercio
   const { socios, planes, darDeBaja, reactivarSocio } = datos;
   const esJefe = useEsJefe();
   const quien = useQuien();
+  const intentar = useIntentar();
   const avisar = useInterfaz((s) => s.avisar);
   const [pestana, setPestana] = useState<Pestana>("cobrar");
   const [confirmarBaja, setConfirmarBaja] = useState(false);
@@ -53,9 +54,8 @@ export function FichaSocio({ comercio, socioId, alCerrar }: { comercio: Comercio
           {esJefe && !socio.activo && (
             <Boton
               icono={RotateCcw}
-              onClick={() => {
-                reactivarSocio(socio.id);
-                avisar(`${socio.nombre} está activo otra vez.`);
+              onClick={async () => {
+                if ((await intentar(() => reactivarSocio(socio.id))) !== undefined) avisar(`${socio.nombre} está activo otra vez.`);
               }}
               className="px-2.5 py-1.5 text-sm"
             >
@@ -76,8 +76,9 @@ export function FichaSocio({ comercio, socioId, alCerrar }: { comercio: Comercio
             <div className="flex gap-2">
               <Boton
                 variante="primario"
-                onClick={() => {
-                  const canceladas = darDeBaja(socio.id, quien);
+                onClick={async () => {
+                  const canceladas = await intentar(() => darDeBaja(socio.id, quien));
+                  if (canceladas === undefined) return;
                   avisar(`${socio.nombre} quedó dado de baja${canceladas ? ` y se cancelaron ${plural(canceladas, "reserva", "reservas")}` : ""}. Lo encontrás en «Dados de baja».`);
                   setConfirmarBaja(false);
                 }}
@@ -159,8 +160,8 @@ function ReservasDelSocio({ comercio, socioId }: { comercio: Comercio; socioId: 
               <Boton
                 variante="fantasma"
                 className="px-2.5 py-1.5 text-sm"
-                onClick={() => {
-                  const hecho = intentar(() => cancelarReserva(r.id, quien));
+                onClick={async () => {
+                  const hecho = await intentar(() => cancelarReserva(r.id, quien));
                   if (!hecho) return;
                   const texto = hecho.eraEspera ? "Salió de la espera." : hecho.planLibre ? "" : hecho.devuelta ? "Le devolvimos la clase." : "Canceló tarde: la clase no se devuelve.";
                   avisar(`Reserva cancelada. ${texto}${hecho.entraron.length ? ` Entró de la lista de espera: ${hecho.entraron.map((e) => e.socio).join(", ")}.` : ""}`);
@@ -192,9 +193,9 @@ function ReservasDelSocio({ comercio, socioId }: { comercio: Comercio; socioId: 
             <Boton
               variante="primario"
               disabled={!elegida}
-              onClick={() => {
+              onClick={async () => {
                 const [claseId, fecha] = elegida.split("|");
-                const hecho = intentar(() => reservarClase(comercio.id, Number(claseId), socio.id, fecha, quien));
+                const hecho = await intentar(() => reservarClase(comercio.id, Number(claseId), socio.id, fecha, quien));
                 if (!hecho) return;
                 avisar(hecho.estado === "reservado" ? `Anotado.${textoClases(hecho.clasesRestantes)}` : `La clase está llena: quedó ${hecho.posicion}° en la lista de espera (entra solo si alguien cancela).`);
                 setElegida("");
@@ -273,9 +274,9 @@ function DatosDelSocio({ socioId }: { socioId: number }) {
   return (
     <form
       className="grid gap-4 sm:grid-cols-2"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        if (intentar(() => (actualizarSocio(socioId, datos), true))) avisar("Datos guardados.");
+        if (await intentar(async () => (await actualizarSocio(socioId, datos), true))) avisar("Datos guardados.");
       }}
     >
       <Campo etiqueta="Nombre y apellido">

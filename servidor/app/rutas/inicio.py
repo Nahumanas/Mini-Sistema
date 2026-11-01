@@ -55,6 +55,23 @@ def inicio(usuario: Usuario = Depends(usuario_actual)):
         ).fetchall()
         gastos = con.execute(f"select * from public.gastos where fecha >= {_DESDE} order by fecha, id").fetchall()
         lotes = con.execute("select * from public.lotes where cantidad > 0 order by vence, id").fetchall()
+        # Gimnasio: todos los socios, planes y la grilla; reservas desde hace 2 meses (y las que vienen),
+        # cuotas del último año (el historial de la ficha) y las entradas por DNI de los últimos 2 meses
+        disciplinas = con.execute("select * from public.disciplinas order by nombre").fetchall()
+        planes = con.execute("select * from public.planes order by precio, id").fetchall()
+        clases = con.execute("select * from public.clases order by dia_semana, hora_inicio, id").fetchall()
+        reglas = con.execute("select * from public.reglas_gimnasio").fetchall()
+        socios = con.execute("select * from public.socios order by nombre").fetchall()
+        reservas = con.execute(f"select * from public.reservas where fecha >= {_DESDE} order by fecha, creada, id").fetchall()
+        cuotas = con.execute(
+            """select * from public.cuotas
+               where (fecha at time zone 'America/Argentina/Buenos_Aires')::date >= (now() at time zone 'America/Argentina/Buenos_Aires')::date - 365
+               order by fecha, id"""
+        ).fetchall()
+        asistencias = con.execute(
+            f"""select * from public.asistencias
+                where (fecha_hora at time zone 'America/Argentina/Buenos_Aires')::date >= {_DESDE} order by fecha_hora, id"""
+        ).fetchall()
         retiros = con.execute(
             f"""select * from public.retiros
                 where (fecha at time zone 'America/Argentina/Buenos_Aires')::date >= {_DESDE} order by fecha, id"""
@@ -74,4 +91,12 @@ def inicio(usuario: Usuario = Depends(usuario_actual)):
             "gastos": [a_camel(f) for f in gastos],
             "lotes": [a_camel(f) for f in lotes],
             "retiros": [a_camel(f) for f in retiros],
+            "disciplinas": [a_camel(f) for f in disciplinas],
+            "planes": [a_camel(f) for f in planes],
+            "clases": [a_camel(f) for f in clases],
+            "reglasGimnasio": [a_camel(f) for f in reglas],
+            "socios": [a_camel(f) for f in socios],
+            "reservas": [a_camel(f) for f in reservas],
+            "cuotas": [a_camel(f) for f in cuotas],
+            "asistencias": [a_camel(f) for f in asistencias],
         }

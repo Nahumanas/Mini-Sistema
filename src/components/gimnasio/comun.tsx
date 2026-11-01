@@ -23,15 +23,22 @@ export function useQuien() {
   return useSesion((s) => s.sesion?.nombre ?? "");
 }
 
-/** Muestra el error de una acción como aviso rojo, en vez de romper la pantalla. */
+/** Hace la acción y, si no se pudo (un dato mal, o en la nube sin internet o la API dijo que no), muestra el
+ * motivo como aviso rojo en vez de romper la pantalla. Devuelve lo que devolvió la acción, o undefined si falló. */
 export function useIntentar() {
   const avisar = useInterfaz((s) => s.avisar);
-  return <T,>(hacer: () => T): T | undefined => {
+  // Mientras se guarda, un segundo clic no hace nada (así no se cobra dos veces la misma cuota)
+  const ocupado = useRef(false);
+  return async <T,>(hacer: () => T | Promise<T>): Promise<T | undefined> => {
+    if (ocupado.current) return undefined;
+    ocupado.current = true;
     try {
-      return hacer();
+      return await hacer();
     } catch (error) {
       avisar(error instanceof Error ? error.message : String(error), "error");
       return undefined;
+    } finally {
+      ocupado.current = false;
     }
   };
 }
@@ -133,9 +140,9 @@ export function AltaSocio({ comercioId, dni = "", alCrear, alCancelar, boton = "
   return (
     <form
       className="grid gap-4 sm:grid-cols-2"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        const id = intentar(() => crearSocio(comercioId, datos));
+        const id = await intentar(() => crearSocio(comercioId, datos));
         if (id === undefined) return;
         avisar(`${datos.nombre.trim()} quedó dado de alta. Ahora cobrale la primera cuota.`);
         alCrear(id);
@@ -323,8 +330,8 @@ export function CobrarCuota({ comercio, socioId, alCobrar }: { comercio: Comerci
             <button
               type="button"
               disabled={falta > 0}
-              onClick={() => {
-                const cuota = intentar(() => cobrarCuota({ comercioId: comercio.id, socioId, planId: plan.id, medioPago: medio, monto, vence, cobradaPor: quien }));
+              onClick={async () => {
+                const cuota = await intentar(() => cobrarCuota({ comercioId: comercio.id, socioId, planId: plan.id, medioPago: medio, monto, vence, cobradaPor: quien }));
                 if (!cuota) return;
                 avisar(textoCuotaCobrada(cuota));
                 setPagaCon("");

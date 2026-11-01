@@ -43,11 +43,11 @@ export function Sidebar() {
       >
         <div className={`flex h-16 shrink-0 items-center justify-between border-b border-borde px-5 ${menuAchicado ? "lg:justify-center lg:px-0" : ""}`}>
           {menuAchicado && (
-            <Link href={pantallaDeEntrada(esJefe, comercio, enNube)} aria-label="Mantenete, ir al inicio" className="hidden lg:block">
+            <Link href={pantallaDeEntrada(esJefe, comercio)} aria-label="Mantenete, ir al inicio" className="hidden lg:block">
               <Image src="/icon.png" alt="" width={28} height={28} className="size-7" />
             </Link>
           )}
-          <Link href={pantallaDeEntrada(esJefe, comercio, enNube)} aria-label="Mantenete, ir al inicio" className={chico}>
+          <Link href={pantallaDeEntrada(esJefe, comercio)} aria-label="Mantenete, ir al inicio" className={chico}>
             {/* Dos logos, uno por tema: el CSS muestra el que corresponde, sin parpadeo */}
             <Image src="/logo-claro.png" alt="Mantenete" width={148} height={38} className="h-7 w-auto dark:hidden" priority />
             <Image src="/logo-oscuro.png" alt="Mantenete" width={148} height={36} className="hidden h-7 w-auto dark:block" priority />

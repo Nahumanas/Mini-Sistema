@@ -19,26 +19,27 @@ export type CuotaCobrada = Cuota & { socio: string; plan: string; clases: number
 export type Entraron = { socio: string; telefono: string }[];
 
 export type AccionesGimnasio = {
-  crearSocio: (comercioId: number, datos: DatosSocio) => number;
-  actualizarSocio: (socioId: number, datos: DatosSocio) => void;
-  darDeBaja: (socioId: number, hechaPor: string) => number;
-  reactivarSocio: (socioId: number) => void;
-  importarSocios: (comercioId: number, filas: FilaImportada[]) => { nuevos: number; actualizados: number };
-  cobrarCuota: (p: { comercioId: number; socioId: number; planId: number; medioPago: MedioDePago; monto: number; vence: string; cobradaPor: string }) => CuotaCobrada;
-  guardarDisciplina: (comercioId: number, nombre: string, id?: number, activa?: boolean) => void;
-  guardarPlan: (plan: Omit<Plan, "id"> & { id?: number }) => void;
-  guardarReglas: (reglas: ReglasGimnasio) => void;
-  guardarClase: (clase: Omit<Clase, "id"> & { id?: number }) => Entraron;
-  desactivarClase: (claseId: number, hechaPor: string) => number;
-  reservarClase: (comercioId: number, claseId: number, socioId: number, fecha: string, hechaPor: string) => { estado: "reservado" | "espera"; posicion: number | null; clasesRestantes: number | null; socio: Socio };
-  cancelarReserva: (reservaId: number, hechaPor: string, devolver?: boolean) => { devuelta: boolean; aTiempo: boolean; eraEspera: boolean; planLibre: boolean; entraron: Entraron };
-  marcarAsistencia: (reservaId: number, vino: boolean) => void;
-  cerrarClasesPasadas: (comercioId: number) => void;
-  registrarIngreso: (comercioId: number, socioId: number, registradoPor: string, resultado?: "paso" | "rechazado", motivo?: string) => { repetido: boolean };
-  cargarEjemploGimnasio: (comercioId: number, conSocios: boolean) => void;
+  crearSocio: (comercioId: number, datos: DatosSocio) => Promise<number>;
+  actualizarSocio: (socioId: number, datos: DatosSocio) => Promise<void>;
+  darDeBaja: (socioId: number, hechaPor: string) => Promise<number>;
+  reactivarSocio: (socioId: number) => Promise<void>;
+  importarSocios: (comercioId: number, filas: FilaImportada[]) => Promise<{ nuevos: number; actualizados: number }>;
+  cobrarCuota: (p: { comercioId: number; socioId: number; planId: number; medioPago: MedioDePago; monto: number; vence: string; cobradaPor: string }) => Promise<CuotaCobrada>;
+  guardarDisciplina: (comercioId: number, nombre: string, id?: number, activa?: boolean) => Promise<void>;
+  guardarPlan: (plan: Omit<Plan, "id"> & { id?: number }) => Promise<void>;
+  guardarReglas: (reglas: ReglasGimnasio) => Promise<void>;
+  guardarClase: (clase: Omit<Clase, "id"> & { id?: number }) => Promise<Entraron>;
+  desactivarClase: (claseId: number, hechaPor: string) => Promise<number>;
+  reservarClase: (comercioId: number, claseId: number, socioId: number, fecha: string, hechaPor: string) => Promise<{ estado: "reservado" | "espera"; posicion: number | null; clasesRestantes: number | null; socio: Socio }>;
+  cancelarReserva: (reservaId: number, hechaPor: string, devolver?: boolean) => Promise<{ devuelta: boolean; aTiempo: boolean; eraEspera: boolean; planLibre: boolean; entraron: Entraron }>;
+  marcarAsistencia: (reservaId: number, vino: boolean) => Promise<void>;
+  cerrarClasesPasadas: (comercioId: number) => Promise<void>;
+  registrarIngreso: (comercioId: number, socioId: number, registradoPor: string, resultado?: "paso" | "rechazado", motivo?: string) => Promise<{ repetido: boolean }>;
+  cargarEjemploGimnasio: (comercioId: number, conSocios: boolean) => Promise<void>;
 };
 
-function validarSocio(d: DatosSocio): DatosSocio {
+/** Ordena y revisa los datos de un socio (en la demo y antes de mandarlos a la API). */
+export function validarSocio(d: DatosSocio): DatosSocio {
   const nombre = d.nombre.split(/\s+/).filter(Boolean).join(" ");
   if (!nombre) throw new Error("Escribí el nombre y apellido del socio.");
   const dni = limpiarDni(d.dni);
@@ -84,7 +85,7 @@ export function accionesGimnasio(set: Set, get: Get, nuevoId: () => number): Acc
   }
 
   const acciones: AccionesGimnasio = {
-    crearSocio: (comercioId, datos) => {
+    crearSocio: async (comercioId, datos) => {
       const d = validarSocio(datos);
       const repetido = get().socios.find((s) => s.comercioId === comercioId && s.dni === d.dni);
       if (repetido) throw new Error(`Ya hay un socio con el DNI ${d.dni}: ${repetido.nombre}.`);
@@ -93,7 +94,7 @@ export function accionesGimnasio(set: Set, get: Get, nuevoId: () => number): Acc
       return id;
     },
 
-    actualizarSocio: (socioId, datos) => {
+    actualizarSocio: async (socioId, datos) => {
       const socio = socioDe(socioId);
       const d = validarSocio(datos);
       const otro = get().socios.find((s) => s.comercioId === socio.comercioId && s.dni === d.dni && s.id !== socioId);
@@ -102,17 +103,17 @@ export function accionesGimnasio(set: Set, get: Get, nuevoId: () => number): Acc
     },
 
     // No se borra nada: deja de figurar entre los activos y sus reservas que vienen se cancelan
-    darDeBaja: (socioId, hechaPor) => {
+    darDeBaja: async (socioId, hechaPor) => {
       const futuras = get().reservas.filter((r) => r.socioId === socioId && r.fecha >= hoy() && (r.estado === "reservado" || r.estado === "espera"));
-      for (const r of futuras) acciones.cancelarReserva(r.id, hechaPor, false);
+      for (const r of futuras) await acciones.cancelarReserva(r.id, hechaPor, false);
       cambiarSocio(socioId, { activo: false });
       return futuras.length;
     },
 
-    reactivarSocio: (socioId) => cambiarSocio(socioId, { activo: true }),
+    reactivarSocio: async (socioId) => cambiarSocio(socioId, { activo: true }),
 
     // Si el DNI ya está en el gimnasio, se actualizan sus datos (sin borrar lo que venga vacío en el Excel).
-    importarSocios: (comercioId, filas) => {
+    importarSocios: async (comercioId, filas) => {
       let nuevos = 0;
       let actualizados = 0;
       for (const fila of filas) {
@@ -134,7 +135,7 @@ export function accionesGimnasio(set: Set, get: Get, nuevoId: () => number): Acc
     },
 
     // La cuota entra a la caja abierta como una venta: suma en el arqueo y en el cierre
-    cobrarCuota: ({ comercioId, socioId, planId, medioPago, monto, vence, cobradaPor }) => {
+    cobrarCuota: async ({ comercioId, socioId, planId, medioPago, monto, vence, cobradaPor }) => {
       const s = get();
       const caja = s.cajas.find((c) => c.comercioId === comercioId && !c.cerrada);
       if (!caja) throw new Error("Para cobrar, primero abrí la caja: la cuota entra a la caja como cualquier venta.");
@@ -164,7 +165,7 @@ export function accionesGimnasio(set: Set, get: Get, nuevoId: () => number): Acc
       return { ...cuota, socio: socio.nombre, plan: plan.nombre, clases: c.clases, clasesQueSePierden: c.clasesQueSePierden };
     },
 
-    guardarDisciplina: (comercioId, nombre, id, activa = true) => {
+    guardarDisciplina: async (comercioId, nombre, id, activa = true) => {
       const limpio = nombre.trim().slice(0, 100);
       if (!limpio) throw new Error("Escribí el nombre de la actividad (por ejemplo: Crossfit o Pesas libres).");
       const igual = (a: string) => a.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -176,7 +177,7 @@ export function accionesGimnasio(set: Set, get: Get, nuevoId: () => number): Acc
       }
     },
 
-    guardarPlan: (plan) => {
+    guardarPlan: async (plan) => {
       const nombre = plan.nombre.trim();
       if (!nombre) throw new Error("Escribí el nombre del plan (por ejemplo: 8 clases por mes).");
       if (!(plan.precio > 0)) throw new Error(`Poné el precio del plan ${nombre}.`);
@@ -190,10 +191,10 @@ export function accionesGimnasio(set: Set, get: Get, nuevoId: () => number): Acc
       }
     },
 
-    guardarReglas: (reglas) => set((s) => ({ reglasGimnasio: [...s.reglasGimnasio.filter((r) => r.comercioId !== reglas.comercioId), reglas] })),
+    guardarReglas: async (reglas) => set((s) => ({ reglasGimnasio: [...s.reglasGimnasio.filter((r) => r.comercioId !== reglas.comercioId), reglas] })),
 
     // Si se agranda el cupo, entra gente de la lista de espera
-    guardarClase: (clase) => {
+    guardarClase: async (clase) => {
       if (!get().disciplinas.some((d) => d.id === clase.disciplinaId)) throw new Error("Elegí la actividad de la clase.");
       if (!(clase.cupoMaximo >= 1 && clase.cupoMaximo <= 500)) throw new Error("El cupo tiene que ser de 1 a 500 personas.");
       if (!(clase.duracionMinutos >= 10 && clase.duracionMinutos <= 300)) throw new Error("La clase tiene que durar entre 10 y 300 minutos.");
@@ -214,16 +215,16 @@ export function accionesGimnasio(set: Set, get: Get, nuevoId: () => number): Acc
     },
 
     // Las reservas que venían se cancelan y se devuelven las clases
-    desactivarClase: (claseId, hechaPor) => {
+    desactivarClase: async (claseId, hechaPor) => {
       set((s) => ({ clases: s.clases.map((c) => (c.id === claseId ? { ...c, activa: false } : c)) }));
       const futuras = get().reservas.filter((r) => r.claseId === claseId && r.fecha >= hoy() && (r.estado === "reservado" || r.estado === "espera"));
-      for (const r of futuras) acciones.cancelarReserva(r.id, hechaPor, true);
+      for (const r of futuras) await acciones.cancelarReserva(r.id, hechaPor, true);
       return futuras.length;
     },
 
     // Si la clase está llena, va a la lista de espera. Con plan por clases, reservar le descuenta una
     // (la lista de espera no descuenta: se descuenta recién cuando entra).
-    reservarClase: (comercioId, claseId, socioId, fecha, hechaPor) => {
+    reservarClase: async (comercioId, claseId, socioId, fecha, hechaPor) => {
       const clase = get().clases.find((c) => c.id === claseId && c.comercioId === comercioId);
       if (!clase) throw new Error("No se encontró la clase.");
       if (!clase.activa) throw new Error("Esa clase ya no está en la grilla.");
@@ -247,7 +248,7 @@ export function accionesGimnasio(set: Set, get: Get, nuevoId: () => number): Acc
 
     // Regla del gimnasio: cancelando con la anticipación que pide, se devuelve la clase. El jefe puede devolverla igual.
     // Si se liberó un lugar, entra solo el primero de la lista de espera.
-    cancelarReserva: (reservaId, hechaPor, devolver) => {
+    cancelarReserva: async (reservaId, hechaPor, devolver) => {
       const reserva = get().reservas.find((r) => r.id === reservaId);
       if (!reserva) throw new Error("No se encontró la reserva.");
       if (reserva.estado !== "reservado" && reserva.estado !== "espera") throw new Error("Esa reserva ya no se puede cancelar.");
@@ -262,11 +263,11 @@ export function accionesGimnasio(set: Set, get: Get, nuevoId: () => number): Acc
       return { devuelta, aTiempo, eraEspera, planLibre: !eraEspera && !reserva.claseDescontada, entraron };
     },
 
-    marcarAsistencia: (reservaId, vino) => cambiarReserva(reservaId, { estado: vino ? "vino" : "falto" }),
+    marcarAsistencia: async (reservaId, vino) => cambiarReserva(reservaId, { estado: vino ? "vino" : "falto" }),
 
     // Las clases que ya terminaron: el que tenía lugar y no vino queda "faltó" (pierde la clase)
     // y el que seguía en la lista de espera queda "cancelado" (no le llegó el lugar)
-    cerrarClasesPasadas: (comercioId) => {
+    cerrarClasesPasadas: async (comercioId) => {
       const momento = ahora();
       const clases = new Map(get().clases.map((c) => [c.id, c]));
       const pasadas = get().reservas.filter((r) => {
@@ -280,7 +281,7 @@ export function accionesGimnasio(set: Set, get: Get, nuevoId: () => number): Acc
     },
 
     // Si pasa y tiene reserva para esta hora, la reserva queda "vino". Si ya entró hace menos de una hora, no se repite.
-    registrarIngreso: (comercioId, socioId, registradoPor, resultado = "paso", motivo = "") => {
+    registrarIngreso: async (comercioId, socioId, registradoPor, resultado = "paso", motivo = "") => {
       const momento = ahora();
       if (resultado === "paso") {
         const desde = sumarMinutos(momento, -MINUTOS_INGRESO_REPETIDO);
@@ -298,7 +299,7 @@ export function accionesGimnasio(set: Set, get: Get, nuevoId: () => number): Acc
       return { repetido: false };
     },
 
-    cargarEjemploGimnasio: (comercioId, conSocios) => {
+    cargarEjemploGimnasio: async (comercioId, conSocios) => {
       const s = get();
       const ej = ejemploGimnasio({
         comercioId,
