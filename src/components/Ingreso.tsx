@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Info, KeyRound, LogOut, Store, User } from "lucide-react";
+import { Info, KeyRound, LogOut, Plus, Store, User } from "lucide-react";
 import { DUENO } from "@/lib/datos-demo";
 import { pantallaDeEntrada } from "@/lib/navegacion";
 import { hayNube } from "@/lib/supabase";
@@ -25,6 +25,7 @@ const ESPERA_SEGUNDOS = 30; // ...y hay que esperar 30 segundos para probar de n
 //    Con la API configurada, desde ahí se trabaja con los datos de la nube (si no, con la demo).
 // 2. Cada turno: elegir el comercio y entrar como empleado (con su nombre) o como jefe (con PIN).
 //    En la nube, la primera vez el dueño crea su primer comercio y elige su PIN de jefe.
+//    El jefe también puede crear otro comercio desde acá ("+ Crear un comercio nuevo"), con su PIN.
 export function Ingreso() {
   const listos = useDatosListos();
   const conexion = useConexion(listos);
@@ -34,10 +35,13 @@ export function Ingreso() {
   const empleados = useDatos((s) => s.empleados);
   const pinCorrecto = useDatos((s) => s.pinCorrecto);
   const cambiarPin = useDatos((s) => s.cambiarPin);
+  const crearComercio = useDatos((s) => s.crearComercio);
   const enNube = useDatos((s) => s.modo === "nube");
   const pinCambiado = useDatos((s) => (s.modo === "nube" ? s.pinConfigurado : s.pin !== null));
 
   const [comercioId, setComercioId] = useState<number | null>(null);
+  const [creando, setCreando] = useState(false); // eligió "+ Crear un comercio nuevo" (solo el jefe, con PIN)
+  const [nuevo, setNuevo] = useState<ComercioNuevo>(COMERCIO_VACIO);
   const [quien, setQuien] = useState<"empleado" | "jefe">("empleado");
   const [nombre, setNombre] = useState("");
   const [pin, setPin] = useState("");
@@ -163,13 +167,20 @@ export function Ingreso() {
       return;
     }
     if (bloqueado || enviando) return;
+    // Primero se revisa el nombre, así un olvido no gasta un intento de PIN
+    if (creando && !nuevo.nombre.trim()) return setError("Escribí el nombre del comercio nuevo.");
     setEnviando(true);
     try {
+      // Con el PIN bien (o recién elegido), si eligió crear uno se crea y se entra directo a ese comercio
+      const entrarComoJefe = async () => {
+        const id = creando ? await crearComercio({ ...nuevo, nombre: nuevo.nombre.trim(), direccion: nuevo.direccion.trim() }) : elegido;
+        ingresar({ rol: "jefe", nombre: nombreJefe, comercioId: id, enNube });
+      };
       if (eligePin) {
         await cambiarPin("", pin, pinRepetido);
-        return ingresar({ rol: "jefe", nombre: nombreJefe, comercioId: elegido, enNube });
+        return await entrarComoJefe();
       }
-      if (await pinCorrecto(pin)) return ingresar({ rol: "jefe", nombre: nombreJefe, comercioId: elegido, enNube });
+      if (await pinCorrecto(pin)) return await entrarComoJefe();
     } catch (err) {
       // Sin conexión, PIN nuevo que no cumple las reglas, o demasiados intentos (la API traba un minuto)
       setPin("");
@@ -216,16 +227,50 @@ export function Ingreso() {
           )}
 
           <Campo etiqueta="Comercio">
-            <select id="comercio" value={elegido} onChange={(e) => setComercioId(Number(e.target.value))} className={claseInput}>
+            <select
+              id="comercio"
+              value={creando ? "nuevo" : elegido}
+              onChange={(e) => {
+                setError("");
+                if (e.target.value === "nuevo") {
+                  setCreando(true);
+                  setQuien("jefe"); // los comercios los crea solo el jefe
+                  return;
+                }
+                setCreando(false);
+                setComercioId(Number(e.target.value));
+              }}
+              className={claseInput}
+            >
               {comercios.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.nombre}
                 </option>
               ))}
+              <option value="nuevo">+ Crear un comercio nuevo</option>
             </select>
           </Campo>
 
-          <div className="flex flex-col gap-1.5">
+          {creando && (
+            <div className="flex flex-col gap-4 rounded-md border border-borde p-4">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <Plus className="size-4 text-primary" /> Comercio nuevo (solo el jefe, con su PIN)
+              </p>
+              <CamposComercio nuevo={nuevo} cambiar={setNuevo} prefijo="nuevo-comercio" />
+              <button
+                type="button"
+                onClick={() => {
+                  setCreando(false);
+                  setError("");
+                }}
+                className="self-start text-sm text-texto-suave underline underline-offset-2 hover:text-texto"
+              >
+                Cancelar y elegir un comercio que ya tengo
+              </button>
+            </div>
+          )}
+
+          <div className={creando ? "hidden" : "flex flex-col gap-1.5"}>
             <span className="text-sm font-medium">¿Quién sos?</span>
             <Segmentado
               etiqueta="¿Quién sos?"
@@ -311,7 +356,7 @@ export function Ingreso() {
           )}
 
           <Boton type="submit" variante="primario" icono={quien === "jefe" ? KeyRound : User} disabled={quien === "jefe" && (bloqueado || enviando)} className="h-11">
-            {quien === "jefe" && enviando ? "Comprobando…" : eligePin && quien === "jefe" ? "Guardar PIN y entrar" : "Entrar"}
+            {quien === "jefe" && enviando ? "Comprobando…" : creando ? "Crear comercio y entrar" : eligePin && quien === "jefe" ? "Guardar PIN y entrar" : "Entrar"}
           </Boton>
         </form>
       </div>
@@ -319,10 +364,40 @@ export function Ingreso() {
   );
 }
 
-/** Cuenta nueva en la nube: crear el primer comercio (después se agregan más en Mis comercios). */
+type ComercioNuevo = { nombre: string; rubro: Rubro; direccion: string; usaTicket: boolean };
+const COMERCIO_VACIO: ComercioNuevo = { nombre: "", rubro: "kiosco", direccion: "", usaTicket: true };
+
+/** Los datos de un comercio nuevo (el primero de la cuenta, o uno más desde el ingreso). */
+function CamposComercio({ nuevo, cambiar, prefijo }: { nuevo: ComercioNuevo; cambiar: (c: ComercioNuevo) => void; prefijo: string }) {
+  return (
+    <>
+      <Campo etiqueta="Nombre del comercio">
+        <input id={prefijo === "primer" ? "primer-comercio" : `${prefijo}-nombre`} value={nuevo.nombre} onChange={(e) => cambiar({ ...nuevo, nombre: e.target.value })} placeholder="Ej.: Kiosco El Paso" className={claseInput} required autoFocus />
+      </Campo>
+      <Campo etiqueta="Rubro">
+        <select id={`${prefijo}-rubro`} value={nuevo.rubro} onChange={(e) => cambiar({ ...nuevo, rubro: e.target.value as Rubro })} className={claseInput}>
+          {(Object.keys(RUBROS) as Rubro[]).map((r) => (
+            <option key={r} value={r}>
+              {RUBROS[r]}
+            </option>
+          ))}
+        </select>
+      </Campo>
+      <Campo etiqueta="Dirección (opcional)">
+        <input id={`${prefijo}-direccion`} value={nuevo.direccion} onChange={(e) => cambiar({ ...nuevo, direccion: e.target.value })} className={claseInput} />
+      </Campo>
+      <label className="flex items-center gap-2 text-[15px]">
+        <input type="checkbox" checked={nuevo.usaTicket} onChange={(e) => cambiar({ ...nuevo, usaTicket: e.target.checked })} className="size-4 accent-[var(--primary-color)]" />
+        Da ticket
+      </label>
+    </>
+  );
+}
+
+/** Cuenta nueva en la nube: crear el primer comercio (después se agregan más en Mis comercios o desde el ingreso). */
 function PrimerComercio() {
   const crearComercio = useDatos((s) => s.crearComercio);
-  const [nuevo, setNuevo] = useState({ nombre: "", rubro: "kiosco" as Rubro, direccion: "", usaTicket: true });
+  const [nuevo, setNuevo] = useState<ComercioNuevo>(COMERCIO_VACIO);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
 
@@ -347,25 +422,7 @@ function PrimerComercio() {
         <h1 className="text-xl font-semibold tracking-tight">¡Bienvenido a Mantenete!</h1>
         <p className="mt-1 text-sm text-texto-suave">Para empezar, cargá tu comercio. Si tenés más sucursales, las agregás después en Mis comercios (son gratis).</p>
       </div>
-      <Campo etiqueta="Nombre del comercio">
-        <input id="primer-comercio" value={nuevo.nombre} onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })} placeholder="Ej.: Kiosco El Paso" className={claseInput} required autoFocus />
-      </Campo>
-      <Campo etiqueta="Rubro">
-        <select id="primer-rubro" value={nuevo.rubro} onChange={(e) => setNuevo({ ...nuevo, rubro: e.target.value as Rubro })} className={claseInput}>
-          {(Object.keys(RUBROS) as Rubro[]).map((r) => (
-            <option key={r} value={r}>
-              {RUBROS[r]}
-            </option>
-          ))}
-        </select>
-      </Campo>
-      <Campo etiqueta="Dirección (opcional)">
-        <input id="primer-direccion" value={nuevo.direccion} onChange={(e) => setNuevo({ ...nuevo, direccion: e.target.value })} className={claseInput} />
-      </Campo>
-      <label className="flex items-center gap-2 text-[15px]">
-        <input type="checkbox" checked={nuevo.usaTicket} onChange={(e) => setNuevo({ ...nuevo, usaTicket: e.target.checked })} className="size-4 accent-[var(--primary-color)]" />
-        Da ticket
-      </label>
+      <CamposComercio nuevo={nuevo} cambiar={setNuevo} prefijo="primer" />
       {error && <p className="text-sm text-peligro">{error}</p>}
       <Boton type="submit" variante="primario" icono={Store} disabled={enviando} className="h-11">
         {enviando ? "Creando…" : "Crear mi comercio"}
