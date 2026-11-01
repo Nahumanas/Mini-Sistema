@@ -5,10 +5,11 @@ import type { BaseDemo } from "@/lib/datos-demo";
 import { ejemploGimnasio } from "@/lib/demo-gimnasio";
 import { horarioDe } from "@/lib/gimnasio";
 import { validarHorarios } from "@/lib/horarios";
+import { guardarLlave } from "@/lib/llave";
 import { validarPinNuevo } from "@/lib/pin";
 import type { Caja, Comercio, Empleado, Producto, Relevo, Reserva, Socio, Venta } from "@/lib/tipos";
 import { validarSocio, type AccionesGimnasio } from "./acciones-gimnasio";
-import type { Acciones } from "./datos";
+import type { Acciones, Seguridad } from "./datos";
 
 // Las acciones de store/datos.ts cuando el sistema trabaja con la nube (la cuenta del dueño + la API).
 // Cada una le pide el cambio a la API y, cuando la API contesta, guarda en pantalla lo que quedó en la base
@@ -65,7 +66,7 @@ export const ACCIONES_EN_LA_NUBE = [
 
 export type AccionesNube = Pick<Acciones & AccionesGimnasio, (typeof ACCIONES_EN_LA_NUBE)[number]>;
 
-type Estado = BaseDemo & { pinConfigurado: boolean };
+type Estado = BaseDemo & Seguridad;
 type Set = (cambio: Partial<Estado> | ((s: Estado) => Partial<Estado>)) => void;
 type Get = () => Estado;
 
@@ -261,8 +262,13 @@ export function accionesNube(set: Set, get: Get): AccionesNube {
       set((s) => ({ empleados: s.empleados.filter((e) => e.id !== id) }));
     },
 
-    // En la nube el PIN lo comprueba la API: la huella nunca llega al navegador
-    pinCorrecto: async (pin) => (await api.verificarPin(pin)).ok,
+    // En la nube el PIN lo comprueba la API: la huella nunca llega al navegador.
+    // Con el cifrado activado, además devuelve la llave del jefe (abre todos sus comercios).
+    pinCorrecto: async (pin) => {
+      const r = await api.verificarPin(pin);
+      if (r.ok && r.llave && r.vence) guardarLlave(r.llave, r.vence);
+      return r.ok;
+    },
 
     cambiarPin: async (actual, nuevo, repetido) => {
       validarPinNuevo(nuevo, repetido);

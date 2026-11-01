@@ -1,4 +1,5 @@
 import type { MedioDePago } from "./formato";
+import { alPerderLaLlave, borrarLlave, llaveGuardada } from "./llave";
 import { hayNube, supabase } from "./supabase";
 import type { AjusteCaja, Asistencia, Caja, Clase, Comercio, Compra, Cuota as CuotaGimnasio, Disciplina, Empleado, Gasto, Lote, Plan, Producto, Promo, Proveedor, ReglasGimnasio, Relevo, Reserva, Retiro, Socio, Venta } from "./tipos";
 
@@ -10,6 +11,7 @@ import type { AjusteCaja, Asistencia, Caja, Clase, Comercio, Compra, Cuota as Cu
 //
 // Cada pedido lleva el token de la cuenta del dueño (Gmail). La API lo comprueba y la base,
 // con sus reglas RLS, le muestra solo lo suyo: nunca se manda "de qué dueño soy".
+// Con el cifrado activado, también lleva la llave de sesión del turno (ver lib/llave.ts).
 
 export const API = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/+$/, "");
 
@@ -32,6 +34,7 @@ export async function mensajeDeError(respuesta: Response): Promise<string> {
   // Los mensajes que arma la API ("La caja está cerrada...") ya vienen en castellano
   if (typeof datos?.detail === "string") return datos.detail;
   if (respuesta.status === 401) return "Se venció la sesión. Volvé a entrar con tu Gmail.";
+  if (respuesta.status === 423) return "Por seguridad, volvé a poner tu PIN de jefe (o el código de empleados).";
   if (respuesta.status === 422) return "Algún dato no es válido. Revisalo y probá de nuevo.";
   if (respuesta.status >= 500) return "El servidor tuvo un problema. Probá de nuevo en un rato.";
   return `No se pudo hacer (error ${respuesta.status}). Probá de nuevo.`;
@@ -43,15 +46,25 @@ type Metodo = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export async function pedir<T>(ruta: string, metodo: Metodo = "GET", cuerpo?: unknown): Promise<T> {
   const sesion = (await supabase()?.auth.getSession())?.data.session;
   if (!sesion) throw new ErrorDeApi("Se cerró la cuenta. Volvé a entrar con tu Gmail.", 401);
+  const llave = llaveGuardada();
   let respuesta: Response;
   try {
     respuesta = await fetch(`${API}${ruta}`, {
       method: metodo,
-      headers: { Authorization: `Bearer ${sesion.access_token}`, ...(cuerpo === undefined ? {} : { "Content-Type": "application/json" }) },
+      headers: {
+        Authorization: `Bearer ${sesion.access_token}`,
+        ...(cuerpo === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(llave ? { "X-Llave": llave } : {}),
+      },
       body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
     });
   } catch {
     throw new ErrorDeApi("No se pudo conectar con el servidor. Revisá internet y probá de nuevo.", 0);
+  }
+  if (respuesta.status === 423) {
+    // La llave del cifrado falta, venció o no sirve: se borra y se vuelve a pedir el PIN o el código
+    borrarLlave();
+    alPerderLaLlave.avisar();
   }
   if (!respuesta.ok) throw new ErrorDeApi(await mensajeDeError(respuesta), respuesta.status);
   return (await respuesta.json()) as T;
@@ -60,7 +73,9 @@ export async function pedir<T>(ruta: string, metodo: Metodo = "GET", cuerpo?: un
 /** Lo que trae /inicio: todo lo del dueño que la página necesita al entrar
  * (ventas, cajas, compras, gastos, retiros, reservas y entradas de los últimos 2 meses; cuotas del último año). */
 export type DatosDeInicio = {
-  dueno: { nombre: string; email: string; pinConfigurado: boolean };
+  dueno: { nombre: string; email: string; pinConfigurado: boolean; cifradoActivo?: boolean };
+  /** Los comercios que ya tienen código de empleados, y desde cuándo (sin código, con el cifrado activado, no entra nadie como empleado). */
+  codigos?: { comercioId: number; codigoCambiado: string }[];
   comercios: Comercio[];
   empleados: Empleado[];
   productos: Producto[];
@@ -103,13 +118,24 @@ export type DatosClase = Omit<Clase, "id" | "comercioId">;
 /** Las reservas y socios que cambiaron (por ejemplo, los que entraron de la lista de espera). */
 type Cambios = { reservas: Reserva[]; socios: Socio[] };
 type Entraron = { socio: string; telefono: string }[];
+/** La llave de sesión del cifrado (la página no la puede leer: solo la guarda y la manda) y cuándo vence. */
+export type LlaveNueva = { llave: string; vence: string };
 
 /** Cada cosa que la página le puede pedir a la API (ver servidor/README.md). */
 export const api = {
   inicio: () => pedir<DatosDeInicio>("/inicio"),
 
-  verificarPin: (pin: string) => pedir<{ ok: boolean }>("/yo/pin/verificar", "POST", { pin }),
+  // Con el cifrado activado, entrar (como jefe o como empleado) devuelve la llave de sesión
+  verificarPin: (pin: string) => pedir<{ ok: boolean } & Partial<LlaveNueva>>("/yo/pin/verificar", "POST", { pin }),
   cambiarPin: (actual: string, nuevo: string) => pedir<{ ok: boolean }>("/yo/pin", "PUT", { actual, nuevo }),
+
+  // Cifrado (etapa 5): la frase de recuperación, activarlo, "me olvidé el PIN" y el código de empleados de cada comercio
+  fraseNueva: () => pedir<{ frase: string }>("/yo/cifrado/frase-nueva"),
+  activarCifrado: (pin: string, frase: string) => pedir<{ ok: true } & LlaveNueva>("/yo/cifrado/activar", "POST", { pin, frase, acepto: true }),
+  recuperarPin: (frase: string, nuevo: string) => pedir<{ ok: true } & LlaveNueva>("/yo/pin/recuperar", "POST", { frase, nuevo }),
+  cambiarCodigo: (comercioId: number, pin: string, codigo: string) =>
+    pedir<{ ok: true; codigoCambiado: string }>(`/comercios/${comercioId}/codigo-empleados`, "PUT", { pin, codigo }),
+  llaveEmpleado: (comercioId: number, codigo: string) => pedir<{ ok: boolean } & Partial<LlaveNueva>>(`/comercios/${comercioId}/llave-empleado`, "POST", { codigo }),
 
   crearComercio: (datos: Pick<Comercio, "nombre" | "rubro" | "direccion" | "usaTicket">) => pedir<Comercio>("/comercios", "POST", datos),
   actualizarComercio: (id: number, cambios: Partial<Comercio>) => pedir<Comercio>(`/comercios/${id}`, "PATCH", cambios),

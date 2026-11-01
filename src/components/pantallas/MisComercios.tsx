@@ -1,14 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
+import { Clock, KeyRound, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
+import { ddmm, hora } from "@/lib/fechas";
 import { HORARIO_SUGERIDO } from "@/lib/horarios";
 import type { Comercio, Permiso, Rubro, Turno } from "@/lib/tipos";
+import { elegirCodigo } from "@/store/cifrado";
 import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { RUBROS } from "../layout/Topbar";
-import { Boton, Campo, claseInput, Encabezado, Segmentado, Tarjeta } from "../ui/base";
+import { Boton, Campo, Chip, claseInput, Encabezado, Segmentado, Tarjeta } from "../ui/base";
 
 const PERMISOS: { clave: Permiso; texto: string; soloGimnasio?: boolean }[] = [
   { clave: "panel_del_dia", texto: "Panel del día (lo cobrado hoy)" },
@@ -26,6 +28,7 @@ export function MisComercios() {
   const activo = useComercioActivo();
   const elegir = useSesion((s) => s.elegir);
   const { comercios, empleados, actualizarComercio, crearComercio, agregarEmpleado, quitarEmpleado } = useDatos();
+  const cifrado = useDatos((s) => s.modo === "nube" && s.cifradoActivo);
   const avisar = useInterfaz((s) => s.avisar);
   const [editandoId, setEditandoId] = useState(activo.id);
   const [creando, setCreando] = useState(false);
@@ -188,9 +191,75 @@ export function MisComercios() {
         </Tarjeta>
       </div>
 
+      {/* Con el cifrado (en la nube), los empleados entran con el código de su comercio */}
+      {cifrado && <CodigoEmpleados key={`codigo-${comercio.id}`} comercio={comercio} />}
+
       {/* key: al cambiar de comercio, el formulario arranca con los horarios del otro */}
       <HorariosYTurnos key={comercio.id} comercio={comercio} />
     </div>
+  );
+}
+
+/**
+ * El código de empleados de un comercio (cifrado): 6 números con los que entran los empleados de ESE comercio.
+ * Lo elige o lo cambia el jefe, con su PIN. Conviene cambiarlo cuando alguien deja de trabajar.
+ */
+function CodigoEmpleados({ comercio }: { comercio: Comercio }) {
+  const cambiado = useDatos((s) => s.codigos[comercio.id]);
+  const avisar = useInterfaz((s) => s.avisar);
+  const [campos, setCampos] = useState({ codigo: "", repetido: "", pin: "" });
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState("");
+  const soloNumeros = (v: string) => v.replace(/\D/g, "");
+
+  return (
+    <Tarjeta
+      titulo={
+        <span className="inline-flex flex-wrap items-center gap-2">
+          <KeyRound className="size-4 text-texto-suave" />
+          Código de empleados
+          {cambiado ? <Chip tono="verde">Elegido el {ddmm(cambiado)} a las {hora(cambiado)}</Chip> : <Chip tono="amarillo">Sin elegir: los empleados no pueden entrar</Chip>}
+        </span>
+      }
+    >
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setError("");
+          setEnviando(true);
+          try {
+            await elegirCodigo(comercio.id, campos.pin, campos.codigo, campos.repetido);
+            setCampos({ codigo: "", repetido: "", pin: "" });
+            avisar(`Código guardado. Pasáselo a los empleados de ${comercio.nombre}.`);
+          } catch (err) {
+            setError((err as Error).message);
+            setCampos((c) => ({ ...c, pin: "" }));
+          } finally {
+            setEnviando(false);
+          }
+        }}
+        className="flex flex-col gap-4"
+      >
+        <p className="text-sm text-texto-suave">
+          Los empleados de <b>{comercio.nombre}</b> entran con su nombre y este código de 6 números (cada comercio tiene el suyo). Si alguien deja de trabajar, cambialo.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Campo etiqueta={cambiado ? "Código nuevo" : "Código"}>
+            <input id="codigo-nuevo" type="password" inputMode="numeric" maxLength={6} autoComplete="off" value={campos.codigo} onChange={(e) => setCampos({ ...campos, codigo: soloNumeros(e.target.value) })} className={`${claseInput} tracking-[0.4em]`} />
+          </Campo>
+          <Campo etiqueta="Repetilo">
+            <input id="codigo-repetido" type="password" inputMode="numeric" maxLength={6} autoComplete="off" value={campos.repetido} onChange={(e) => setCampos({ ...campos, repetido: soloNumeros(e.target.value) })} className={`${claseInput} tracking-[0.4em]`} />
+          </Campo>
+          <Campo etiqueta="Tu PIN de jefe">
+            <input id="codigo-pin" type="password" inputMode="numeric" maxLength={8} autoComplete="off" value={campos.pin} onChange={(e) => setCampos({ ...campos, pin: soloNumeros(e.target.value) })} className={`${claseInput} tracking-[0.4em]`} />
+          </Campo>
+        </div>
+        {error && <p className="text-sm text-peligro">{error}</p>}
+        <Boton type="submit" icono={Save} disabled={enviando} className="self-end">
+          {enviando ? "Guardando…" : "Guardar código"}
+        </Boton>
+      </form>
+    </Tarjeta>
   );
 }
 

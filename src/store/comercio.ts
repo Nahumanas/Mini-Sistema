@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { alPerderLaLlave, borrarLlave } from "@/lib/llave";
 import type { Sesion } from "@/lib/tipos";
 import { useDatos } from "./datos";
 
@@ -32,13 +33,20 @@ export const useSesion = create<EstadoSesion>()(
       comercioId: 1,
       verTodos: true,
       ingresar: (sesion) => set({ sesion, comercioId: sesion.comercioId, verTodos: sesion.rol === "jefe", ultimoUso: Date.now() }),
-      salir: () => set({ sesion: null }),
+      salir: () => {
+        borrarLlave(); // la llave del cifrado es del turno: se va con él
+        set({ sesion: null });
+      },
       elegir: (comercioId) => set({ comercioId, verTodos: false }),
       elegirTodos: () => set({ verTodos: true }),
     }),
     { name: "mantenete-sesion", skipHydration: true },
   ),
 );
+
+// Si la API dice que la llave del cifrado ya no sirve (venció a las 12 horas), se cierra el turno y se vuelve a
+// pedir el PIN o el código (la cuenta de Gmail sigue abierta).
+alPerderLaLlave.avisar = () => useSesion.getState().salir();
 
 export function useEsJefe() {
   return useSesion((s) => s.sesion?.rol === "jefe");

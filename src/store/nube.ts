@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { api, hayApi } from "@/lib/api";
+import { llaveGuardada } from "@/lib/llave";
 import { hayNube } from "@/lib/supabase";
 import { useCarrito } from "./carrito";
 import { useSesion } from "./comercio";
@@ -77,8 +78,10 @@ export function useConexion(listos: boolean) {
     if (!listos || esperando) return;
     const { sesion, salir } = useSesion.getState();
     const enNube = estado === "lista";
-    // Una cuenta nueva todavía no tiene comercios: primero hay que crear uno (en la pantalla de ingreso)
-    if (sesion && (Boolean(sesion.enNube) !== enNube || !useDatos.getState().comercios.length)) salir();
+    const { comercios, cifradoActivo } = useDatos.getState();
+    // Una cuenta nueva todavía no tiene comercios: primero hay que crear uno (en la pantalla de ingreso).
+    // Con el cifrado activado, un turno sin llave (venció, o es de antes de activarlo) vuelve a pedir el PIN o el código.
+    if (sesion && (Boolean(sesion.enNube) !== enNube || !comercios.length || (enNube && cifradoActivo && !llaveGuardada()))) salir();
   }, [listos, esperando, estado]);
 
   return { esperando, estado, error, reintentar: cargar };

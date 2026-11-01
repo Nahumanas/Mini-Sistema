@@ -155,6 +155,8 @@ def test_activar_entrar_codigo_cambiar_y_recuperar(cliente):
     r = cliente.put(codigo, json={"pin": "4826", "codigo": "739152"}, headers=ana)
     assert r.status_code == 200 and r.json()["codigoCambiado"]
     assert "739152" not in _sql(f"select sal_empleado || clave_empleado from public.claves_comercio where comercio_id = {kiosco}")
+    codigos = cliente.get("/inicio", headers=ana).json()["codigos"]
+    assert [c["comercioId"] for c in codigos] == [kiosco] and codigos[0]["codigoCambiado"]  # el gimnasio todavía no tiene
 
     # --- El empleado entra al kiosco con el código: su llave abre SOLO el kiosco
     entrar = f"/comercios/{kiosco}/llave-empleado"

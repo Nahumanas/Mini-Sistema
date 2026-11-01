@@ -56,3 +56,12 @@ Crea una base de prueba, imita lo mínimo de Supabase, carga las tablas, corre l
 - Tienen RLS como todas: cada dueño ve y cambia solo las suyas, y no se pueden borrar desde la web.
 - **Las copias de la base tienen que incluir estas dos tablas.** Sin ellas, los datos cifrados no se abren ni con la frase.
 - Para pasarla a Supabase: después del merge, SQL Editor → New query → pegar el archivo → Run.
+
+## Cifrado: las pantallas (etapa 5, parte 2)
+
+- **La primera vez que el jefe entra** (con su PIN) aparece *Protegé tus datos*: la frase de recuperación en letra grande (se puede imprimir), después hay que escribirla de nuevo sin verla y marcar la casilla "si pierdo el PIN y la frase, pierdo los datos".
+- **Código de empleados**: en *Mis comercios*, cada comercio tiene el suyo (6 números, con el PIN del jefe). Con el cifrado activado, el empleado entra con su nombre **y** ese código; si el comercio todavía no tiene código, no puede entrar.
+- **Me olvidé el PIN**: con la frase se elige un PIN nuevo y se entra. Los datos siguen todos.
+- Al entrar, la página guarda la **llave del turno** (vence a las 12 horas, se borra al cerrar sesión). Si falta o venció, vuelve a pedir el PIN o el código.
+- La demo no cambia: no tiene cifrado.
+

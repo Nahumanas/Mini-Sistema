@@ -78,8 +78,13 @@ def inicio(usuario: Usuario = Depends(usuario_actual)):
             f"""select * from public.retiros
                 where (fecha at time zone 'America/Argentina/Buenos_Aires')::date >= {_DESDE} order by fecha, id"""
         ).fetchall()
+        # Qué comercios ya tienen código de empleados (cifrado): sin código, el empleado no puede entrar
+        codigos = con.execute(
+            "select comercio_id, codigo_cambiado from public.claves_comercio where codigo_cambiado is not null order by comercio_id"
+        ).fetchall()
         return {
             "dueno": a_camel(dueno),
+            "codigos": [a_camel(f) for f in codigos],
             "comercios": [a_camel(f) for f in comercios],
             "empleados": [a_camel(f) for f in empleados],
             "productos": [a_camel(f) for f in productos],

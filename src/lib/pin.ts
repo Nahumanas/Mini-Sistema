@@ -36,3 +36,31 @@ export function validarPinNuevo(nuevo: string, repetido: string) {
   if (facil) throw new Error(facil);
   if (nuevo !== repetido) throw new Error("Los dos PIN nuevos no coinciden. Escribilos de nuevo.");
 }
+
+/**
+ * El código de empleados de un comercio (cifrado): 6 números, no muy fácil, escrito igual dos veces
+ * y distinto del PIN del jefe. Las mismas reglas que la API (validar_codigo_empleados de servidor/app/pin.py).
+ */
+export function validarCodigoNuevo(codigo: string, repetido: string, pinJefe: string) {
+  if (!/^\d{6}$/.test(codigo)) throw new Error("El código de empleados tiene que tener 6 números (sin letras ni espacios).");
+  const facil = pinFacil(codigo);
+  if (facil) throw new Error(facil.replace("Ese PIN", "Ese código"));
+  if (codigo !== repetido) throw new Error("Los dos códigos no coinciden. Escribilos de nuevo.");
+  if (codigo === pinJefe) throw new Error("El código de empleados no puede ser igual a tu PIN de jefe.");
+}
+
+/** Las letras de la frase de recuperación (sin 0/O ni 1/I, para no confundirse al copiarla). Igual que la API. */
+const LETRAS_FRASE = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/** La frase sin guiones, espacios ni minúsculas: "k7qx m2pa…" y "K7QX-M2PA-…" son la misma. */
+export function normalizarFrase(frase: string) {
+  return Array.from(frase.toUpperCase())
+    .filter((c) => LETRAS_FRASE.includes(c))
+    .join("");
+}
+
+/** ¿Escribió las 24 letras y números de la frase? */
+export function fraseCompleta(frase: string) {
+  return normalizarFrase(frase).length === 24;
+}
+
