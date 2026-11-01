@@ -23,6 +23,7 @@ import type { Acciones, Seguridad } from "./datos";
 
 export const ACCIONES_EN_LA_NUBE = [
   "registrarVenta",
+  "sumarVenta",
   "abrirCaja",
   "cerrarCaja",
   "registrarRelevo",
@@ -99,6 +100,12 @@ export function accionesNube(set: Set, get: Get): AccionesNube {
   };
 
   return {
+    // Una venta que ya guardó la API sola (la de un QR de Mercado Pago, cuando el cliente pagó)
+    sumarVenta: (venta) => {
+      if (get().ventas.some((v) => v.id === venta.id)) return; // ya estaba (dos avisos de la misma venta)
+      aplicarVenta(venta, venta.items);
+    },
+
     registrarVenta: async (comercioId, items, medioPago, cuenta, vendidoPor) => {
       // Un número único por venta (lo inventa la página): si el pedido llegó pero se perdió la respuesta,
       // al mandarla de nuevo desde la cola el servidor contesta "ya estaba" y no la guarda dos veces

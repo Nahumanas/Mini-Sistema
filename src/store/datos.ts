@@ -28,6 +28,8 @@ export type Modo = "demo" | "nube";
 
 export type Acciones = {
   registrarVenta: (comercioId: number, items: ItemVenta[], medioPago: MedioDePago, cuenta: Cuenta, vendidoPor: string) => Promise<Venta>;
+  /** Pone en pantalla una venta que ya se guardó (la de un QR de Mercado Pago: se guarda sola cuando el cliente paga). */
+  sumarVenta: (venta: Venta) => void;
   abrirCaja: (comercioId: number, responsable: string, montoInicial: number) => Promise<void>;
   cerrarCaja: (comercioId: number, efectivoContado: number, nota: string) => Promise<void>;
   registrarRelevo: (comercioId: number, entra: string, efectivoContado: number, nota: string, turno?: string | null) => Promise<Relevo>;
@@ -175,6 +177,9 @@ export const useDatos = create<EstadoDatos>()(
           }
           return venta;
         },
+
+        // En la demo, la venta con Mercado Pago ya la guardó registrarVenta: acá no hay nada más que hacer
+        sumarVenta: () => {},
 
         abrirCaja: async (comercioId, responsable, montoInicial) => {
           const id = nuevoId();

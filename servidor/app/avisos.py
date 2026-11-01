@@ -22,7 +22,7 @@ from .sobres import Cofre
 from .telegram import texto
 
 TIPOS = ("apertura", "cierre", "relevo", "stock_bajo")
-MEDIOS = {"efectivo": "Efectivo", "debito": "Débito", "credito": "Crédito", "transferencia": "Transferencia"}
+MEDIOS = {"efectivo": "Efectivo", "debito": "Débito", "credito": "Crédito", "transferencia": "Transferencia", "mercadopago": "Mercado Pago"}
 
 
 def plata(valor) -> str:
