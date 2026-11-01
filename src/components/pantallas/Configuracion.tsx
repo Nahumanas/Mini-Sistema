@@ -8,6 +8,7 @@ import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { Boton, Campo, claseInput, Encabezado, Tarjeta } from "../ui/base";
 import { AvisosTelegram } from "./AvisosTelegram";
+import { CuentaMercadoPago } from "./CuentaMercadoPago";
 import { ProbarAparatos } from "./ProbarAparatos";
 
 // Ajustes del jefe: apariencia, probar la pistola y la ticketera, PIN, avisos al celular y volver a empezar con los datos de prueba.
@@ -40,6 +41,8 @@ export function Configuracion() {
       <CambiarPin />
 
       <AvisosTelegram />
+
+      <CuentaMercadoPago />
 
       {/* En la nube no hay datos de prueba para reiniciar: son los datos de verdad */}
       {!enNube && (
