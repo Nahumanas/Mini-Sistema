@@ -188,7 +188,7 @@ function Problema() {
 const CARACTERISTICAS: { icono: LucideIcon; titulo: string; texto: string; pronto?: boolean }[] = [
   { icono: RefreshCw, titulo: "Relevos sin cerrar caja", texto: "Cambiá de turno sin frenar el negocio. Controlá qué empleado operó y si hubo faltantes en ese tramo." },
   { icono: Store, titulo: "Varios comercios, un solo panel", texto: "Si tenés más de un local, controlá todos desde tu celular en un solo panel. Las sucursales no se cobran aparte." },
-  { icono: Send, titulo: "Avisos a tu Telegram", texto: "Recibí un aviso cuando se abre o se cierra la caja, hay un relevo o se está terminando un producto, estés donde estés.", pronto: true },
+  { icono: Send, titulo: "Avisos a tu Telegram", texto: "Recibí un aviso cuando se abre o se cierra la caja (con el resumen del día), hay un relevo o se está terminando un producto, estés donde estés." },
   { icono: Globe, titulo: "Cero instalación", texto: "Funciona desde el navegador de la compu, la tablet o el celular, sin descargar programas pesados." },
 ];
 

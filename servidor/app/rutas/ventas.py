@@ -3,9 +3,10 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from .. import avisos
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario
 from ..cifrado import Llave
@@ -84,16 +85,17 @@ def insertar_detalle(con, cofre: Cofre, comercio_id: int, venta_id: int, product
 
 
 @router.post("/comercios/{comercio_id}/ventas", status_code=201)
-def registrar(comercio_id: int, venta: NuevaVenta, usuario: Usuario = Depends(usuario_actual),
+def registrar(comercio_id: int, venta: NuevaVenta, tareas: BackgroundTasks, usuario: Usuario = Depends(usuario_actual),
               llave: Llave = Depends(llave_requerida)):
     """Cobra una venta de una vez (todo o nada): la guarda, baja el stock y saca de las tandas más viejas.
 
     Los precios y costos salen de la base, no de la página. El comercio se "traba" mientras se cobra,
     así dos compus del mismo local nunca sacan el mismo número de venta.
+    Si algún producto quedó en su mínimo, al jefe le llega un aviso (uno solo hasta que se reponga).
     """
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
-        cofre.comercio(comercio_id, bloquear=True)
+        comercio = cofre.comercio(comercio_id, bloquear=True)
         caja = con.execute(
             "select id from public.cajas where comercio_id = %s and cerrada is null", (comercio_id,)
         ).fetchone()
@@ -128,6 +130,7 @@ def registrar(comercio_id: int, venta: NuevaVenta, usuario: Usuario = Depends(us
             con.execute("update public.productos set stock = stock - %s where id = %s", (item.cantidad, p["id"]))
             _consumir_tandas(con, p["id"], Decimal(str(item.cantidad)))
 
+        avisos.avisar(con, tareas, "stock_bajo", lambda: avisos.stock_bajo(con, cofre, comercio, ids))
         return con_items(con, cofre, [fila])[0]
 
 

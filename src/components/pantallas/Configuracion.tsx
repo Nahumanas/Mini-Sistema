@@ -1,15 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, MessageCircle, Moon, RotateCcw, Sun } from "lucide-react";
+import { KeyRound, Moon, RotateCcw, Sun } from "lucide-react";
 import { DUENO } from "@/lib/datos-demo";
 import { useCarrito } from "@/store/carrito";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { Boton, Campo, claseInput, Encabezado, Tarjeta } from "../ui/base";
+import { AvisosTelegram } from "./AvisosTelegram";
 import { ProbarAparatos } from "./ProbarAparatos";
-
-const AVISOS = ["Apertura de caja", "Cierre de caja (con el arqueo)", "Relevo de turno", "Producto con stock bajo"];
 
 // Ajustes del jefe: apariencia, probar la pistola y la ticketera, PIN, avisos al celular y volver a empezar con los datos de prueba.
 export function Configuracion() {
@@ -40,24 +39,7 @@ export function Configuracion() {
 
       <CambiarPin />
 
-      <Tarjeta titulo="Avisos al celular (Telegram)">
-        <div className="flex flex-col gap-4">
-          <div className="flex gap-3">
-            <MessageCircle className="mt-0.5 size-5 shrink-0 text-texto-suave" strokeWidth={1.75} />
-            <p className="text-texto-suave">Los avisos te llegan solo a vos, el jefe. Se conectan cuando esté la API (hoy funcionan en la versión de Streamlit).</p>
-          </div>
-          <ul className="flex flex-col gap-2">
-            {AVISOS.map((a) => (
-              <li key={a}>
-                <label className="flex items-center gap-2.5 text-[15px] opacity-60">
-                  <input type="checkbox" defaultChecked disabled className="size-4 accent-[var(--primary-color)]" />
-                  {a}
-                </label>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Tarjeta>
+      <AvisosTelegram />
 
       {/* En la nube no hay datos de prueba para reiniciar: son los datos de verdad */}
       {!enNube && (

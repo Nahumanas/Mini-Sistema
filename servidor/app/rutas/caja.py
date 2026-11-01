@@ -1,9 +1,10 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from psycopg import errors
 from pydantic import BaseModel, Field
 
+from .. import avisos
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario
 from ..cifrado import Llave
@@ -45,18 +46,21 @@ def caja_abierta(comercio_id: int, usuario: Usuario = Depends(usuario_actual), l
 
 
 @router.post("/comercios/{comercio_id}/caja/abrir", status_code=201)
-def abrir(comercio_id: int, datos: AbrirCaja, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
+def abrir(comercio_id: int, datos: AbrirCaja, tareas: BackgroundTasks, usuario: Usuario = Depends(usuario_actual),
+          llave: Llave = Depends(llave_requerida)):
     try:
         with como_usuario(usuario) as con:
             cofre = Cofre(con, llave)
-            cofre.comercio(comercio_id)
+            comercio = cofre.comercio(comercio_id)
             sobre = cofre.cerrar("cajas", comercio_id, {"monto_inicial": datos.montoInicial, "efectivo_esperado": None,
                                                         "efectivo_contado": None, "nota": ""})
             fila = con.execute(
                 "insert into public.cajas (comercio_id, responsable, sobre) values (%s, %s, %s) returning *",
                 (comercio_id, datos.responsable.strip(), sobre),
             ).fetchone()
-            return a_camel(cofre.abrir("cajas", fila))
+            caja = cofre.abrir("cajas", fila)
+            avisos.avisar(con, tareas, "apertura", lambda: avisos.apertura(comercio, caja))
+            return a_camel(caja)
     except errors.UniqueViolation as error:
         # Otra compu del mismo local ya la abrió (la base solo deja UNA caja abierta por comercio)
         raise HTTPException(409, "La caja ya está abierta (quizás desde otra compu). Actualizá la pantalla.") from error
@@ -68,11 +72,13 @@ def _efectivo(cofre: Cofre, ventas: list[dict]) -> Decimal:
 
 
 @router.post("/comercios/{comercio_id}/caja/cerrar")
-def cerrar(comercio_id: int, datos: CerrarCaja, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
-    """Cierra con arqueo: esperado = con lo que abrió + lo cobrado en efectivo (sin las ventas anuladas)."""
+def cerrar(comercio_id: int, datos: CerrarCaja, tareas: BackgroundTasks, usuario: Usuario = Depends(usuario_actual),
+           llave: Llave = Depends(llave_requerida)):
+    """Cierra con arqueo: esperado = con lo que abrió + lo cobrado en efectivo (sin las ventas anuladas).
+    Si el jefe tiene los avisos prendidos, le llega el arqueo con el resumen del día."""
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
-        cofre.comercio(comercio_id, bloquear=True)  # que no se cuele una venta mientras se cuenta
+        comercio = cofre.comercio(comercio_id, bloquear=True)  # que no se cuele una venta mientras se cuenta
         caja = cofre.abrir("cajas", con.execute(
             "select * from public.cajas where comercio_id = %s and cerrada is null for update", (comercio_id,)
         ).fetchone())
@@ -88,17 +94,20 @@ def cerrar(comercio_id: int, datos: CerrarCaja, usuario: Usuario = Depends(usuar
         fila = con.execute(
             "update public.cajas set cerrada = now(), sobre = %s where id = %s returning *", (sobre, caja["id"])
         ).fetchone()
-        return a_camel(cofre.abrir("cajas", fila))
+        cerrada = cofre.abrir("cajas", fila)
+        avisos.avisar(con, tareas, "cierre", lambda: avisos.cierre(con, cofre, comercio, cerrada))
+        return a_camel(cerrada)
 
 
 @router.post("/comercios/{comercio_id}/caja/relevo", status_code=201)
-def relevo(comercio_id: int, datos: Relevo, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
+def relevo(comercio_id: int, datos: Relevo, tareas: BackgroundTasks, usuario: Usuario = Depends(usuario_actual),
+           llave: Llave = Depends(llave_requerida)):
     """Relevo de turno (como registrarRelevo de la página): el que se va cuenta el efectivo y se compara
     con lo de SU turno (con lo que arrancó + lo cobrado en efectivo desde el último relevo).
     La caja sigue abierta y queda a nombre del que entra."""
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
-        cofre.comercio(comercio_id, bloquear=True)  # que no se cuele una venta en el medio
+        comercio = cofre.comercio(comercio_id, bloquear=True)  # que no se cuele una venta en el medio
         caja = cofre.abrir("cajas", con.execute(
             "select * from public.cajas where comercio_id = %s and cerrada is null for update", (comercio_id,)
         ).fetchone())
@@ -133,7 +142,9 @@ def relevo(comercio_id: int, datos: Relevo, usuario: Usuario = Depends(usuario_a
         caja = con.execute(
             "update public.cajas set responsable = %s where id = %s returning *", (quien, caja["id"])
         ).fetchone()
-        return {"relevo": a_camel(cofre.abrir("relevos", fila)), "caja": a_camel(cofre.abrir("cajas", caja))}
+        fila = cofre.abrir("relevos", fila)
+        avisos.avisar(con, tareas, "relevo", lambda: avisos.relevo(comercio, fila))
+        return {"relevo": a_camel(fila), "caja": a_camel(cofre.abrir("cajas", caja))}
 
 
 # -----------------------------------------------------------------------------

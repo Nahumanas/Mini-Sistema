@@ -30,3 +30,7 @@ ORIGENES_PERMITIDOS = [
     "http://localhost:3000",
 ]
 ORIGENES_VISTA_PREVIA = r"https://mantenete-[a-z0-9-]+-nahuel-900e\.vercel\.app"
+
+# Avisos al celular del jefe (etapa 6). La clave del bot de Telegram (la da @BotFather) es SECRETA:
+# solo va en Render. Sin ella la API anda igual, solo que no manda avisos.
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
