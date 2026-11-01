@@ -20,6 +20,7 @@ import type { Acciones, Seguridad } from "./datos";
 
 export const ACCIONES_EN_LA_NUBE = [
   "registrarVenta",
+  "sumarVenta",
   "abrirCaja",
   "cerrarCaja",
   "registrarRelevo",
@@ -83,6 +84,18 @@ export function accionesNube(set: Set, get: Get): AccionesNube {
   const guardarComercio = (comercio: Comercio) => set((s) => ({ comercios: conCambio(s.comercios, comercio) }));
   const guardarProductos = (productos: Producto[]) => set((s) => ({ productos: productos.reduce(conCambio, s.productos) }));
 
+  /** Pone en pantalla una venta que ya guardó la API: la venta, el stock y las tandas. */
+  const ponerVenta = (venta: Venta, items: { productoId: number; cantidad: number }[]) => {
+    const vendidos = new Map<number, number>();
+    for (const i of items) vendidos.set(i.productoId, (vendidos.get(i.productoId) ?? 0) + i.cantidad);
+    set((s) => ({
+      ventas: [...s.ventas, venta],
+      productos: s.productos.map((p) => (vendidos.has(p.id) ? { ...p, stock: p.stock - (vendidos.get(p.id) ?? 0) } : p)),
+      // La API ya sacó de las tandas más viejas; acá se hace la misma cuenta para no tener que pedirlas de nuevo
+      lotes: [...vendidos].reduce((lotes, [id, cantidad]) => sacarDeTandas(lotes, id, cantidad), s.lotes),
+    }));
+  };
+
   return {
     registrarVenta: async (comercioId, items, medioPago, cuenta, vendidoPor) => {
       // Los precios y costos los pone la base (los de esta pantalla podrían estar viejos)
@@ -93,15 +106,14 @@ export function accionesNube(set: Set, get: Get): AccionesNube {
         descuento: cuenta.descuento,
         promos: cuenta.aplicadas.filter((a) => a.monto > 0),
       });
-      const vendidos = new Map<number, number>();
-      for (const i of items) vendidos.set(i.productoId, (vendidos.get(i.productoId) ?? 0) + i.cantidad);
-      set((s) => ({
-        ventas: [...s.ventas, venta],
-        productos: s.productos.map((p) => (vendidos.has(p.id) ? { ...p, stock: p.stock - (vendidos.get(p.id) ?? 0) } : p)),
-        // La API ya sacó de las tandas más viejas; acá se hace la misma cuenta para no tener que pedirlas de nuevo
-        lotes: [...vendidos].reduce((lotes, [id, cantidad]) => sacarDeTandas(lotes, id, cantidad), s.lotes),
-      }));
+      ponerVenta(venta, items);
       return venta;
+    },
+
+    // Una venta que ya guardó la API sola (la de un QR de Mercado Pago, cuando el cliente pagó)
+    sumarVenta: (venta) => {
+      if (get().ventas.some((v) => v.id === venta.id)) return; // ya estaba (dos avisos de la misma venta)
+      ponerVenta(venta, venta.items);
     },
 
     abrirCaja: async (comercioId, responsable, montoInicial) => {

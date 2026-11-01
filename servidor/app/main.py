@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from . import config
 from .base import cerrar_pool, pool
 from .cifrado import FaltaConfigurar
-from .rutas import caja, clases, comercios, compras, cuenta, inicio, productos, promos, seguridad, socios, telegram, vencimientos, ventas
+from .rutas import caja, clases, comercios, compras, cuenta, inicio, mercadopago, productos, promos, seguridad, socios, telegram, vencimientos, ventas
 
 
 @asynccontextmanager
@@ -48,5 +48,5 @@ def salud():
     return {"ok": True}
 
 
-for modulo in (inicio, cuenta, seguridad, telegram, comercios, productos, caja, ventas, compras, vencimientos, promos, socios, clases):
+for modulo in (inicio, cuenta, seguridad, telegram, comercios, productos, caja, ventas, mercadopago, compras, vencimientos, promos, socios, clases):
     app.include_router(modulo.router)

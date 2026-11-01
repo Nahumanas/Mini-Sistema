@@ -127,6 +127,28 @@ export type LlaveNueva = { llave: string; vence: string };
 export type TipoAviso = "apertura" | "cierre" | "relevo" | "stock_bajo";
 export type EstadoTelegram = { listo: boolean; conectado: boolean; nombre: string; avisos: TipoAviso[] };
 
+/** La cuenta de Mercado Pago de un comercio (etapa 8): con ella la Caja cobra con QR. */
+export type EstadoMercadoPago = { conectada: boolean; nombre: string; conectadaEl: string | null };
+export type DatosMercadoPago = {
+  accessToken: string;
+  calle: string;
+  numero: string;
+  ciudad: string;
+  provincia: string;
+  latitud: number;
+  longitud: number;
+};
+/** Un cobro con QR: mientras "esperando", la Caja muestra el QR; al pasar a "pagado" trae la venta ya guardada. */
+export type CobroMercadoPago = {
+  id: number;
+  estado: "esperando" | "pagado" | "cancelado" | "vencido";
+  vence: string;
+  venta: Venta | null;
+  qrData?: string;
+  total?: number;
+};
+export type NuevoCobro = Omit<NuevaVenta, "medioPago">;
+
 /** Cada cosa que la página le puede pedir a la API (ver servidor/README.md). */
 export const api = {
   inicio: () => pedir<DatosDeInicio>("/inicio"),
@@ -168,6 +190,15 @@ export const api = {
     pedir<{ relevo: Relevo; caja: Caja }>(`/comercios/${comercioId}/caja/relevo`, "POST", datos),
 
   registrarVenta: (comercioId: number, venta: NuevaVenta) => pedir<Venta>(`/comercios/${comercioId}/ventas`, "POST", venta),
+
+  // Mercado Pago (etapa 8): conectar la cuenta del comercio (solo el jefe) y cobrar con QR
+  mercadoPago: (comercioId: number) => pedir<EstadoMercadoPago>(`/comercios/${comercioId}/mercadopago`),
+  conectarMercadoPago: (comercioId: number, datos: DatosMercadoPago) => pedir<EstadoMercadoPago>(`/comercios/${comercioId}/mercadopago`, "PUT", datos),
+  desconectarMercadoPago: (comercioId: number) => pedir<EstadoMercadoPago>(`/comercios/${comercioId}/mercadopago`, "DELETE"),
+  cobrarConQr: (comercioId: number, cobro: NuevoCobro) => pedir<CobroMercadoPago>(`/comercios/${comercioId}/mercadopago/cobros`, "POST", cobro),
+  verCobro: (comercioId: number, id: number) => pedir<CobroMercadoPago>(`/comercios/${comercioId}/mercadopago/cobros/${id}`),
+  cancelarCobro: (comercioId: number, id: number) => pedir<CobroMercadoPago>(`/comercios/${comercioId}/mercadopago/cobros/${id}/cancelar`, "POST"),
+  revisarCobros: (comercioId: number) => pedir<{ cobros: CobroMercadoPago[]; esperando: number }>(`/comercios/${comercioId}/mercadopago/revisar`, "POST"),
   anularVenta: (cajaId: number, datos: { ventaId: number; hechoPor: string; motivo: string }) =>
     pedir<{ ajuste: AjusteCaja; venta: Venta; productos: Producto[]; cuota: Cuota | null; socio: Socio | null }>(`/cajas/${cajaId}/anular-venta`, "POST", datos),
   recontar: (cajaId: number, datos: { efectivo: number; hechoPor: string; motivo: string }) => pedir<AjusteCaja>(`/cajas/${cajaId}/recontar`, "POST", datos),

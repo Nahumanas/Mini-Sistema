@@ -252,7 +252,7 @@ export function CobrarCuota({ comercio, socioId, alCobrar }: { comercio: Comerci
           <fieldset>
             <legend className="mb-2 text-sm font-medium">Medio de pago</legend>
             <div className="flex flex-wrap gap-2">
-              {(Object.keys(MEDIOS_DE_PAGO) as MedioDePago[]).map((m) => {
+              {(Object.keys(MEDIOS_DE_PAGO) as MedioDePago[]).filter((m): m is Exclude<MedioDePago, "mercadopago"> => m !== "mercadopago").map((m) => {
                 const Icono = ICONO_MEDIO[m];
                 return (
                   <button

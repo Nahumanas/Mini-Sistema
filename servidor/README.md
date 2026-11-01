@@ -70,6 +70,19 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
   consultas juntas, con los valores puestos por `ClientCursor.mogrify`). `pruebas/test_viajes.py` los cuenta.
   Conexiones a la base: `POOL_MAXIMO` (20 por defecto).
 
+## Cobrar con Mercado Pago (etapa 8, parte 1: QR en pantalla)
+
+- Cada comercio conecta SU cuenta de Mercado Pago (Configuración, solo el jefe) con su Access Token. La API comprueba
+  la clave (`/users/me`), crea en esa cuenta una sucursal (con la dirección real del local) y una caja con QR, y guarda
+  la clave cifrada con un secreto que sale de `PIMIENTA_CIFRADO` (`mercadopago_cuentas.token_cifrado`). No hace falta
+  ninguna variable nueva en Render.
+- En la Caja, "Mercado Pago" → la API arma una orden QR dinámica por el total (con los precios de la base) y guarda el
+  cobro en `cobros_mp` con la venta ya cifrada. La página dibuja el QR y pregunta cada 2,5 s. Cuando Mercado Pago dice
+  `processed`, la API guarda la venta (medio `mercadopago`) y marca el cobro, en la misma transacción y una sola vez.
+- Si se cerró la pestaña con el QR, al abrir la Caja se revisan los cobros que quedaron esperando.
+- Pruebas: `pruebas/test_mercadopago.py` con un Mercado Pago de mentira (nunca se llama al real).
+- Pendiente (parte 2): avisos de Mercado Pago (webhooks), devoluciones y el posnet Point.
+
 ## Qué hace
 
 | Pedido | Para qué |
@@ -90,6 +103,8 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 | `POST /comercios/{id}/productos/importar` | La lista del Excel: crea o actualiza por código, todo o nada |
 | `GET /comercios/{id}/caja`, `POST .../caja/abrir`, `.../caja/relevo`, `.../caja/cerrar` | Caja con relevo de turno y arqueo (una sola abierta por comercio, aunque haya varias compus) |
 | `POST /comercios/{id}/ventas`, `GET /comercios/{id}/ventas?desde=&hasta=` | Cobrar (baja stock y tandas, numera sin repetir) y ver ventas |
+| `GET/PUT/DELETE /comercios/{id}/mercadopago` | Ver si la cuenta de Mercado Pago está conectada; conectarla (solo jefe, con Access Token y dirección) o desconectarla |
+| `POST /comercios/{id}/mercadopago/cobros`, `GET .../cobros/{cobro}`, `POST .../cobros/{cobro}/cancelar`, `POST /comercios/{id}/mercadopago/revisar` | Cobrar con QR, preguntar si pagó (guarda la venta), cancelar y revisar los que quedaron esperando |
 | `POST /cajas/{id}/anular-venta`, `POST /cajas/{id}/recontar` | Ajustes de una caja cerrada: anular una venta (vuelve al stock; si era una cuota, el socio vuelve a como estaba) o corregir el efectivo contado |
 | `POST /comercios/{id}/proveedores`, `POST /comercios/{id}/compras` | Compras: suma al stock, cambia el costo y crea las tandas de lo que vence, todo o nada |
 | `POST /comercios/{id}/gastos`, `DELETE /gastos/{id}` | Gastos del comercio |
