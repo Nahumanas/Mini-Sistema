@@ -6,7 +6,9 @@ from pydantic import BaseModel, Field
 
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario
+from ..cifrado import Llave
 from ..formato import a_camel
+from ..llaves import VOLVER_A_PONER, crear_clave_comercio, llave_opcional
 from .comun import comercio_mio
 
 router = APIRouter(tags=["Comercios"])
@@ -60,16 +62,26 @@ def listar(usuario: Usuario = Depends(usuario_actual)):
 
 
 @router.post("/comercios", status_code=201)
-def crear(datos: NuevoComercio, usuario: Usuario = Depends(usuario_actual)):
+def crear(datos: NuevoComercio, usuario: Usuario = Depends(usuario_actual), llave: Llave | None = Depends(llave_opcional)):
+    """Con el cifrado activado hace falta la llave del jefe: el comercio nace con su propia clave."""
     with como_usuario(usuario) as con:
-        if con.execute("select privado.mi_dueno_id() as id").fetchone()["id"] is None:
+        dueno = con.execute(
+            "select privado.mi_dueno_id() as id, exists (select 1 from public.cifrado_duenos) as cifrado"
+        ).fetchone()
+        if dueno["id"] is None:
             raise HTTPException(403, "Ese Gmail todavía no tiene cuenta en Mantenete.")
+        if dueno["cifrado"] and llave is None:
+            raise HTTPException(423, VOLVER_A_PONER)
+        if dueno["cifrado"] and llave.dueno is None:
+            raise HTTPException(403, "Solo el jefe puede crear comercios.")
         fila = con.execute(
             """insert into public.comercios (dueno_id, nombre, rubro, direccion, usa_ticket, permisos_empleado)
                values (privado.mi_dueno_id(), %s, %s, %s, %s, %s) returning *""",
             (datos.nombre.strip(), datos.rubro, datos.direccion.strip(), datos.usaTicket,
              PERMISOS_INICIALES.get(datos.rubro, PERMISOS_COMUNES)),
         ).fetchone()
+        if dueno["cifrado"]:
+            crear_clave_comercio(con, llave.dueno, fila["id"])
     return a_camel(fila)
 
 

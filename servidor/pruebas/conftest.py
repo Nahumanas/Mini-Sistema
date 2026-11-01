@@ -4,6 +4,7 @@ Usa las mismas variables de PostgreSQL que supabase/pruebas/probar-en-local.sh (
 """
 
 import os
+import secrets
 import subprocess
 import time
 import uuid
@@ -35,6 +36,11 @@ def base_de_prueba():
     puerto = os.environ.get("PGPORT", "5432")
     os.environ["DATABASE_URL"] = f"host={host} port={puerto} dbname={BASE} user={usuario}" + (f" password={clave}" if clave else "")
     os.environ["SUPABASE_URL"] = URL_FALSA
+    # Los secretos del cifrado (en Render los genera Nahuel; acá unos de prueba que cambian cada vez)
+    from app import config
+
+    config.PIMIENTA_CIFRADO = secrets.token_urlsafe(32)
+    config.SECRETO_SESION = secrets.token_urlsafe(32)
     yield
     from app.base import cerrar_pool
 
