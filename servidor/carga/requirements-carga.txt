@@ -1,0 +1,2 @@
+# Solo para la prueba de carga (carga/README.md). No hace falta en Render.
+locust==2.43.1
