@@ -11,12 +11,12 @@ Hecha con **FastAPI** (Python). Está publicada en **Render** (plan gratis para 
 4. Los precios y costos de una venta salen de la base, no de la página.
 5. El **PIN de jefe** se comprueba acá: su huella (PBKDF2) nunca sale de la base, y después de 5 errores seguidos se traba un minuto.
 
-## Qué hace (partes 1 y 2)
+## Qué hace
 
 | Pedido | Para qué |
 |---|---|
 | `GET /salud` | Ver si la API está viva y llega a la base |
-| `GET /inicio` | Todo lo que la página necesita al entrar, en un solo pedido (comercios, empleados, productos, promos, proveedores, tandas con stock, y cajas, relevos, ajustes, ventas, compras, gastos y retiros de los últimos 62 días) |
+| `GET /inicio` | Todo lo que la página necesita al entrar, en un solo pedido (comercios, empleados, productos, promos, proveedores, tandas con stock, y cajas, relevos, ajustes, ventas, compras, gastos y retiros de los últimos 62 días; del gimnasio: actividades, planes, grilla, reglas, socios, reservas y entradas de 62 días y cuotas del último año) |
 | `GET /yo` | La ficha del dueño conectado (403 si no fue invitado) |
 | `POST /yo/pin/verificar`, `PUT /yo/pin` | Comprobar el PIN de jefe; elegirlo la primera vez o cambiarlo (pide el actual) |
 | `GET/POST /comercios`, `PATCH /comercios/{id}` | Mis comercios (datos, permisos de empleados, horarios y turnos) |
@@ -30,12 +30,18 @@ Hecha con **FastAPI** (Python). Está publicada en **Render** (plan gratis para 
 | `POST /comercios/{id}/gastos`, `DELETE /gastos/{id}` | Gastos del comercio |
 | `POST /comercios/{id}/lotes`, `POST .../lotes/retirar-vencidos`, `POST /lotes/{id}/sacar` | Vencimientos: cargar una tanda, retirar lo vencido (pérdida) y corregir una tanda |
 | `POST /comercios/{id}/promos`, `PUT /promos/{id}`, `DELETE /promos/{id}` | Descuentos y promos |
+| `POST /comercios/{id}/socios`, `PATCH /socios/{id}`, `POST /socios/{id}/baja`, `POST /socios/{id}/reactivar` | Socios del gimnasio (el DNI no se repite; la baja cancela sus reservas que vienen, no se borra nada) |
+| `POST /comercios/{id}/socios/importar` | Socios desde el Excel: crea o actualiza por DNI, todo o nada |
+| `POST /comercios/{id}/cuotas` | Cobrar la cuota: entra a la caja abierta de hoy como una venta y le carga vencimiento y clases al socio |
+| `POST /comercios/{id}/disciplinas`, `PATCH /disciplinas/{id}`, `POST /comercios/{id}/planes`, `PUT /planes/{id}`, `PUT /comercios/{id}/reglas-gimnasio` | Actividades, planes y reglas del gimnasio |
+| `POST /comercios/{id}/gimnasio/ejemplo` | "¿Arrancás de cero?": actividades, planes, grilla y reglas de ejemplo (sin socios inventados), todo o nada |
+| `POST /comercios/{id}/clases`, `PUT /clases/{id}`, `POST /clases/{id}/desactivar` | La grilla de clases (si se agranda el cupo, entra la lista de espera; al desactivar se cancelan las reservas y se devuelven las clases) |
+| `POST /comercios/{id}/reservas`, `POST /reservas/{id}/cancelar`, `POST /reservas/{id}/asistencia`, `POST .../reservas/cerrar-pasadas` | Reservas con cupo y lista de espera, cancelar (devuelve la clase según la regla de horas), vino/faltó y cerrar las clases que ya terminaron |
+| `POST /comercios/{id}/ingresos` | La entrada por DNI en recepción (si ya entró hace menos de una hora no se repite; si tenía reserva, queda "vino") |
 
 Las fechas con hora salen en hora argentina, con el formato de la página (`2026-10-31T18:05`).
 Con la API corriendo, la lista completa está en `/docs`.
 
-Todavía no está (parte 4): el gimnasio (socios, cuotas, planes, clases, reservas e ingreso por DNI).
-Con la cuenta abierta, esas pantallas no aparecen en el menú; en la demo funcionan todas.
 
 ## Variables (en Render, nunca en GitHub)
 
