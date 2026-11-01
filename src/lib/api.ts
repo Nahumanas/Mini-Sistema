@@ -121,6 +121,10 @@ type Entraron = { socio: string; telefono: string }[];
 /** La llave de sesión del cifrado (la página no la puede leer: solo la guarda y la manda) y cuándo vence. */
 export type LlaveNueva = { llave: string; vence: string };
 
+/** Los avisos al Telegram del jefe (etapa 6). */
+export type TipoAviso = "apertura" | "cierre" | "relevo" | "stock_bajo";
+export type EstadoTelegram = { listo: boolean; conectado: boolean; nombre: string; avisos: TipoAviso[] };
+
 /** Cada cosa que la página le puede pedir a la API (ver servidor/README.md). */
 export const api = {
   inicio: () => pedir<DatosDeInicio>("/inicio"),
@@ -136,6 +140,14 @@ export const api = {
   cambiarCodigo: (comercioId: number, pin: string, codigo: string) =>
     pedir<{ ok: true; codigoCambiado: string }>(`/comercios/${comercioId}/codigo-empleados`, "PUT", { pin, codigo }),
   llaveEmpleado: (comercioId: number, codigo: string) => pedir<{ ok: boolean } & Partial<LlaveNueva>>(`/comercios/${comercioId}/llave-empleado`, "POST", { codigo }),
+
+  // Avisos por Telegram (solo el jefe): conectar el bot, elegir los avisos, probar y desconectar
+  telegram: () => pedir<EstadoTelegram>("/yo/telegram"),
+  enlaceTelegram: () => pedir<{ enlace: string; bot: string }>("/yo/telegram/enlace", "POST"),
+  confirmarTelegram: () => pedir<EstadoTelegram>("/yo/telegram/confirmar", "POST"),
+  elegirAvisos: (avisos: TipoAviso[]) => pedir<EstadoTelegram>("/yo/telegram/avisos", "PUT", { avisos }),
+  probarTelegram: () => pedir<{ ok: true }>("/yo/telegram/prueba", "POST"),
+  desconectarTelegram: () => pedir<EstadoTelegram>("/yo/telegram", "DELETE"),
 
   crearComercio: (datos: Pick<Comercio, "nombre" | "rubro" | "direccion" | "usaTicket">) => pedir<Comercio>("/comercios", "POST", datos),
   actualizarComercio: (id: number, cambios: Partial<Comercio>) => pedir<Comercio>(`/comercios/${id}`, "PATCH", cambios),

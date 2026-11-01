@@ -45,6 +45,19 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 - Las sumas que antes hacía la base (efectivo del arqueo, del relevo) y los "ordenar por nombre" ahora los hace la API,
   porque la base ya no ve esos números.
 
+## Avisos por Telegram (etapa 6)
+
+- Un solo bot para todo Mantenete; su clave (`TELEGRAM_BOT_TOKEN`) va solo en Render. Sin ella la API anda igual, sin avisos.
+- El jefe lo conecta desde Configuración: "Conectar mi Telegram" abre `t.me/<bot>?start=<código>`, aprieta "Iniciar"
+  y después "Ya apreté Iniciar". La API busca ese mensaje entre los últimos del bot (`getUpdates`) y guarda el chat
+  en su ficha (`duenos.telegram_chat_id`). El código sale de la cuenta y la hora: sirve unos 10 a 20 minutos y no se guarda.
+- Avisos: apertura de caja, relevo, cierre con el arqueo y el resumen (lo vendido en esa caja, por medio de pago,
+  lo más vendido y compras/gastos de hoy) y stock bajo al vender. Se arman en el pedido (cuando la API tiene la llave
+  y puede leer nombres y montos) y se mandan después de contestar. Si fallan, la venta igual queda hecha.
+- Stock bajo: avisa una vez por producto (`productos.avisado_stock_bajo`); al reponer por encima del mínimo, la base
+  lo vuelve a "sin avisar" sola (trigger). Sin mínimo cargado, avisa cuando se queda sin stock.
+- No hay avisos a hora fija: el servidor solo puede leer los datos cifrados mientras alguien usa el sistema.
+
 ## Qué hace
 
 | Pedido | Para qué |
@@ -55,6 +68,8 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 | `POST /yo/pin/verificar`, `PUT /yo/pin` | Comprobar el PIN de jefe (con cifrado, devuelve la llave de sesión); elegirlo la primera vez o cambiarlo (pide el actual) |
 | `GET /yo/cifrado`, `GET /yo/cifrado/frase-nueva`, `POST /yo/cifrado/activar` | Cifrado: ver si está activado, la frase para anotar y activarlo (PIN + frase + casilla; crea las claves de todos sus comercios) |
 | `POST /yo/pin/recuperar` | "Me olvidé el PIN": con la frase elige uno nuevo (la frase también se traba con 5 errores) |
+| `GET /yo/telegram`, `POST /yo/telegram/enlace`, `POST /yo/telegram/confirmar` | Avisos por Telegram (solo jefe): ver si está conectado; el enlace al bot; guardar el chat después de apretar "Iniciar" |
+| `PUT /yo/telegram/avisos`, `POST /yo/telegram/prueba`, `DELETE /yo/telegram` | Elegir qué avisos llegan, mandar uno de prueba, desconectar |
 | `GET /yo/llave` | Si la llave de sesión todavía sirve y qué comercios abre |
 | `PUT /comercios/{id}/codigo-empleados`, `POST /comercios/{id}/llave-empleado` | El jefe elige el código de empleados de un comercio (pide el PIN otra vez); el empleado pone el código y recibe la llave de ese comercio solo |
 | `GET/POST /comercios`, `PATCH /comercios/{id}` | Mis comercios (datos, permisos de empleados, horarios y turnos). Con cifrado, crear uno pide la llave del jefe |
@@ -91,6 +106,7 @@ Con la API corriendo, la lista completa está en `/docs`.
 | `SUPABASE_JWT_SECRET` | Solo si el proyecto firma con el secreto viejo (HS256): Supabase → Project Settings → JWT Keys | **Sí** |
 | `PIMIENTA_CIFRADO` | Botón **Generate** de Render (32 caracteres o más). **No se cambia nunca** y se guarda una copia en papel: si se pierde, los PIN dejan de abrir los datos y cada dueño tiene que usar su frase | **Sí** |
 | `SECRETO_SESION` | Botón **Generate** de Render. Si se cambia no se pierde nada: todos vuelven a poner su PIN o código | **Sí** |
+| `TELEGRAM_BOT_TOKEN` | La clave del bot de Telegram (la da @BotFather). Sin ella no se mandan avisos | **Sí** |
 
 Y en **Vercel**, para que la página use la API: `NEXT_PUBLIC_API_URL` = la dirección de la API (no es secreta).
 Sin esa variable la página sigue como demo aunque el dueño entre con Gmail.
