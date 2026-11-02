@@ -1,10 +1,35 @@
 import { create } from "zustand";
+import { borrarLoGuardado } from "@/lib/sin-conexion/almacen";
 import { mensajeDeIngreso, supabase } from "@/lib/supabase";
 
 // La cuenta del dueño en la nube (Gmail). Es distinta de la "sesión" de store/comercio.ts:
 //   - la cuenta queda abierta en la compu del local (la abre el dueño una vez con su Gmail),
 //   - adentro, cada turno entra el empleado con su nombre o el jefe con su PIN, como siempre.
-export type Cuenta = { email: string; nombre: string };
+// sinConexion: sin internet, Supabase no pudo renovar el permiso de la cuenta, pero la cuenta sigue abierta en
+// esta compu (no se cerró): se trabaja con la foto de la caja hasta que vuelva internet (ver store/nube.ts).
+export type Cuenta = { email: string; nombre: string; sinConexion?: boolean };
+
+const RECORDADA = "mantenete-cuenta";
+
+function recordar(cuenta: Cuenta | null) {
+  try {
+    if (cuenta) localStorage.setItem(RECORDADA, JSON.stringify({ email: cuenta.email, nombre: cuenta.nombre }));
+    else localStorage.removeItem(RECORDADA);
+  } catch {
+    // sin almacenamiento: sin internet no se va a poder seguir, nada más
+  }
+}
+
+/** Si no hay sesión pero la cuenta NO se cerró (Supabase todavía tiene guardado su permiso), es falta de internet. */
+function cuentaSinInternet(): Cuenta | null {
+  try {
+    const quedoAbierta = Object.keys(localStorage).some((k) => k.startsWith("sb-") && k.endsWith("-auth-token"));
+    const recordada = JSON.parse(localStorage.getItem(RECORDADA) ?? "null") as Cuenta | null;
+    return quedoAbierta && recordada?.email ? { ...recordada, sinConexion: true } : null;
+  } catch {
+    return null;
+  }
+}
 
 type EstadoCuenta = {
   cargando: boolean;
@@ -48,11 +73,14 @@ export const useCuenta = create<EstadoCuenta>()((set) => ({
         await sb.auth.signOut();
         return set({ cargando: false, cuenta: null, error: mensajeDeIngreso("not allowed") });
       }
-      set({ cargando: false, cuenta: { email: data?.email || email, nombre: data?.nombre ?? "" } });
+      const recordada = cuentaSinInternet();
+      const cuenta = { email: data?.email || email, nombre: data?.nombre ?? (recordada?.email === email ? recordada.nombre : "") };
+      if (data) recordar(cuenta);
+      set({ cargando: false, cuenta });
     };
 
     const { data } = sb.auth.onAuthStateChange((_evento, sesion) => {
-      if (!sesion) return set({ cargando: false, cuenta: null });
+      if (!sesion) return set({ cargando: false, cuenta: cuentaSinInternet() });
       // Supabase pide no esperar otras consultas adentro de este aviso: se leen apenas termina.
       setTimeout(() => void leerFicha(sesion.user.email ?? ""), 0);
     });
@@ -72,6 +100,8 @@ export const useCuenta = create<EstadoCuenta>()((set) => ({
 
   salirDeLaCuenta: async () => {
     await supabase()?.auth.signOut();
+    recordar(null);
+    await borrarLoGuardado().catch(() => {}); // la foto de la caja (si quedan ventas sin mandar, esas no)
     set({ cuenta: null });
   },
 }));
