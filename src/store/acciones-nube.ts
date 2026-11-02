@@ -3,7 +3,7 @@ import { sacarDeTandas } from "@/lib/calculos";
 import { ahora, hoy, sumarDias } from "@/lib/fechas";
 import type { BaseDemo } from "@/lib/datos-demo";
 import { ejemploGimnasio } from "@/lib/demo-gimnasio";
-import { horarioDe } from "@/lib/gimnasio";
+import { HECHA_POR_CELULAR, horarioDe } from "@/lib/gimnasio";
 import { validarHorarios } from "@/lib/horarios";
 import { guardarLlave } from "@/lib/llave";
 import { validarPinNuevo } from "@/lib/pin";
@@ -460,10 +460,13 @@ function accionesGimnasioNube(set: Set, get: Get): AccionesGimnasio {
     actualizarReservas: async (comercioId) => {
       const desde = sumarDias(ahora().slice(0, 10), -7);
       const r = await api.reservasDesde(comercioId, desde);
+      const antes = new Set(get().reservas.map((x) => x.id));
+      const nuevasDelCelular = r.reservas.filter((x) => !antes.has(x.id) && x.hechaPor === HECHA_POR_CELULAR && (x.estado === "reservado" || x.estado === "espera"));
       set((s) => ({
         reservas: [...s.reservas.filter((x) => x.comercioId !== comercioId || x.fecha < r.desde), ...r.reservas],
         socios: r.socios.reduce(conCambio, s.socios),
       }));
+      return nuevasDelCelular;
     },
 
     registrarIngreso: async (comercioId, socioId, registradoPor, resultado = "paso", motivo = "") => {

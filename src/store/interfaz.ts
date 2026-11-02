@@ -15,7 +15,7 @@ type EstadoInterfaz = {
   abrirMenu: (abierto: boolean) => void;
   leerMenu: () => void;
   achicarMenu: () => void;
-  avisar: (texto: string, tipo?: Aviso["tipo"]) => void;
+  avisar: (texto: string, tipo?: Aviso["tipo"], duracion?: number) => void;
   cerrarAviso: (id: number) => void;
 };
 
@@ -55,10 +55,10 @@ export const useInterfaz = create<EstadoInterfaz>()((set, get) => ({
     }
     set({ menuAchicado });
   },
-  avisar: (texto, tipo = "exito") => {
+  avisar: (texto, tipo = "exito", duracion = 5000) => {
     const id = proximoAviso++;
     set((s) => ({ avisos: [...s.avisos, { id, texto, tipo }] }));
-    setTimeout(() => get().cerrarAviso(id), 5000);
+    setTimeout(() => get().cerrarAviso(id), duracion);
   },
   cerrarAviso: (id) => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })),
 }));

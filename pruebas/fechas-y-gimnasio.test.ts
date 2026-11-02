@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { diasEntre, sumarDias } from "@/lib/fechas";
-import { calcularCuota, limpiarHora, situacionSocio, sumarMeses } from "@/lib/gimnasio";
+import { calcularCuota, HECHA_POR_CELULAR, limpiarHora, situacionSocio, sumarMeses, textoReservaDelCelular } from "@/lib/gimnasio";
 import { rangoMes } from "@/lib/reporte";
 import type { Plan, ReglasGimnasio, Socio } from "@/lib/tipos";
 
@@ -77,5 +77,18 @@ describe("cuotas del gimnasio", () => {
     expect(situacionSocio(socio({ vence: "2026-10-25" }), null, "2026-10-20", 7).clave).toBe("vence_pronto");
     expect(situacionSocio(socio({ vence: "2026-11-30" }), null, "2026-10-20", 7).clave).toBe("al_dia");
     expect(situacionSocio(socio({}), null, "2026-10-20", 7).clave).toBe("nunca_pago");
+  });
+});
+
+describe("cartel de reserva desde el celular", () => {
+  const d = {
+    socios: [{ id: 400, comercioId: 60, nombre: "Juan Pérez", dni: "30111222", telefono: "", email: "", nota: "", planId: null, vence: null, clasesRestantes: 0, alta: "2026-10-01", activo: true }],
+    clases: [{ id: 300, comercioId: 60, disciplinaId: 11, diaSemana: 0, horaInicio: "19:00", duracionMinutos: 60, profesor: "", cupoMaximo: 10, activa: true }],
+    disciplinas: [{ id: 11, comercioId: 60, nombre: "Crossfit", activa: true }],
+  };
+  const r = { id: 1, comercioId: 60, claseId: 300, socioId: 400, fecha: "2026-11-03", estado: "reservado" as const, creada: "2026-11-02T10:00", hechaPor: HECHA_POR_CELULAR, claseDescontada: true, claseDevuelta: false };
+  it("dice quién, qué clase y qué día", () => {
+    expect(textoReservaDelCelular(r, d)).toBe("Juan Pérez reservó Crossfit 19:00 del 03/11 desde el celular.");
+    expect(textoReservaDelCelular({ ...r, estado: "espera" }, d)).toBe("Juan Pérez se anotó en la lista de espera de Crossfit 19:00 del 03/11 desde el celular.");
   });
 });

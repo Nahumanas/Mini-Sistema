@@ -34,8 +34,9 @@ export type AccionesGimnasio = {
   cancelarReserva: (reservaId: number, hechaPor: string, devolver?: boolean) => Promise<{ devuelta: boolean; aTiempo: boolean; eraEspera: boolean; planLibre: boolean; entraron: Entraron }>;
   marcarAsistencia: (reservaId: number, vino: boolean) => Promise<void>;
   cerrarClasesPasadas: (comercioId: number) => Promise<void>;
-  /** Vuelve a leer las reservas de los últimos días (las de otra compu o del celular del socio). En la demo no hace nada. */
-  actualizarReservas: (comercioId: number) => Promise<void>;
+  /** Vuelve a leer las reservas de los últimos días (las de otra compu o del celular del socio) y devuelve
+   * las que llegaron nuevas desde el celular del socio. En la demo no hace nada. */
+  actualizarReservas: (comercioId: number) => Promise<Reserva[]>;
   registrarIngreso: (comercioId: number, socioId: number, registradoPor: string, resultado?: "paso" | "rechazado", motivo?: string) => Promise<{ repetido: boolean }>;
   cargarEjemploGimnasio: (comercioId: number, conSocios: boolean) => Promise<void>;
 };
@@ -268,7 +269,7 @@ export function accionesGimnasio(set: Set, get: Get, nuevoId: () => number): Acc
     marcarAsistencia: async (reservaId, vino) => cambiarReserva(reservaId, { estado: vino ? "vino" : "falto" }),
 
     // En la demo todo pasa en esta misma compu: no hay nada nuevo que leer
-    actualizarReservas: async () => {},
+    actualizarReservas: async () => [],
 
     // Las clases que ya terminaron: el que tenía lugar y no vino queda "faltó" (pierde la clase)
     // y el que seguía en la lista de espera queda "cancelado" (no le llegó el lugar)

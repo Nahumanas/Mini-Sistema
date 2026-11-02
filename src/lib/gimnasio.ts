@@ -5,6 +5,9 @@ import type { Asistencia, Clase, Disciplina, Plan, ReglasGimnasio, Reserva, Soci
 // amarillo o rojo), hasta cuándo le vale una cuota, la grilla de la semana y qué ve la recepción
 // al pasar el DNI. Son cuentas sin guardar nada: lo que se guarda está en store/datos.ts.
 
+/** Así quedan marcadas las reservas que el socio hizo desde su celular (lo pone la API). */
+export const HECHA_POR_CELULAR = "Celular del socio";
+
 export const DIAS_SEMANA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
 export const DURACIONES: Record<number, string> = { 1: "1 mes", 2: "2 meses", 3: "3 meses (trimestral)", 6: "6 meses (semestral)", 12: "12 meses (anual)" };
@@ -341,4 +344,15 @@ export function verificarDni(d: DatosGimnasio, comercioId: number, texto: string
   else Object.assign(r, { puedePasar: true, puedeCobrar: estado.color !== "verde" });
   if (!debe && porClases && !reserva) r.clasesHoy = clasesDisponibles(d, socio, ahora.slice(0, 10), 1, ahora).filter((c) => !c.yaAnotado);
   return r;
+}
+
+/** "Juan Pérez reservó Crossfit 19:00 del 03/11 desde el celular." */
+export function textoReservaDelCelular(r: Reserva, d: Pick<DatosGimnasio, "socios" | "clases" | "disciplinas">) {
+  const socio = d.socios.find((s) => s.id === r.socioId)?.nombre ?? "Un socio";
+  const clase = d.clases.find((c) => c.id === r.claseId);
+  const actividad = d.disciplinas.find((x) => x.id === clase?.disciplinaId)?.nombre ?? "una clase";
+  const cuando = `${actividad}${clase ? ` ${clase.horaInicio}` : ""} del ${ddmm(r.fecha)}`;
+  return r.estado === "espera"
+    ? `${socio} se anotó en la lista de espera de ${cuando} desde el celular.`
+    : `${socio} reservó ${cuando} desde el celular.`;
 }

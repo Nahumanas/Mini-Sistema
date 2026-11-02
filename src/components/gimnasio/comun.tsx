@@ -6,7 +6,7 @@ import { Banknote, CalendarPlus, CircleCheck, CreditCard, MessageCircle, Octagon
 import { archivoIcs, descargarIcs, linkGoogleCalendar, linkWhatsapp } from "@/lib/calendario";
 import { ddmm, hoy } from "@/lib/fechas";
 import { MEDIOS_DE_PAGO, type MedioDePago, normalizar, pesos } from "@/lib/formato";
-import { type Color, calcularCuota, plural, reglasDe, situacionSocio, textoPlan } from "@/lib/gimnasio";
+import { type Color, calcularCuota, plural, reglasDe, situacionSocio, textoPlan, textoReservaDelCelular } from "@/lib/gimnasio";
 import { calcular } from "@/lib/promos";
 import type { Comercio, Socio } from "@/lib/tipos";
 import { type CuotaCobrada } from "@/store/acciones-gimnasio";
@@ -21,12 +21,20 @@ import { Boton, Campo, Chip, claseInput } from "../ui/base";
 /** Quién está usando el sistema (queda anotado en lo que cobra o anota). */
 /** Cada 30 segundos (y al volver a la pestaña) vuelve a leer las reservas de los últimos días, así la
  * recepción ve las que se hicieron desde el celular del socio o en otra compu sin recargar la página.
- * Si falla (por ejemplo, sin internet), no avisa nada: se intenta la próxima vez. */
+ * Por cada reserva nueva del celular sale un cartel. Si falla (por ejemplo, sin internet), no avisa nada:
+ * se intenta la próxima vez. */
 export function useReservasAlDia(comercioId: number) {
   const actualizarReservas = useDatos((s) => s.actualizarReservas);
+  const avisar = useInterfaz((s) => s.avisar);
   useEffect(() => {
     const leer = () => {
-      if (document.visibilityState === "visible") actualizarReservas(comercioId).catch(() => {});
+      if (document.visibilityState !== "visible") return;
+      actualizarReservas(comercioId)
+        .then((nuevas) => {
+          const d = useDatos.getState();
+          for (const r of nuevas) avisar(textoReservaDelCelular(r, d), "info", 15_000);
+        })
+        .catch(() => {});
     };
     leer();
     const cada = window.setInterval(leer, 30_000);
