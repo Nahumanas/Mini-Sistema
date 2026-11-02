@@ -39,6 +39,10 @@ Las tablas del proyecto de pruebas se crean de una sola vez con `python carga/mi
 migraciones de `supabase/migrations` en orden y se acuerda de cuáles ya corrió). **Solo para el proyecto de pruebas**:
 en el de los clientes, los cambios de base siguen yendo por PR y se pegan a mano en el SQL Editor.
 
+En el proyecto de pruebas, subí **Authentication → Rate Limits → sign-ups and sign-ins** a 500: Supabase deja entrar
+unas 30 veces cada 5 minutos desde la misma compu y `preparar.py` entra con los 100 dueños seguidos (si igual se topa
+con el límite, espera y sigue solo).
+
 Si Locust corre desde una compu en Argentina, cada pedido suma lo que tarda internet hasta Render (unos 0,2 s).
 Para que el veredicto no lo cuente: `P95_MAXIMO_MS=700` (en PowerShell: `$env:P95_MAXIMO_MS="700"`).
 
