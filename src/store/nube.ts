@@ -1,11 +1,13 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { api, type DatosDeInicio, ErrorDeApi, hayApi } from "@/lib/api";
-import { llaveGuardada } from "@/lib/llave";
+import { alGuardarLlave, llaveGuardada } from "@/lib/llave";
 import { guardarFoto, leerFoto } from "@/lib/sin-conexion/foto";
+import { recontarCola, sincronizar } from "@/lib/sin-conexion/sincronizar";
 import { hayNube } from "@/lib/supabase";
 import { useCarrito } from "./carrito";
 import { useSesion } from "./comercio";
+import { useConexionRed, vigilarConexion } from "./conexion";
 import { useCuenta } from "./cuenta";
 import { useDatos } from "./datos";
 
@@ -82,6 +84,7 @@ export const useNube = create<EstadoNube>()((set, get) => ({
         const cambiaDeModo = useDatos.getState().modo !== "nube";
         useDatos.getState().usarNube(foto.datos);
         if (cambiaDeModo) useCarrito.setState({ carritos: {} });
+        useConexionRed.setState({ estado: "sin_conexion", fallas: 2 });
         return set({ estado: "sin_conexion", guardada: foto.guardada, error: "" });
       }
       set({ estado: "error", error: (err as Error).message });
@@ -131,18 +134,25 @@ export function useConexion(listos: boolean) {
     if (!cuenta && estado !== "apagada") apagar();
   }, [cuenta, cargandoCuenta, estado, cargar, apagar]);
 
-  // Sin conexión: se prueba volver cuando el navegador avisa que hay internet, y cada 30 segundos
-  const reconectar = useNube((s) => s.reconectar);
+  // Con la nube: se vigila si hay internet (store/conexion.ts). Cuando vuelve, primero se mandan las ventas
+  // guardadas sin internet y después (si se estaba con la foto de la caja) se traen los datos de nuevo.
+  const enLaNube = estado === "lista" || estado === "sin_conexion";
   useEffect(() => {
-    if (estado !== "sin_conexion") return;
-    const probar = () => void reconectar();
-    window.addEventListener("online", probar);
-    const reloj = setInterval(probar, 30_000);
-    return () => {
-      window.removeEventListener("online", probar);
-      clearInterval(reloj);
+    if (!enLaNube) return;
+    void recontarCola().then(() => sincronizar());
+    alGuardarLlave.avisar = () => {
+      useConexionRed.setState({ faltaLlave: false });
+      void sincronizar();
     };
-  }, [estado, reconectar]);
+    const apagar = vigilarConexion(
+      () => void sincronizar().then(() => useNube.getState().reconectar()),
+      () => useNube.getState().estado === "sin_conexion",
+    );
+    return () => {
+      apagar();
+      alGuardarLlave.avisar = () => {};
+    };
+  }, [enLaNube]);
 
   // Si hay cuenta y API, hasta que no estén los datos de la nube no se dibuja nada (ni la demo)
   const esperando = (hayNube && cargandoCuenta) || estado === "cargando" || (hayApi && Boolean(cuenta) && estado === "apagada");
@@ -154,7 +164,10 @@ export function useConexion(listos: boolean) {
     const { comercios, cifradoActivo } = useDatos.getState();
     // Una cuenta nueva todavía no tiene comercios: primero hay que crear uno (en la pantalla de ingreso).
     // Con el cifrado activado, un turno sin llave (venció, o es de antes de activarlo) vuelve a pedir el PIN o el código.
-    if (sesion && (Boolean(sesion.enNube) !== enNube || !comercios.length || (enNube && cifradoActivo && !llaveGuardada()))) salir();
+    // Sin internet (con la foto de la caja) el turno abierto sigue aunque venza la llave: nadie podría volver a entrar,
+    // porque el PIN y el código los revisa el servidor. Las ventas se guardan y la llave se pide al volver internet.
+    const sinLlave = enNube && cifradoActivo && !llaveGuardada() && estado !== "sin_conexion";
+    if (sesion && (Boolean(sesion.enNube) !== enNube || !comercios.length || sinLlave)) salir();
   }, [listos, esperando, estado]);
 
   return { esperando, estado, error, reintentar: cargar };
@@ -174,7 +187,10 @@ function guardarFotoDespues(ms = 5000) {
     relojFoto = null;
     const cuenta = useCuenta.getState().cuenta;
     const d = useDatos.getState();
-    if (!cuenta || d.modo !== "nube" || useNube.getState().estado !== "lista" || !llaveGuardada()) return;
+    const { estado, guardada } = useNube.getState();
+    // Sin internet también se guarda (así las ventas cobradas siguen en pantalla si se recarga), con la hora de la foto vieja
+    if (!cuenta || d.modo !== "nube" || (estado !== "lista" && estado !== "sin_conexion")) return;
+    if (estado === "lista" && !llaveGuardada()) return;
     const datos: DatosDeInicio = {
       dueno: { nombre: cuenta.nombre, email: cuenta.email, pinConfigurado: d.pinConfigurado, cifradoActivo: d.cifradoActivo },
       codigos: Object.entries(d.codigos).map(([comercioId, codigoCambiado]) => ({ comercioId: Number(comercioId), codigoCambiado })),
@@ -183,7 +199,7 @@ function guardarFotoDespues(ms = 5000) {
       ajustes: [], proveedores: [], compras: [], gastos: [], retiros: [], disciplinas: [], planes: [], clases: [],
       reglasGimnasio: [], socios: [], reservas: [], cuotas: [], asistencias: [],
     };
-    void guardarFoto(cuenta.email, datos).catch(() => {});
+    void guardarFoto(cuenta.email, datos, estado === "sin_conexion" && guardada ? guardada : undefined).catch(() => {});
   }, ms);
 }
 
@@ -193,4 +209,11 @@ if (typeof window !== "undefined") {
     if (s.productos !== antes.productos || s.cajas !== antes.cajas || s.ventas !== antes.ventas || s.promos !== antes.promos ||
         s.comercios !== antes.comercios || s.empleados !== antes.empleados || s.relevos !== antes.relevos) guardarFotoDespues();
   });
+}
+
+/** ¿Se está trabajando sin internet? (porque se cortó, o porque la Caja abrió con la foto guardada) */
+export function useSinInternet() {
+  const conFoto = useNube((s) => s.estado === "sin_conexion");
+  const sinRed = useConexionRed((s) => s.estado === "sin_conexion");
+  return conFoto || sinRed;
 }

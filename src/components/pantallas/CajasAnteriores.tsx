@@ -9,6 +9,7 @@ import type { Caja } from "@/lib/tipos";
 import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
+import { ParaRevisar } from "../caja/ParaRevisar";
 import { Boton, Campo, Chip, claseInput, Encabezado, Segmentado, Tabla, Tarjeta, Vacio } from "../ui/base";
 
 // Las cajas de los últimos días con su arqueo, como "Cajas anteriores" de Streamlit. Solo la ve el jefe.
@@ -31,6 +32,8 @@ export function CajasAnteriores() {
         titulo="Cajas anteriores"
         descripcion="Cada caja con su arqueo y sus turnos. Tocá una para ver quién atendió y, si hubo un error, corregirlo con un ajuste."
       />
+
+      <ParaRevisar />
 
       {suyas.length === 0 ? (
         <Vacio icono={History}>Todavía no hay cajas en {comercio.nombre}.</Vacio>

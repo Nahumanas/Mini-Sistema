@@ -10,6 +10,7 @@ import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { useConexion, useNube } from "@/store/nube";
 import { Boton } from "../ui/base";
+import { BannerSinConexion } from "./BannerSinConexion";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
@@ -75,29 +76,10 @@ export function Marco({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />
         <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8">
-          <CartelSinConexion />
+          <BannerSinConexion />
           <ConPermiso>{children}</ConPermiso>
         </main>
       </div>
-    </div>
-  );
-}
-
-/** Sin internet, con la foto de la caja guardada en esta compu (store/nube.ts). */
-function CartelSinConexion() {
-  const sinConexion = useNube((s) => s.estado === "sin_conexion");
-  const guardada = useNube((s) => s.guardada);
-  if (!sinConexion) return null;
-  const cuando = guardada
-    ? new Date(guardada).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" })
-    : "";
-  return (
-    <div role="status" aria-live="polite"
-      className="mx-auto mb-4 flex max-w-6xl items-center gap-3 rounded-lg border border-amber-400/50 bg-amber-400/10 px-4 py-2 text-sm text-amber-800 dark:text-amber-200">
-      <CloudOff className="size-4 shrink-0" aria-hidden />
-      <span>
-        <b>Sin internet.</b> Estás viendo la caja como estaba guardada en esta compu{cuando && ` (${cuando})`}. Se actualiza sola cuando vuelva internet.
-      </span>
     </div>
   );
 }

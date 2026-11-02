@@ -122,7 +122,7 @@ describe("modo nube", () => {
     const venta = await datos().registrarVenta(50, items, "efectivo", calcular([], items, "efectivo", "mejor"), "Ana");
 
     expect(venta.numero).toBe(41);
-    expect(api.registrarVenta).toHaveBeenCalledWith(50, { items: [{ productoId: 900, cantidad: 2 }], medioPago: "efectivo", vendidoPor: "Ana", descuento: 0, promos: [] });
+    expect(api.registrarVenta).toHaveBeenCalledWith(50, { idCliente: expect.any(String), items: [{ productoId: 900, cantidad: 2 }], medioPago: "efectivo", vendidoPor: "Ana", descuento: 0, promos: [] });
     expect(datos().ventas).toEqual([deLaApi]);
     expect(datos().productos[0].stock).toBe(8);
   });

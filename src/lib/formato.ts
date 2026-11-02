@@ -14,6 +14,9 @@ export const MEDIOS_DE_PAGO = {
 
 export type MedioDePago = keyof typeof MEDIOS_DE_PAGO;
 
+/** Los medios que no se pueden cobrar sin internet (hay que confirmar el pago con alguien de afuera). */
+export const NECESITAN_INTERNET: ReadonlySet<MedioDePago> = new Set(["debito", "credito", "transferencia"]);
+
 /** Para buscar sin mayúsculas ni tildes: "cano" encuentra "Caño PVC". */
 export function normalizar(texto: string) {
   return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();

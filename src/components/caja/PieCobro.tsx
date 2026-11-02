@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Banknote, CreditCard, Printer, QrCode, WalletCards } from "lucide-react";
-import { MEDIOS_DE_PAGO, type MedioDePago, pesos } from "@/lib/formato";
+import { MEDIOS_DE_PAGO, type MedioDePago, NECESITAN_INTERNET, pesos } from "@/lib/formato";
 import type { Cuenta } from "@/lib/promos";
 import { descargarTicket } from "@/lib/ticket";
 import type { Venta } from "@/lib/tipos";
@@ -10,6 +10,7 @@ import { useCarrito, useItemsDe } from "@/store/carrito";
 import { useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
+import { useSinInternet } from "@/store/nube";
 
 const ICONO_MEDIO = { efectivo: Banknote, debito: WalletCards, credito: CreditCard, transferencia: QrCode };
 
@@ -28,6 +29,20 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
   const [conTicket, setConTicket] = useState(false);
   const [ultima, setUltima] = useState<Venta | null>(null); // para volver a bajar el ticket de la última venta
   const [cobrando, setCobrando] = useState(false); // en la nube la venta tarda un momento: no se cobra dos veces
+  const sinInternet = useSinInternet();
+
+  // Si se corta internet con otro medio elegido, se pasa solo a Efectivo (y se avisa una vez)
+  useEffect(() => {
+    if (sinInternet && NECESITAN_INTERNET.has(medio)) {
+      setMedio("efectivo");
+      avisar("Sin internet solo se puede cobrar en efectivo.", "info");
+    }
+  }, [sinInternet, medio, setMedio, avisar]);
+
+  // El armador del ticket se baja una vez con internet, así queda guardado para cuando no haya
+  useEffect(() => {
+    if (comercio?.usaTicket) void import("jspdf").catch(() => {});
+  }, [comercio?.usaTicket]);
 
   const total = cuenta.total;
   // "Paga con" es opcional: si se completa, el sistema calcula el vuelto (así no se da de más ni de menos)
@@ -50,7 +65,9 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
       setCobrando(false);
     }
     avisar(
-      `Venta N° ${venta.numero} cobrada: ${pesos(venta.total)} en ${MEDIOS_DE_PAGO[medio].toLowerCase()}.` +
+      (venta.provisorio
+        ? `Venta guardada en esta compu (${venta.provisorio}): ${pesos(venta.total)} en efectivo. Se manda sola cuando vuelva internet.`
+        : `Venta N° ${venta.numero} cobrada: ${pesos(venta.total)} en ${MEDIOS_DE_PAGO[medio].toLowerCase()}.`) +
         (vuelto ? ` Vuelto: ${pesos(vuelto)}.` : "") +
         (venta.descuento ? ` El cliente ahorró ${pesos(venta.descuento)} con las promos.` : ""),
     );
@@ -76,13 +93,16 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
             {(Object.keys(MEDIOS_DE_PAGO) as MedioDePago[]).map((m) => {
               const Icono = ICONO_MEDIO[m];
               const elegido = m === medio;
+              const apagado = sinInternet && NECESITAN_INTERNET.has(m);
               return (
                 <button
                   key={m}
                   type="button"
                   onClick={() => setMedio(m)}
                   aria-pressed={elegido}
-                  className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-[15px] transition-colors ${
+                  disabled={apagado}
+                  title={apagado ? "Necesita internet" : undefined}
+                  className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-[15px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                     elegido ? "border-primary bg-primary/10 font-medium text-texto" : "border-borde text-texto-suave hover:bg-superficie-suave hover:text-texto"
                   }`}
                 >
@@ -130,7 +150,7 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar }: Prop
             {ultima && (
               <button type="button" onClick={() => bajarTicket(ultima)} className="inline-flex items-center gap-1.5 text-sm text-texto-suave underline-offset-2 hover:text-texto hover:underline">
                 <Printer className="size-3.5" />
-                Ticket de la venta N° {ultima.numero}
+                Ticket de la venta {ultima.provisorio ?? `N° ${ultima.numero}`}
               </button>
             )}
           </div>

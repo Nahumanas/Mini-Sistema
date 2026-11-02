@@ -10,6 +10,7 @@ import { calcular } from "@/lib/promos";
 import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useItemsDe } from "@/store/carrito";
 import { useDatos } from "@/store/datos";
+import { useSinInternet } from "@/store/nube";
 import { Encabezado } from "../ui/base";
 import { AbrirCaja, CerrarCaja, RelevoTurno } from "./AperturaCierre";
 import { BarraIngreso } from "./BarraIngreso";
@@ -27,6 +28,7 @@ export function PointOfSale() {
   const [medio, setMedio] = useState<MedioDePago>("efectivo");
   const [cerrando, setCerrando] = useState(false);
   const [relevando, setRelevando] = useState(false);
+  const sinInternet = useSinInternet(); // relevo y cierre necesitan internet (se sigue cobrando en efectivo)
 
   const caja = cajas.find((c) => c.comercioId === comercio.id && !c.cerrada);
   const productos = useMemo(() => todos.filter((p) => p.comercioId === comercio.id && p.activo), [todos, comercio.id]);
@@ -99,14 +101,18 @@ export function PointOfSale() {
           </p>
           <button
             onClick={() => setRelevando(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-borde bg-superficie px-3 py-1.5 text-sm hover:bg-superficie-suave"
+            disabled={sinInternet}
+            title={sinInternet ? "Necesita internet" : undefined}
+            className="inline-flex items-center gap-1.5 rounded-md border border-borde bg-superficie px-3 py-1.5 text-sm hover:bg-superficie-suave disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Repeat className="size-3.5" />
             Relevo de turno
           </button>
           <button
             onClick={() => setCerrando(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-borde bg-superficie px-3 py-1.5 text-sm hover:bg-superficie-suave"
+            disabled={sinInternet}
+            title={sinInternet ? "Necesita internet" : undefined}
+            className="inline-flex items-center gap-1.5 rounded-md border border-borde bg-superficie px-3 py-1.5 text-sm hover:bg-superficie-suave disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Lock className="size-3.5" />
             Cerrar caja
