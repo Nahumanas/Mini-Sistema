@@ -11,7 +11,7 @@ from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import llave_requerida
 from ..sobres import Cofre
-from .comun import LEER_CLAVES, LEER_COMERCIO, existe
+from .comun import LEER_CLAVES, LEER_COMERCIO, existe, insertar_ajuste
 from .ventas import con_items
 
 router = APIRouter(tags=["Caja"])
@@ -191,16 +191,6 @@ def _motivo(texto: str) -> str:
     return motivo
 
 
-def _ajuste(con, cofre: Cofre, caja: dict, hecho_por: str, tipo: str, venta_id: int | None, monto, motivo: str) -> dict:
-    sobre = cofre.cerrar("ajustes_caja", caja["comercio_id"], {"monto": monto, "motivo": motivo})
-    fila = con.execute(
-        """insert into public.ajustes_caja (comercio_id, caja_id, hecho_por, tipo, venta_id, sobre)
-           values (%s, %s, %s, %s, %s, %s) returning *""",
-        (caja["comercio_id"], caja["id"], hecho_por.strip(), tipo, venta_id, sobre),
-    ).fetchone()
-    return cofre.abrir("ajustes_caja", fila)
-
-
 @router.post("/cajas/{caja_id}/anular-venta", status_code=201)
 def anular_venta(caja_id: int, datos: AnularVenta, usuario: Usuario = Depends(usuario_actual),
                  llave: Llave = Depends(llave_requerida)):
@@ -218,7 +208,7 @@ def anular_venta(caja_id: int, datos: AnularVenta, usuario: Usuario = Depends(us
         venta = cofre.abrir("ventas", con.execute(
             "update public.ventas set anulada = now() where id = %s returning *", (venta["id"],)
         ).fetchone())
-        ajuste = _ajuste(con, cofre, caja, datos.hechoPor, "anular_venta", venta["id"], venta["total"], motivo)
+        ajuste = insertar_ajuste(con, cofre, caja, datos.hechoPor, "anular_venta", venta["id"], venta["total"], motivo)
         productos = con.execute(
             """update public.productos p set stock = p.stock + d.cantidad
                from (select producto_id, sum(cantidad) as cantidad from public.ventas_detalle
@@ -257,4 +247,4 @@ def recontar(caja_id: int, datos: Recontar, usuario: Usuario = Depends(usuario_a
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
         caja = _caja_cerrada(con, cofre, caja_id)
-        return a_camel(_ajuste(con, cofre, caja, datos.hechoPor, "recontar", None, datos.efectivo, motivo))
+        return a_camel(insertar_ajuste(con, cofre, caja, datos.hechoPor, "recontar", None, datos.efectivo, motivo))

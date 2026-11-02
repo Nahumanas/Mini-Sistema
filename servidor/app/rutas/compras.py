@@ -44,12 +44,18 @@ def con_items(con, cofre: Cofre, compras: list[dict]) -> list[dict]:
     """Las compras (ya abiertas) con lo que llegó en cada una (items), como las usa la página."""
     if not compras:
         return []
-    por_compra: dict[int, list[dict]] = defaultdict(list)
-    for d in con.execute(
+    detalle = con.execute(
         """select comercio_id, compra_id, producto_id, cantidad, sobre
            from public.compras_detalle where compra_id = any(%s) order by id""",
         ([c["id"] for c in compras],),
-    ).fetchall():
+    ).fetchall()
+    return armar_items(cofre, compras, detalle)
+
+
+def armar_items(cofre: Cofre, compras: list[dict], detalle: list[dict]) -> list[dict]:
+    """Como con_items, con el detalle ya leído."""
+    por_compra: dict[int, list[dict]] = defaultdict(list)
+    for d in detalle:
         d = cofre.abrir("compras_detalle", d)
         por_compra[d["compra_id"]].append(a_camel({
             "producto_id": d["producto_id"], "nombre": d["nombre"], "cantidad": d["cantidad"], "costo_unitario": d["costo_unitario"],

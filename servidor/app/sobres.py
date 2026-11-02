@@ -36,7 +36,8 @@ TEXTO, NUMERO, JSON = "texto", "numero", "json"
 # Lo que va adentro del sobre de cada tabla (y de qué tipo). Lo demás de la fila queda a la vista.
 CAMPOS: dict[str, dict[str, str]] = {
     "productos": {"codigo": TEXTO, "nombre": TEXTO, "categoria": TEXTO, "precio_venta": NUMERO, "costo": NUMERO},
-    "ventas": {"subtotal": NUMERO, "descuento": NUMERO, "total": NUMERO, "promos": JSON},
+    # diferencias: en las ventas sin conexión, los productos que se cobraron a otro precio que el de ahora
+    "ventas": {"subtotal": NUMERO, "descuento": NUMERO, "total": NUMERO, "promos": JSON, "diferencias": JSON},
     "ventas_detalle": {"nombre": TEXTO, "categoria": TEXTO, "precio_unitario": NUMERO, "costo_unitario": NUMERO},
     "cajas": {"monto_inicial": NUMERO, "efectivo_esperado": NUMERO, "efectivo_contado": NUMERO, "nota": TEXTO},
     "relevos": {"esperado": NUMERO, "contado": NUMERO, "diferencia": NUMERO, "nota": TEXTO},
@@ -183,6 +184,9 @@ class Cofre:
         campos = CAMPOS[tabla]
         for k, v in json.loads(texto).items():
             fila[k] = Decimal(v) if campos.get(k) == NUMERO and v is not None else v
+        # Los sobres de antes de agregar un campo no lo tienen (por ejemplo "diferencias" en las ventas)
+        for k, tipo in campos.items():
+            fila.setdefault(k, [] if tipo == JSON else None)
         return fila
 
     def abrir_todas(self, tabla: str, filas: list[dict]) -> list[dict]:
