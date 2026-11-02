@@ -6,7 +6,7 @@ from contextlib import contextmanager
 
 import psycopg
 
-from .conftest import crear_usuario
+from .conftest import PIN_DE_PRUEBA, crear_usuario
 from .test_parte_3 import _sql
 
 
@@ -86,3 +86,41 @@ def test_una_venta_que_falla_no_deja_nada_a_medias(cliente):
     assert _sql(f"select count(*) from public.ventas where comercio_id = {cid}") == "0"
     # Y la siguiente sale bien, con el número 1 (la conexión quedó limpia)
     assert cliente.post(f"/comercios/{cid}/ventas", json=venta, headers=jefe).json()["numero"] == 1
+
+
+def test_entrar_va_en_un_viaje(cliente):
+    """La pantalla de entrada: /inicio (sin llave y con llave), poner el PIN de jefe y el código de empleados.
+    Antes /inicio con llave eran casi 30 viajes (unos 3,5 s con la base lejos); ahora es uno solo."""
+    jefe, cid, _ = _local(cliente, "entrar@gmail.com")
+    cliente.post(f"/comercios/{cid}/caja/abrir", json={"responsable": "Ana"}, headers=jefe)
+    sin_llave = {k: v for k, v in jefe.items() if k != "X-Llave"}
+    pin = "739152"
+    assert cliente.put(f"/comercios/{cid}/codigo-empleados", json={"pin": PIN_DE_PRUEBA, "codigo": pin}, headers=jefe).status_code == 200
+    pedidos = [
+        ("inicio sin llave", lambda: cliente.get("/inicio", headers=sin_llave)),
+        ("inicio con llave", lambda: cliente.get("/inicio", headers=jefe)),
+        ("quién soy", lambda: cliente.get("/yo", headers=sin_llave)),
+        ("poner el PIN", lambda: cliente.post("/yo/pin/verificar", json={"pin": PIN_DE_PRUEBA}, headers=sin_llave)),
+        ("código de empleados", lambda: cliente.post(f"/comercios/{cid}/llave-empleado", json={"codigo": pin}, headers=sin_llave)),
+        ("¿sirve la llave?", lambda: cliente.get("/yo/llave", headers=jefe)),
+    ]
+    for nombre, pedido in pedidos:
+        with contar_viajes() as cuenta:
+            r = pedido()
+            assert r.status_code < 300, (nombre, r.text)
+        assert cuenta["viajes"] == 1, f"{nombre}: {cuenta['viajes']} viajes a la base (tiene que ser 1)"
+    assert cliente.get("/inicio", headers=jefe).json()["cajas"][0]["comercioId"] == cid
+
+
+def test_inicio_con_la_llave_de_un_empleado_trae_solo_su_comercio(cliente):
+    jefe, kiosco, _ = _local(cliente, "dos.locales@gmail.com")
+    otro = cliente.post("/comercios", json={"nombre": "Otro", "rubro": "kiosco"}, headers=jefe).json()["id"]
+    cliente.post(f"/comercios/{otro}/productos", headers=jefe, json={"nombre": "Chicle", "precioVenta": 100, "costo": 50, "stock": 5})
+    cliente.put(f"/comercios/{kiosco}/codigo-empleados", json={"pin": PIN_DE_PRUEBA, "codigo": "739152"}, headers=jefe)
+    sin_llave = {k: v for k, v in jefe.items() if k != "X-Llave"}
+    llave = cliente.post(f"/comercios/{kiosco}/llave-empleado", json={"codigo": "739152"}, headers=sin_llave).json()["llave"]
+    datos = cliente.get("/inicio", headers={**sin_llave, "X-Llave": llave}).json()
+    assert {p["nombre"] for p in datos["productos"]} == {"Alfajor"}
+    assert {c["id"] for c in datos["comercios"]} == {kiosco, otro}  # los comercios se ven igual (para elegir en cuál entrar)
+    todo = cliente.get("/inicio", headers=jefe).json()
+    assert {p["nombre"] for p in todo["productos"]} == {"Alfajor", "Chicle"}

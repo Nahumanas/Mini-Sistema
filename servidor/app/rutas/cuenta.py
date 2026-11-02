@@ -5,9 +5,9 @@ from pydantic import BaseModel, Field
 
 from .. import cifrado
 from ..autenticacion import Usuario, usuario_actual
-from ..base import como_usuario
+from ..base import como_usuario, leer
 from ..formato import a_camel
-from ..llaves import SIN_CUENTA, abrir_dueno_con_pin, ficha_del_dueno, respuesta, sin_cambios
+from ..llaves import FICHA, SIN_CUENTA, abrir_dueno_con_pin, ficha_de, ficha_del_dueno, respuesta, sin_cambios
 from ..pin import anotar_intento, coincide, huella, revisar_traba, validar_pin_nuevo
 
 router = APIRouter(tags=["Cuenta"])
@@ -16,15 +16,13 @@ router = APIRouter(tags=["Cuenta"])
 @router.get("/yo")
 def yo(usuario: Usuario = Depends(usuario_actual)):
     """La ficha del dueño conectado. Si no tiene (no fue invitado), no tiene cuenta."""
-    with como_usuario(usuario) as con:
-        ficha = con.execute(
-            """select id, nombre, email, pin_huella is not null as pin_configurado,
-                      exists (select 1 from public.cifrado_duenos) as cifrado_activo
-               from public.duenos"""
-        ).fetchone()
-    if ficha is None:
+    (filas,) = leer(usuario, (
+        """select id, nombre, email, pin_huella is not null as pin_configurado,
+                  exists (select 1 from public.cifrado_duenos) as cifrado_activo
+           from public.duenos""", None))
+    if not filas:
         raise HTTPException(403, SIN_CUENTA)
-    return a_camel(ficha)
+    return a_camel(filas[0])
 
 
 # -----------------------------------------------------------------------------
@@ -51,8 +49,7 @@ def verificar_pin(datos: Pin, usuario: Usuario = Depends(usuario_actual)):
     """¿Es el PIN de jefe? Si todavía no eligió uno, no hay PIN que coincida (primero tiene que elegirlo).
     Con el cifrado activado, además devuelve la llave de sesión del jefe (abre todos sus comercios)."""
     revisar_traba(usuario.id)
-    with como_usuario(usuario) as con:
-        ficha = ficha_del_dueno(con)
+    ficha = ficha_de(leer(usuario, (FICHA, None))[0])
     correcto = coincide(datos.pin, ficha["pin_sal"], ficha["pin_huella"])
     anotar_intento(usuario.id, correcto)
     if not correcto:
