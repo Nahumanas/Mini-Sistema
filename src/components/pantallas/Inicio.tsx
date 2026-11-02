@@ -72,28 +72,31 @@ function useUltimos30(comercioIds: number[]) {
   return porDia(ventasEntre(ventas, desde, fecha, comercioIds), desde, fecha).map((d) => ({ ...d, dia: ddmm(d.fecha) }));
 }
 
-/** Avisos de un comercio: stock bajo y mercadería vencida (y en un gimnasio, cómo están las cuotas).
- * Cada uno lleva a su pantalla. */
-function Alertas({ comercio }: { comercio: Comercio }) {
-  const router = useRouter();
-  const elegir = useSesion((s) => s.elegir);
+/** Cuántos avisos tiene un comercio: stock bajo, mercadería vencida y (en un gimnasio) cómo están las cuotas. */
+function useEstadoComercio(comercio: Comercio) {
   const { productos, lotes, socios, planes, reglasGimnasio } = useDatos();
   const bajo = conStockBajo(productos.filter((p) => p.comercioId === comercio.id)).length;
   const vencidas = tandasVencidas(lotes, comercio.id).reduce((s, l) => s + l.cantidad, 0);
   const gimnasio = comercio.rubro === "gimnasio" ? resumenSocios(socios, planes, comercio.id, hoy(), reglasDe(reglasGimnasio, comercio.id).diasAviso) : null;
   const vencenHoy = gimnasio ? socios.filter((s) => s.comercioId === comercio.id && s.activo && s.vence === hoy()).length : 0;
-  if (!bajo && !vencidas && !gimnasio?.activos) return null;
+  return { bajo, vencidas, gimnasio, vencenHoy };
+}
 
+/** Las insignias de los avisos de un comercio. Cada una lleva a su pantalla. */
+function Insignias({ comercio, corto = false }: { comercio: Comercio; corto?: boolean }) {
+  const router = useRouter();
+  const elegir = useSesion((s) => s.elegir);
+  const { bajo, vencidas, gimnasio, vencenHoy } = useEstadoComercio(comercio);
   const irA = (ruta: string) => {
     elegir(comercio.id);
     router.push(ruta);
   };
   return (
-    <div className="relative z-10 flex flex-wrap gap-2">
+    <>
       {gimnasio && gimnasio.activos > 0 && (
         <>
           <button onClick={() => irA("/socios")}>
-            <Chip tono="verde">{plural(gimnasio.alDia, "socio al día", "socios al día")}</Chip>
+            <Chip tono="verde">{corto ? `${gimnasio.alDia} al día` : plural(gimnasio.alDia, "socio al día", "socios al día")}</Chip>
           </button>
           {vencenHoy > 0 && (
             <button onClick={() => irA("/cuotas")}>
@@ -102,22 +105,61 @@ function Alertas({ comercio }: { comercio: Comercio }) {
           )}
           {gimnasio.deben > 0 && (
             <button onClick={() => irA("/cuotas")}>
-              <Chip tono="rojo">{plural(gimnasio.deben, "debe", "deben")} la cuota</Chip>
+              <Chip tono="rojo">{plural(gimnasio.deben, "debe", "deben")}{corto ? "" : " la cuota"}</Chip>
             </button>
           )}
         </>
       )}
       {bajo > 0 && (
         <button onClick={() => irA("/stock")}>
-          <Chip tono="amarillo">{bajo} {bajo === 1 ? "producto" : "productos"} con stock bajo</Chip>
+          <Chip tono="amarillo">{bajo} {corto ? "" : bajo === 1 ? "producto " : "productos "}con stock bajo</Chip>
         </button>
       )}
       {vencidas > 0 && (
         <button onClick={() => irA("/vencimientos")}>
-          <Chip tono="rojo">{vencidas} unidades vencidas para retirar</Chip>
+          <Chip tono="rojo">{vencidas} {corto ? "vencidas" : "unidades vencidas para retirar"}</Chip>
         </button>
       )}
+    </>
+  );
+}
+
+/** Los avisos sueltos (en las tarjetas de "Todos mis comercios"). */
+function Alertas({ comercio }: { comercio: Comercio }) {
+  const { bajo, vencidas, gimnasio } = useEstadoComercio(comercio);
+  if (!bajo && !vencidas && !gimnasio?.activos) return null;
+  return (
+    <div className="relative z-10 flex flex-wrap gap-2">
+      <Insignias comercio={comercio} />
     </div>
+  );
+}
+
+/** La cuarta tarjeta del tablero: en un gimnasio, los socios; en los demás, lo que hay que reponer. */
+function TarjetaEstado({ comercio }: { comercio: Comercio }) {
+  const { bajo, vencidas, gimnasio } = useEstadoComercio(comercio);
+  const conAvisos = bajo > 0 || vencidas > 0 || (gimnasio?.activos ?? 0) > 0;
+  const insignias = conAvisos ? <Insignias comercio={comercio} corto /> : undefined;
+  if (gimnasio) {
+    return (
+      <Kpi titulo="Socios" valor={String(gimnasio.activos)} detalle={gimnasio.activos === 1 ? "activo" : "activos"}>
+        {insignias}
+      </Kpi>
+    );
+  }
+  return (
+    <Kpi titulo="Para reponer" valor={String(bajo)} detalle={bajo ? (bajo === 1 ? "producto con stock bajo" : "productos con stock bajo") : "todo con stock"}>
+      {vencidas > 0 ? insignias : undefined}
+    </Kpi>
+  );
+}
+
+/** La insignia de la caja, para la tarjeta de "Hoy". */
+function InsigniaCaja({ caja }: { caja?: { responsable: string; abierta: string } }) {
+  return (
+    <span title={caja ? `Caja abierta por ${caja.responsable} desde las ${hora(caja.abierta)}` : undefined}>
+      <Chip tono={caja ? "verde" : "gris"}>{caja ? `Abierta · ${hora(caja.abierta)}` : "Caja cerrada"}</Chip>
+    </span>
   );
 }
 
@@ -201,10 +243,15 @@ function VistaTodos() {
 
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">Todos tus comercios juntos</h2>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           {kpis.map((k) => (
             <Kpi key={k.nombre} titulo={k.nombre} valor={pesos(k.total)} cambio={k.cambio} detalle={`${k.cantidad} ventas`} />
           ))}
+          <Kpi
+            titulo="Cajas abiertas"
+            valor={`${comercios.filter((c) => cajas.some((x) => x.comercioId === c.id && !x.cerrada)).length} de ${comercios.length}`}
+            detalle="comercios atendiendo ahora"
+          />
         </div>
         <Tarjeta titulo="Ventas de los últimos 30 días">
           <GraficoArea datos={ultimos30} x="dia" y="total" />
@@ -243,20 +290,16 @@ function VistaComercio({ comercio }: { comercio: Comercio }) {
               {RUBROS[comercio.rubro]} · {comercio.direccion} · {diaDeLaSemana(fecha)} {ddmm(fecha, true)}
             </span>
           }
-          acciones={
-            <Chip tono={caja ? "verde" : "gris"}>{caja ? `Caja abierta por ${caja.responsable} desde las ${hora(caja.abierta)}` : "Caja cerrada"}</Chip>
-          }
         />
       </div>
       {sesion?.rol === "jefe" && <Atajos gimnasio={comercio.rubro === "gimnasio"} />}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        {kpis.map((k) => (
-          <Kpi key={k.nombre} titulo={k.nombre} valor={pesos(k.total)} cambio={k.cambio} detalle={`${k.cantidad} ventas`} />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {kpis.map((k, i) => (
+          <Kpi key={k.nombre} titulo={k.nombre} valor={pesos(k.total)} cambio={k.cambio} detalle={`${k.cantidad} ventas`} insignia={i === 0 ? <InsigniaCaja caja={caja} /> : undefined} />
         ))}
+        <TarjetaEstado comercio={comercio} />
       </div>
-
-      <Alertas comercio={comercio} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Tarjeta titulo="Ventas de los últimos 30 días" className="lg:col-span-2">

@@ -5,13 +5,16 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { LogOut, Moon, Sun, X } from "lucide-react";
+import { SelectorSucursal } from "./Topbar";
 import { CONFIGURACION, estaEnLaNube, MENU, pantallaDeEntrada, puedeVer, type Seccion } from "@/lib/navegacion";
 import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 
-// La barra de la izquierda. Arriba el logo y el menú; abajo de todo, ancladas:
-// Configuración, Modo oscuro y Cerrar sesión. En el celular se esconde y se abre con ☰.
+// La barra de la izquierda, en tres partes (de arriba abajo):
+// 1. Fija arriba: el logo y el selector de comercio (así se ve siempre en qué comercio se está trabajando).
+// 2. El menú: es lo único que se desplaza si no entra en la pantalla.
+// 3. Fija abajo, separada con una línea: Configuración, Cerrar sesión, quién entró y el botón ☀/🌙. En el celular se esconde y se abre con ☰.
 // En la compu se puede achicar a solo íconos (botón de la barra de arriba) para dar más lugar a la pantalla.
 export function Sidebar() {
   const ruta = usePathname();
@@ -61,7 +64,12 @@ export function Sidebar() {
           </button>
         </div>
 
-        <nav className={`flex-1 overflow-y-auto px-3 py-4 ${menuAchicado ? "lg:px-2" : ""}`} aria-label="Menú principal">
+        {/* El comercio elegido, arriba de todo (en el celular está en la barra de arriba) */}
+        <div className={`hidden shrink-0 px-3 pt-3 lg:block ${menuAchicado ? "lg:px-2" : ""}`}>
+          <SelectorSucursal enBarra achicado={menuAchicado} />
+        </div>
+
+        <nav className={`min-h-0 flex-1 overflow-y-auto px-3 py-4 ${menuAchicado ? "lg:px-2" : ""}`} aria-label="Menú principal">
           {MENU.map((grupo) => {
             const visibles = grupo.secciones.filter((s) => puedeVer(s, esJefe, comercio) && (!enNube || estaEnLaNube(s)));
             if (!visibles.length) return null;
@@ -84,23 +92,9 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* Anclado abajo de todo */}
-        <div className={`flex shrink-0 flex-col gap-0.5 border-t border-borde px-3 py-3 ${menuAchicado ? "lg:px-2" : ""}`}>
+        {/* Anclado abajo de todo: no se mueve aunque el menú se desplace */}
+        <div className={`flex shrink-0 flex-col gap-0.5 border-t border-borde px-3 pb-3 pt-3 ${menuAchicado ? "lg:px-2" : ""}`}>
           {esJefe && <ItemMenu seccion={CONFIGURACION} activo={ruta === CONFIGURACION.ruta} chico={menuAchicado} />}
-          <button onClick={alternarTema} className={claseItem(false, menuAchicado)} role="switch" aria-checked={tema === "oscuro"} aria-label="Modo oscuro" title={menuAchicado ? "Modo oscuro" : undefined}>
-            {tema === "oscuro" ? <Sun className="size-[18px] shrink-0" strokeWidth={1.75} /> : <Moon className="size-[18px] shrink-0" strokeWidth={1.75} />}
-            <span className={`flex-1 text-left ${chico}`}>Modo oscuro</span>
-            <span
-              className={`relative h-5 w-9 rounded-full transition-colors ${tema === "oscuro" ? "bg-primary" : "bg-borde-fuerte"} ${chico}`}
-              aria-hidden
-            >
-              <span
-                className={`absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow transition-transform ${
-                  tema === "oscuro" ? "translate-x-4" : "translate-x-0"
-                }`}
-              />
-            </span>
-          </button>
           <button
             onClick={() => {
               salir();
@@ -113,9 +107,20 @@ export function Sidebar() {
             <LogOut className="size-[18px] shrink-0" strokeWidth={1.75} />
             <span className={chico}>Cerrar sesión</span>
           </button>
-          <p className={`mt-2 truncate px-3 text-xs text-texto-suave ${chico}`}>
-            {sesion?.nombre} · {esJefe ? "Jefe" : "Empleado"}
-          </p>
+          <div className={`mt-1.5 flex items-center justify-between gap-2 pl-3 ${menuAchicado ? "lg:justify-center lg:pl-0" : ""}`}>
+            <p className={`min-w-0 truncate text-xs text-texto-suave ${chico}`}>
+              {sesion?.nombre} · {esJefe ? "Jefe" : "Empleado"}
+            </p>
+            {/* Modo claro / oscuro: un solo botón chico. Cambia la clase "dark" y con eso todos los colores de una vez */}
+            <button
+              onClick={alternarTema}
+              className="shrink-0 rounded-md p-1.5 text-texto-suave transition-colors hover:bg-superficie-suave hover:text-texto focus-visible:outline-2 focus-visible:outline-primary"
+              aria-label={tema === "oscuro" ? "Pasar a modo claro" : "Pasar a modo oscuro"}
+              title={tema === "oscuro" ? "Modo claro" : "Modo oscuro"}
+            >
+              {tema === "oscuro" ? <Sun className="size-[18px]" strokeWidth={1.75} /> : <Moon className="size-[18px]" strokeWidth={1.75} />}
+            </button>
+          </div>
         </div>
       </aside>
     </>

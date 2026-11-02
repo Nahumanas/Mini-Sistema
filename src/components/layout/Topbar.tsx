@@ -45,7 +45,7 @@ export const RUBROS: Record<Rubro, string> = {
   otro: "Otro",
 };
 
-// La barra de arriba: solo las migas de pan (dónde estoy) y el selector de sucursal.
+// La barra de arriba: las migas de pan (dónde estoy). En el celular también el selector de sucursal.
 export function Topbar() {
   const ruta = usePathname();
   const { abrirMenu, achicarMenu, menuAchicado } = useInterfaz();
@@ -85,12 +85,19 @@ export function Topbar() {
         </ol>
       </nav>
 
-      <SelectorSucursal />
+      {/* En la compu el selector está arriba de todo en la barra lateral; en el celular, acá */}
+      <div className="lg:hidden">
+        <SelectorSucursal />
+      </div>
     </header>
   );
 }
 
-function SelectorSucursal() {
+/**
+ * El selector de comercio. `enBarra`: va en la barra lateral (ancho completo, la lista se abre hacia abajo).
+ * `achicado`: la barra lateral está en modo solo íconos, así que se muestra solo el ícono del rubro.
+ */
+export function SelectorSucursal({ enBarra = false, achicado = false }: { enBarra?: boolean; achicado?: boolean }) {
   const ruta = usePathname();
   const { elegir, elegirTodos, sesion, verTodos } = useSesion();
   const comercios = useDatos((s) => s.comercios);
@@ -120,9 +127,12 @@ function SelectorSucursal() {
   // El empleado trabaja en un solo comercio: se muestra, pero no se puede cambiar
   if (sesion?.rol !== "jefe") {
     return (
-      <span className="flex max-w-[60vw] items-center gap-2 text-[15px] text-texto-suave">
+      <span
+        className={`flex items-center gap-2 text-[15px] text-texto-suave ${enBarra ? "rounded-md border border-borde px-3 py-2" : "max-w-[60vw]"} ${achicado ? "justify-center px-0" : ""}`}
+        title={achicado ? activo.nombre : undefined}
+      >
         <Icono className="size-4 shrink-0" strokeWidth={1.75} />
-        <span className="truncate">{activo.nombre}</span>
+        <span className={`truncate ${achicado ? "sr-only" : ""}`}>{activo.nombre}</span>
       </span>
     );
   }
@@ -133,18 +143,26 @@ function SelectorSucursal() {
         onClick={() => setAbierto(!abierto)}
         aria-haspopup="listbox"
         aria-expanded={abierto}
-        className="flex max-w-[60vw] items-center gap-2 rounded-md border border-borde bg-superficie px-3 py-1.5 text-[15px] hover:bg-superficie-suave focus-visible:outline-2 focus-visible:outline-primary sm:max-w-none"
+        aria-label={achicado ? `Comercio: ${todosElegido ? "Todos mis comercios" : activo.nombre}` : undefined}
+        title={achicado ? (todosElegido ? "Todos mis comercios" : activo.nombre) : undefined}
+        className={`flex items-center gap-2 rounded-md border border-borde bg-superficie text-[15px] hover:bg-superficie-suave focus-visible:outline-2 focus-visible:outline-primary ${
+          enBarra ? "w-full px-3 py-2" : "max-w-[60vw] px-3 py-1.5 sm:max-w-none"
+        } ${achicado ? "justify-center px-0" : ""}`}
       >
         <Icono className="size-4 shrink-0 text-texto-suave" strokeWidth={1.75} />
-        <span className="truncate font-medium">{todosElegido ? "Todos mis comercios" : activo.nombre}</span>
-        <ChevronsUpDown className="size-4 shrink-0 text-texto-suave" />
+        {!achicado && (
+          <>
+            <span className="min-w-0 flex-1 truncate text-left font-medium">{todosElegido ? "Todos mis comercios" : activo.nombre}</span>
+            <ChevronsUpDown className="size-4 shrink-0 text-texto-suave" />
+          </>
+        )}
       </button>
 
       {abierto && (
         <ul
           role="listbox"
           aria-label="Elegir sucursal"
-          className="absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-lg border border-borde bg-superficie p-1 shadow-lg shadow-black/5"
+          className={`absolute z-50 mt-2 w-72 overflow-hidden ${enBarra ? "left-0" : "right-0"} rounded-lg border border-borde bg-superficie p-1 shadow-lg shadow-black/5`}
         >
           {conTodos && (
             <li role="option" aria-selected={todosElegido}>
