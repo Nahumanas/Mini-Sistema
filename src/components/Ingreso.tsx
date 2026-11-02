@@ -10,6 +10,7 @@ import { hayNube } from "@/lib/supabase";
 import type { Rubro } from "@/lib/tipos";
 import { entrarConCodigo, recuperarPin } from "@/store/cifrado";
 import { useCuenta } from "@/store/cuenta";
+import { useConexionRed } from "@/store/conexion";
 import { useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { traerDatosConLlave, useConexion } from "@/store/nube";
@@ -64,6 +65,14 @@ export function Ingreso() {
   const [recupero, setRecupero] = useState({ frase: "", nuevo: "", repetido: "" });
   const reiniciar = useDatos((s) => s.reiniciar);
   const { cuenta, error: errorCuenta, ingresarConGoogle, salirDeLaCuenta } = useCuenta();
+  // Con ventas cobradas sin internet todavía sin mandar, se avisa antes (no se borran: se mandan al volver a entrar)
+  const cerrarCuenta = () => {
+    const { pendientes } = useConexionRed.getState();
+    const aviso = `Hay ${pendientes === 1 ? "1 venta" : `${pendientes} ventas`} cobradas sin internet que todavía no se mandaron. ` +
+      "Si cerrás la cuenta, quedan guardadas en esta compu y se mandan cuando vuelvas a entrar con esta misma cuenta. ¿Cerrar igual?";
+    if (pendientes > 0 && !window.confirm(aviso)) return;
+    void salirDeLaCuenta();
+  };
   const [probarDemo, setProbarDemo] = useState(false);
   // Los botones "Probar Demo Gratis" de la landing traen ?demo: van directo a la demo, sin pedir Gmail.
   const pideDemo = useSearchParams().has("demo");
@@ -88,7 +97,7 @@ export function Ingreso() {
     return (
       <div className="flex min-h-full flex-col bg-fondo">
         <SinConexion error={conexion.error} reintentar={() => void conexion.reintentar()} />
-        <button type="button" onClick={() => void salirDeLaCuenta()} className="mx-auto mb-10 flex items-center gap-1 text-sm text-texto-suave hover:text-texto">
+        <button type="button" onClick={cerrarCuenta} className="mx-auto mb-10 flex items-center gap-1 text-sm text-texto-suave hover:text-texto">
           <LogOut className="size-4" /> Cerrar la cuenta y usar la demo
         </button>
       </div>
@@ -144,7 +153,7 @@ export function Ingreso() {
         Cuenta: <b>{cuenta.nombre || cuenta.email}</b>
         {cuenta.nombre && <span className="text-texto-suave"> · {cuenta.email}</span>}
       </span>
-      <button type="button" onClick={() => void salirDeLaCuenta()} className="flex shrink-0 items-center gap-1 text-texto-suave hover:text-texto">
+      <button type="button" onClick={cerrarCuenta} className="flex shrink-0 items-center gap-1 text-texto-suave hover:text-texto">
         <LogOut className="size-4" /> Cerrar cuenta
       </button>
     </p>

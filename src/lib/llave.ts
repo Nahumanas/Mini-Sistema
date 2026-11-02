@@ -26,6 +26,7 @@ export function guardarLlave(llave: string, vence: string) {
   } catch {
     // Sin almacenamiento (ventana privada estricta): la llave no queda y se vuelve a pedir el PIN
   }
+  alGuardarLlave.avisar();
 }
 
 export function borrarLlave() {
@@ -38,3 +39,6 @@ export function borrarLlave() {
 
 /** Qué hacer cuando la API dice que la llave no sirve (lo completa store/comercio.ts: cerrar la sesión del turno). */
 export const alPerderLaLlave = { avisar: () => {} };
+
+/** Qué hacer cuando llega una llave nueva (lo completa el Marco: mandar las ventas guardadas sin internet). */
+export const alGuardarLlave = { avisar: () => {} };

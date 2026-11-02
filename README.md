@@ -86,6 +86,20 @@ Tiene que decir `Tests  51 passed`. Si alguna dice `FAIL`, un cambio rompió alg
 GitHub las corre solo en cada PR y en cada cambio que llega a `main` (`.github/workflows/pruebas.yml`).
 Cuando esté la base de datos, estas mismas pruebas sirven para comprobar que las cuentas no cambiaron.
 
+### Prueba en el navegador: modo sin conexión
+
+En `pruebas-navegador/` hay una prueba que abre un Chrome de verdad, **corta internet a propósito** y cobra en la
+Caja. Revisa que la venta quede guardada en la compu, que la página abra al recargar sin internet, que al volver
+internet la venta se mande sola **una sola vez**, y que si venció la llave del cifrado pida el código antes de mandarla.
+No usa la base real ni tu cuenta: Supabase y la API los contesta la prueba misma.
+
+```
+npx playwright install chromium   (solo la primera vez: baja el Chrome de prueba)
+npm run test:navegador
+```
+
+Tarda unos 3 minutos (primero arma la página, en la carpeta `.next-prueba/`). Tiene que decir `3 passed`.
+
 ## Seguridad
 
 Lo que ya tiene la web (con los datos de prueba en el navegador):
@@ -141,7 +155,9 @@ src/
     ├── tipos.ts                Cómo es cada cosa (las tablas de esquema.sql)
     ├── datos-demo.ts           Arma los datos de prueba (como generar_datos_prueba.py)
     ├── demo-gimnasio.ts        El gimnasio de ejemplo (como demo_gimnasio.py)
-    ├── api.ts                  Donde va a ir la conexión con FastAPI
+    ├── api.ts                  La conexión con la API (FastAPI en Render)
+    ├── sin-conexion/           Modo sin conexión: lo guardado en la compu (cifrado), la foto de la caja,
+    │                           la cola de ventas cobradas sin internet y el que las manda al volver
     ├── navegacion.ts           El menú y quién ve qué
     └── fechas.ts, formato.ts   Fechas en hora argentina y pesos ($ 33.220)
 ```

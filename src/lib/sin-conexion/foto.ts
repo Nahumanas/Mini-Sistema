@@ -28,9 +28,9 @@ export function recortar(datos: DatosDeInicio): DatosDeInicio {
   };
 }
 
-export async function guardarFoto(cuenta: string, datos: DatosDeInicio) {
+/** guardada: de cuándo son los precios y el stock (sin internet se vuelve a guardar con la hora de la foto vieja). */
+export async function guardarFoto(cuenta: string, datos: DatosDeInicio, guardada = new Date().toISOString()) {
   if (!hayAlmacen()) return;
-  const guardada = new Date().toISOString();
   const sobre = await cerrarSobre({ cuenta, guardada, datos: recortar(datos) } satisfies Foto, "foto");
   await (await baseLocal()).put("foto", { cuenta, sobre }, "foto");
 }
