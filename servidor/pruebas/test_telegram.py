@@ -15,6 +15,14 @@ from .test_parte_2 import _venta
 from .test_parte_3 import _sql
 
 
+def _hoy_en_argentina() -> str:
+    """El "hoy" de la API es el de Argentina (de 21 a 24 h, en la compu que corre las pruebas ya puede ser mañana)."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    return datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).strftime("%Y-%m-%d")
+
+
 class TelegramFalso:
     def __init__(self):
         self.mensajes: list[tuple[int, str]] = []
@@ -163,7 +171,7 @@ def test_avisos_de_caja_y_stock_bajo(cliente, tg):
     cliente.post(f"/comercios/{cid}/caja/relevo", json={"entra": "Ana", "efectivoContado": 16000}, headers=ana)
     # Esperado: 5000 de arranque + 9 alfajores en efectivo... menos el que fue con débito: 5000 + 8 × 1500 = 17000
     assert "Relevo" in tg.para(222)[-1] and "Sale Martina, entra Ana" in tg.para(222)[-1] and "Faltan $ 1.000" in tg.para(222)[-1]
-    cliente.post(f"/comercios/{cid}/gastos", json={"fecha": time.strftime("%Y-%m-%d"), "categoria": "Limpieza", "descripcion": "", "monto": 500},
+    cliente.post(f"/comercios/{cid}/gastos", json={"fecha": _hoy_en_argentina(), "categoria": "Limpieza", "descripcion": "", "monto": 500},
                  headers=ana)
     cliente.post(f"/comercios/{cid}/caja/cerrar", json={"efectivoContado": 17000, "nota": "todo bien"}, headers=ana)
     cierre = tg.para(222)[-1]
