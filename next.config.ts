@@ -22,6 +22,8 @@ const DIRECCIONES_DEL_SISTEMA = "(mantenete-app\\.vercel\\.app|app\\.mantenete\\
 
 const nextConfig: NextConfig = {
   poweredByHeader: false, // no contarle a nadie con qué está hecho el sistema
+  // La prueba en el navegador (npm run test:navegador) arma su propia copia en otra carpeta, así no pisa la normal
+  distDir: process.env.CARPETA_NEXT || ".next",
   async redirects() {
     return [
       {
