@@ -78,6 +78,46 @@ export async function pedir<T>(ruta: string, metodo: Metodo = "GET", cuerpo?: un
   return (await respuesta.json()) as T;
 }
 
+/** Un pedido SIN cuenta: lo usa la página del socio del gimnasio (entra con el link y su DNI). */
+async function pedirSinCuenta<T>(ruta: string, metodo: Metodo = "GET", cuerpo?: unknown): Promise<T> {
+  if (!API) throw new ErrorDeApi("Las reservas desde el celular todavía no están listas.", 0);
+  let respuesta: Response;
+  try {
+    respuesta = await fetch(`${API}${ruta}`, {
+      method: metodo,
+      headers: cuerpo === undefined ? {} : { "Content-Type": "application/json" },
+      body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+    });
+  } catch {
+    throw new ErrorDeApi("No se pudo conectar. Revisá internet y probá de nuevo.", 0);
+  }
+  if (!respuesta.ok) throw new ErrorDeApi(await mensajeDeError(respuesta), respuesta.status);
+  return (await respuesta.json()) as T;
+}
+
+/** Las reservas desde el celular de un gimnasio (lo que ve el jefe). */
+export type EstadoReservasWeb = { prendida: boolean; codigo: string | null };
+
+/** Lo que ve el socio en su celular: su plan y las clases de los próximos 7 días. */
+export type ClaseWeb = {
+  claseId: number;
+  hora: string;
+  duracionMinutos: number;
+  actividad: string;
+  profesor: string;
+  libres: number;
+  espera: number;
+  mia: { reservaId: number; estado: "reservado" | "vino" | "espera"; posicion: number | null } | null;
+  motivo: string | null; // por qué no puede reservarla (null = puede)
+};
+export type PanelSocio = {
+  gimnasio: string;
+  socio: { nombre: string; plan: string | null; vence: string | null; clasesRestantes: number | null };
+  horasCancelacion: number;
+  dias: { fecha: string; clases: ClaseWeb[] }[];
+  mensaje?: string;
+};
+
 /** Lo que trae /inicio: todo lo del dueño que la página necesita al entrar
  * (ventas, cajas, compras, gastos, retiros, reservas y entradas de los últimos 2 meses; cuotas del último año). */
 export type DatosDeInicio = {
@@ -181,6 +221,12 @@ export const api = {
   probarTelegram: () => pedir<{ ok: true }>("/yo/telegram/prueba", "POST"),
   desconectarTelegram: () => pedir<EstadoTelegram>("/yo/telegram", "DELETE"),
 
+  // Reservas desde el celular del socio (solo el jefe las prende, por gimnasio)
+  reservasWeb: (comercioId: number) => pedir<EstadoReservasWeb>(`/comercios/${comercioId}/reservas-web`),
+  prenderReservasWeb: (comercioId: number, prendida: boolean) =>
+    pedir<EstadoReservasWeb>(`/comercios/${comercioId}/reservas-web`, "PUT", { prendida }),
+  linkNuevoReservasWeb: (comercioId: number) => pedir<EstadoReservasWeb>(`/comercios/${comercioId}/reservas-web/link-nuevo`, "POST"),
+
   crearComercio: (datos: Pick<Comercio, "nombre" | "rubro" | "direccion" | "usaTicket">) => pedir<Comercio>("/comercios", "POST", datos),
   actualizarComercio: (id: number, cambios: Partial<Comercio>) => pedir<Comercio>(`/comercios/${id}`, "PATCH", cambios),
   agregarEmpleado: (comercioId: number, nombre: string) => pedir<Empleado>(`/comercios/${comercioId}/empleados`, "POST", { nombre }),
@@ -256,4 +302,14 @@ export const api = {
   cerrarClasesPasadas: (comercioId: number) => pedir<{ reservas: Reserva[] }>(`/comercios/${comercioId}/reservas/cerrar-pasadas`, "POST"),
   registrarIngreso: (comercioId: number, datos: { socioId: number; registradoPor: string; resultado: "paso" | "rechazado"; motivo: string }) =>
     pedir<{ repetido: boolean; asistencia: Asistencia | null; reserva: Reserva | null }>(`/comercios/${comercioId}/ingresos`, "POST", datos),
+};
+
+/** La página del socio (sin cuenta): el link del gimnasio y su DNI. */
+export const apiSocio = {
+  gimnasio: (codigo: string) => pedirSinCuenta<{ gimnasio: string }>(`/web/${encodeURIComponent(codigo)}`),
+  entrar: (codigo: string, dni: string) => pedirSinCuenta<PanelSocio>(`/web/${encodeURIComponent(codigo)}/entrar`, "POST", { dni }),
+  reservar: (codigo: string, dni: string, claseId: number, fecha: string) =>
+    pedirSinCuenta<PanelSocio>(`/web/${encodeURIComponent(codigo)}/reservar`, "POST", { dni, claseId, fecha }),
+  cancelar: (codigo: string, dni: string, reservaId: number) =>
+    pedirSinCuenta<PanelSocio>(`/web/${encodeURIComponent(codigo)}/cancelar`, "POST", { dni, reservaId }),
 };
