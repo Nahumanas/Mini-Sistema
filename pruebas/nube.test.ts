@@ -298,7 +298,8 @@ describe("modo nube, parte 4 (gimnasio)", () => {
     const delCelular = reserva(9, { hechaPor: "Celular del socio" });
     api.reservasDesde.mockResolvedValue({ desde: "2026-10-25", reservas: [reserva(3, { estado: "cancelado" }), delCelular], socios: [{ ...SOCIO, clasesRestantes: 1 }] });
 
-    await datos().actualizarReservas(60);
+    // Solo la nueva del celular se devuelve para el cartel (la cancelada ya estaba en pantalla)
+    expect(await datos().actualizarReservas(60)).toEqual([delCelular]);
     expect(api.reservasDesde).toHaveBeenCalledWith(60, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
     expect(datos().reservas).toEqual([vieja, deOtro, reserva(3, { estado: "cancelado" }), delCelular]);
     expect(datos().socios[0].clasesRestantes).toBe(1);
