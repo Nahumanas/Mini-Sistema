@@ -74,13 +74,20 @@ export function Chip({ tono = "gris", children }: { tono?: keyof typeof TONOS; c
   return <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${TONOS[tono]}`}>{children}</span>;
 }
 
-/** Un número grande con su título, y (si hay) la flechita de cuánto cambió contra antes. */
-export function Kpi({ titulo, valor, detalle, cambio }: { titulo: string; valor: string; detalle?: string; cambio?: number | null }) {
+/**
+ * Un número grande con su título, y (si hay) la flechita de cuánto cambió contra antes.
+ * Liviana: sin fondo propio (se ve el fondo de la página) y con un borde finito.
+ * `insignia` va arriba a la derecha (por ejemplo "Caja abierta") y `children` abajo (más insignias).
+ */
+export function Kpi({ titulo, valor, detalle, cambio, insignia, children }: { titulo: string; valor: string; detalle?: string; cambio?: number | null; insignia?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="min-w-0 rounded-lg border border-borde bg-superficie p-4">
-      <p className="text-sm text-texto-suave">{titulo}</p>
-      <p className="numeros mt-1 truncate text-2xl font-semibold tracking-tight">{valor}</p>
-      <div className="mt-1 flex flex-wrap items-center gap-x-2 text-sm">
+    <div className="flex min-w-0 flex-col rounded-lg border border-borde px-4 py-3.5">
+      <div className="flex min-h-6 flex-wrap items-start justify-between gap-x-2 gap-y-1">
+        <p className="min-w-0 truncate text-sm text-texto-suave">{titulo}</p>
+        {insignia}
+      </div>
+      <p className="numeros mt-0.5 truncate text-xl font-semibold tracking-tight">{valor}</p>
+      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm">
         {cambio != null && (
           <span className={`numeros inline-flex items-center ${cambio >= 0 ? "text-positivo" : "text-peligro"}`}>
             {cambio >= 0 ? <ArrowUpRight className="size-4" /> : <ArrowDownRight className="size-4" />}
@@ -89,6 +96,7 @@ export function Kpi({ titulo, valor, detalle, cambio }: { titulo: string; valor:
         )}
         {detalle && <span className="text-texto-suave">{detalle}</span>}
       </div>
+      {children && <div className="mt-2.5 flex flex-wrap gap-1.5">{children}</div>}
     </div>
   );
 }
