@@ -1,5 +1,6 @@
 import type { MedioDePago } from "./formato";
 import { alPerderLaLlave, borrarLlave, llaveGuardada } from "./llave";
+import { red } from "./red";
 import { hayNube, supabase } from "./supabase";
 import type { AjusteCaja, Asistencia, Caja, Clase, Comercio, Compra, Cuota as CuotaGimnasio, Disciplina, Empleado, Gasto, Lote, Plan, Producto, Promo, Proveedor, ReglasGimnasio, Relevo, Reserva, Retiro, Socio, Venta } from "./tipos";
 
@@ -42,8 +43,12 @@ export async function mensajeDeError(respuesta: Response): Promise<string> {
 
 type Metodo = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-/** Un pedido a la API con el token de la cuenta. Si algo sale mal, tira un ErrorDeApi con el motivo. */
-export async function pedir<T>(ruta: string, metodo: Metodo = "GET", cuerpo?: unknown): Promise<T> {
+/** Un pedido a la API con el token de la cuenta. Si algo sale mal, tira un ErrorDeApi con el motivo.
+ * cerrarTurnoSi423: false para mandar las ventas guardadas sin internet (si venció la llave, se pide el PIN
+ * sin cerrar el turno: ver lib/sin-conexion/sincronizar.ts).
+ * tiempo: cuántos milisegundos esperar la respuesta antes de darla por perdida (como si no hubiera internet). */
+export async function pedir<T>(ruta: string, metodo: Metodo = "GET", cuerpo?: unknown,
+  { cerrarTurnoSi423 = true, tiempo }: { cerrarTurnoSi423?: boolean; tiempo?: number } = {}): Promise<T> {
   const sesion = (await supabase()?.auth.getSession())?.data.session;
   if (!sesion) throw new ErrorDeApi("Se cerró la cuenta. Volvé a entrar con tu Gmail.", 401);
   const llave = llaveGuardada();
@@ -57,14 +62,17 @@ export async function pedir<T>(ruta: string, metodo: Metodo = "GET", cuerpo?: un
         ...(llave ? { "X-Llave": llave } : {}),
       },
       body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+      signal: tiempo ? AbortSignal.timeout(tiempo) : undefined,
     });
   } catch {
+    red.falla();
     throw new ErrorDeApi("No se pudo conectar con el servidor. Revisá internet y probá de nuevo.", 0);
   }
+  red.exito();
   if (respuesta.status === 423) {
     // La llave del cifrado falta, venció o no sirve: se borra y se vuelve a pedir el PIN o el código
     borrarLlave();
-    alPerderLaLlave.avisar();
+    if (cerrarTurnoSi423) alPerderLaLlave.avisar();
   }
   if (!respuesta.ok) throw new ErrorDeApi(await mensajeDeError(respuesta), respuesta.status);
   return (await respuesta.json()) as T;
@@ -109,6 +117,28 @@ export type NuevaVenta = {
   vendidoPor: string;
   descuento: number;
   promos: { nombre: string; monto: number }[];
+  idCliente?: string; // un número único por venta: si llega dos veces, la API no la guarda de nuevo
+};
+/** Una venta cobrada sin internet, como la manda la cola (lib/sin-conexion/cola.ts). */
+export type VentaSinConexion = {
+  idCliente: string;
+  comercioId: number;
+  cajaId: number;
+  cobradaEn: string;
+  dispositivo: string;
+  numeroProvisorio: string;
+  items: { productoId: number; cantidad: number; precioCobrado: number; nombre: string }[];
+  medioPago: "efectivo";
+  vendidoPor: string;
+  descuento: number;
+  promos: { nombre: string; monto: number }[];
+};
+export type ResultadoSinConexion = {
+  idCliente: string;
+  estado: "guardada" | "ya_estaba" | "rechazada";
+  venta?: Venta;
+  motivo?: string;
+  stockNegativo?: number[];
 };
 export type NuevaCompra = { proveedorId: number | null; items: { productoId: number; cantidad: number; costoUnitario: number }[]; cargadaPor: string };
 export type DatosPromo = Omit<Promo, "id" | "comercioId">;
@@ -167,7 +197,13 @@ export const api = {
   relevo: (comercioId: number, datos: { entra: string; efectivoContado: number; nota: string; turno: string | null }) =>
     pedir<{ relevo: Relevo; caja: Caja }>(`/comercios/${comercioId}/caja/relevo`, "POST", datos),
 
-  registrarVenta: (comercioId: number, venta: NuevaVenta) => pedir<Venta>(`/comercios/${comercioId}/ventas`, "POST", venta),
+  // Con internet lento, a los 20 s se deja de esperar y la venta en efectivo va a la cola (con el mismo idCliente,
+  // así que si había llegado no se guarda dos veces)
+  registrarVenta: (comercioId: number, venta: NuevaVenta) => pedir<Venta>(`/comercios/${comercioId}/ventas`, "POST", venta, { tiempo: 20_000 }),
+  // Las ventas cobradas sin internet, de a 20 (sin cerrar el turno si venció la llave)
+  sincronizarVentas: (comercioId: number, ventas: Omit<VentaSinConexion, "comercioId" | "numeroProvisorio">[]) =>
+    pedir<{ resultados: ResultadoSinConexion[]; productos: Producto[] }>(`/comercios/${comercioId}/ventas/sin-conexion`, "POST",
+      { ventas }, { cerrarTurnoSi423: false }),
   anularVenta: (cajaId: number, datos: { ventaId: number; hechoPor: string; motivo: string }) =>
     pedir<{ ajuste: AjusteCaja; venta: Venta; productos: Producto[]; cuota: Cuota | null; socio: Socio | null }>(`/cajas/${cajaId}/anular-venta`, "POST", datos),
   recontar: (cajaId: number, datos: { efectivo: number; hechoPor: string; motivo: string }) => pedir<AjusteCaja>(`/cajas/${cajaId}/recontar`, "POST", datos),

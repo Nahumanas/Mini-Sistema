@@ -73,6 +73,8 @@ export type Venta = {
   vendidoPor: string;
   promos?: { nombre: string; monto: number }[]; // las promos que se aplicaron y cuánto descontó cada una
   anulada?: string | null; // vacío = venta válida; con fecha y hora = el jefe la anuló con un ajuste de caja
+  idCliente?: string | null; // el número único que inventó la página (para no guardarla dos veces)
+  provisorio?: string; // cobrada sin internet y todavía sin mandar: "SC-K7QD-12" (todavía no tiene N°)
 };
 
 /**

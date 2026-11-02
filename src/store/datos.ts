@@ -432,6 +432,18 @@ export const useDatos = create<EstadoDatos>()(
         usarNube: (datos) => {
           guardarEnElNavegador = false; // antes de cambiar nada, así no se pisa la demo guardada
           const { dueno, codigos, ...base } = datos;
+          // Las ventas cobradas sin internet que todavía no se mandaron no están en lo que trajo la API:
+          // se dejan en pantalla (con su stock descontado) hasta que la cola las mande
+          // (sin llave, /inicio trae solo los comercios y los empleados: no hay ventas ni productos)
+          const yaEstan = new Set((base.ventas ?? []).map((v) => v.idCliente).filter(Boolean));
+          const siguen = get().modo === "nube" ? get().ventas.filter((v) => v.provisorio && !yaEstan.has(v.idCliente)) : [];
+          if (siguen.length) {
+            const vendidos = new Map<number, number>();
+            for (const i of siguen.flatMap((v) => v.items)) vendidos.set(i.productoId, (vendidos.get(i.productoId) ?? 0) + i.cantidad);
+            base.ventas = [...(base.ventas ?? []), ...siguen];
+            base.productos = (base.productos ?? []).map((p) => (vendidos.has(p.id) ? { ...p, stock: p.stock - (vendidos.get(p.id) ?? 0) } : p));
+            base.lotes = [...vendidos].reduce((lotes, [id, cantidad]) => sacarDeTandas(lotes, id, cantidad), base.lotes ?? []);
+          }
           set({
             ...GIMNASIO_VACIO,
             ...base,

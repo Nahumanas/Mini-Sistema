@@ -9,8 +9,26 @@ import { MEDIOS_DE_PAGO, type MedioDePago, pesos } from "@/lib/formato";
 import type { Caja } from "@/lib/tipos";
 import { useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
+import { useConexionRed } from "@/store/conexion";
 import { useInterfaz } from "@/store/interfaz";
+import { useSinInternet } from "@/store/nube";
 import { Boton, Campo, claseInput, Tarjeta } from "../ui/base";
+
+/**
+ * Abrir, cerrar y el relevo necesitan internet (el arqueo lo hace el servidor). Cerrar y el relevo, además,
+ * esperan a que se manden las ventas guardadas sin internet: si no, el arqueo no las contaría.
+ */
+function useBloqueo(conCola: boolean) {
+  const sinInternet = useSinInternet();
+  const pendientes = useConexionRed((s) => s.pendientes);
+  if (sinInternet) return "Esto necesita internet. Mientras tanto se puede seguir cobrando en efectivo.";
+  if (conCola && pendientes > 0) return `Primero se tienen que mandar ${pendientes === 1 ? "la venta guardada" : `las ${pendientes} ventas guardadas`} en esta compu (se mandan solas en un momento).`;
+  return "";
+}
+
+function Bloqueo({ motivo }: { motivo: string }) {
+  return motivo ? <p className="rounded-md border border-amber-400/50 bg-amber-400/10 p-3 text-sm">{motivo}</p> : null;
+}
 
 /** Abrir la caja: quién la abre y con cuánto efectivo arranca el cajón. */
 export function AbrirCaja({ comercioId, nombreComercio, responsable }: { comercioId: number; nombreComercio: string; responsable: string }) {
@@ -18,6 +36,7 @@ export function AbrirCaja({ comercioId, nombreComercio, responsable }: { comerci
   const avisar = useInterfaz((s) => s.avisar);
   const [monto, setMonto] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const bloqueo = useBloqueo(false);
 
   return (
     <Tarjeta>
@@ -45,10 +64,11 @@ export function AbrirCaja({ comercioId, nombreComercio, responsable }: { comerci
           <Campo etiqueta="Efectivo inicial ($)" className="w-48">
             <input id="monto-inicial" type="number" min={0} inputMode="numeric" value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="0" className={`${claseInput} numeros`} autoFocus />
           </Campo>
-          <Boton type="submit" variante="primario" icono={LockOpen} disabled={enviando}>
+          <Boton type="submit" variante="primario" icono={LockOpen} disabled={enviando || Boolean(bloqueo)}>
             Abrir caja
           </Boton>
         </div>
+        <Bloqueo motivo={bloqueo} />
       </form>
     </Tarjeta>
   );
@@ -66,6 +86,7 @@ export function CerrarCaja({ caja, alTerminar }: { caja: Caja; alTerminar: () =>
   const [contado, setContado] = useState("");
   const [nota, setNota] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const bloqueo = useBloqueo(true);
 
   const deEstaCaja = ventas.filter((v) => v.cajaId === caja.id);
   const porMedio = (Object.keys(MEDIOS_DE_PAGO) as MedioDePago[]).map((m) => ({
@@ -157,10 +178,11 @@ export function CerrarCaja({ caja, alTerminar }: { caja: Caja; alTerminar: () =>
             <Boton variante="fantasma" onClick={alTerminar}>
               Volver a la caja
             </Boton>
-            <Boton type="submit" variante="primario" icono={Lock} disabled={contado === "" || enviando}>
+            <Boton type="submit" variante="primario" icono={Lock} disabled={contado === "" || enviando || Boolean(bloqueo)}>
               Cerrar caja
             </Boton>
           </div>
+          <Bloqueo motivo={bloqueo} />
         </form>
       </Tarjeta>
     </div>
@@ -180,6 +202,7 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
   const [nota, setNota] = useState("");
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const bloqueo = useBloqueo(true);
 
   const turno = turnoEnCurso(caja, ventas, relevos);
   const diferencia = contado === "" ? null : Number(contado) - turno.esperado;
@@ -274,10 +297,11 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
             <Boton variante="fantasma" onClick={alTerminar}>
               Volver a la caja
             </Boton>
-            <Boton type="submit" variante="primario" icono={Repeat} disabled={contado === "" || !entra.trim() || enviando}>
+            <Boton type="submit" variante="primario" icono={Repeat} disabled={contado === "" || !entra.trim() || enviando || Boolean(bloqueo)}>
               Registrar relevo
             </Boton>
           </div>
+          <Bloqueo motivo={bloqueo} />
         </form>
       </Tarjeta>
     </div>

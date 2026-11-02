@@ -15,7 +15,7 @@ export async function descargarTicket(comercio: Pick<Comercio, "nombre" | "direc
   const url = URL.createObjectURL(pdf.output("blob"));
   const enlace = document.createElement("a");
   enlace.href = url;
-  enlace.download = `ticket ${venta.numero} - ${comercio.nombre}.pdf`;
+  enlace.download = `ticket ${venta.provisorio ?? venta.numero} - ${comercio.nombre}.pdf`;
   enlace.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -79,8 +79,15 @@ async function armarTicket(comercio: Pick<Comercio, "nombre" | "direccion">, ven
     y += 4;
   }
   y += 2;
-  pdf.text(`Ticket N° ${venta.numero}`, centro, y, { align: "center" });
+  // Cobrada sin internet: todavía no tiene N° (se lo pone el servidor cuando se manda)
+  pdf.text(venta.provisorio ? `Ticket ${venta.provisorio}` : `Ticket N° ${venta.numero}`, centro, y, { align: "center" });
   y += 4;
+  if (venta.provisorio) {
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Comprobante provisorio · sin conexión", centro, y, { align: "center" });
+    pdf.setFont("helvetica", "normal");
+    y += 4;
+  }
   pdf.text(`${ddmm(venta.fecha, true)} ${hora(venta.fecha)}`, centro, y, { align: "center" });
   y += 1;
   linea();

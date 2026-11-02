@@ -1,4 +1,4 @@
-import { api, ErrorDeApi } from "@/lib/api";
+import { api, ErrorDeApi, type VentaSinConexion } from "@/lib/api";
 import { sacarDeTandas } from "@/lib/calculos";
 import { ahora, hoy } from "@/lib/fechas";
 import type { BaseDemo } from "@/lib/datos-demo";
@@ -7,8 +7,11 @@ import { horarioDe } from "@/lib/gimnasio";
 import { validarHorarios } from "@/lib/horarios";
 import { guardarLlave } from "@/lib/llave";
 import { validarPinNuevo } from "@/lib/pin";
-import type { Caja, Comercio, Empleado, Producto, Relevo, Reserva, Socio, Venta } from "@/lib/tipos";
+import { dispositivo, encolar, siguienteProvisorio } from "@/lib/sin-conexion/cola";
+import type { Caja, Comercio, Empleado, ItemVenta, Producto, Relevo, Reserva, Socio, Venta } from "@/lib/tipos";
 import { validarSocio, type AccionesGimnasio } from "./acciones-gimnasio";
+import { sinConexion, useConexionRed } from "./conexion";
+import { useCuenta } from "./cuenta";
 import type { Acciones, Seguridad } from "./datos";
 
 // Las acciones de store/datos.ts cuando el sistema trabaja con la nube (la cuenta del dueño + la API).
@@ -82,26 +85,93 @@ export function accionesNube(set: Set, get: Get): AccionesNube {
   const guardarProducto = (producto: Producto) => set((s) => ({ productos: conCambio(s.productos, producto) }));
   const guardarComercio = (comercio: Comercio) => set((s) => ({ comercios: conCambio(s.comercios, comercio) }));
   const guardarProductos = (productos: Producto[]) => set((s) => ({ productos: productos.reduce(conCambio, s.productos) }));
+  /** La venta en pantalla, con el stock y las tandas que bajan (la API hace la misma cuenta en la base). */
+  const aplicarVenta = (venta: Venta, items: ItemVenta[]) => {
+    const vendidos = new Map<number, number>();
+    for (const i of items) vendidos.set(i.productoId, (vendidos.get(i.productoId) ?? 0) + i.cantidad);
+    set((s) => ({
+      ventas: [...s.ventas, venta],
+      productos: s.productos.map((p) => (vendidos.has(p.id) ? { ...p, stock: p.stock - (vendidos.get(p.id) ?? 0) } : p)),
+      lotes: [...vendidos].reduce((lotes, [id, cantidad]) => sacarDeTandas(lotes, id, cantidad), s.lotes),
+    }));
+  };
 
   return {
     registrarVenta: async (comercioId, items, medioPago, cuenta, vendidoPor) => {
-      // Los precios y costos los pone la base (los de esta pantalla podrían estar viejos)
-      const venta: Venta = await api.registrarVenta(comercioId, {
-        items: items.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad })),
-        medioPago,
+      // Un número único por venta (lo inventa la página): si el pedido llegó pero se perdió la respuesta,
+      // al mandarla de nuevo desde la cola el servidor contesta "ya estaba" y no la guarda dos veces
+      const idCliente = crypto.randomUUID();
+      const promos = cuenta.aplicadas.filter((a) => a.monto > 0);
+
+      const yaSinInternet = sinConexion();
+      if (!yaSinInternet) {
+        try {
+          // Los precios y costos los pone la base (los de esta pantalla podrían estar viejos)
+          const venta: Venta = await api.registrarVenta(comercioId, {
+            idCliente,
+            items: items.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad })),
+            medioPago,
+            vendidoPor,
+            descuento: cuenta.descuento,
+            promos,
+          });
+          aplicarVenta(venta, items);
+          return venta;
+        } catch (error) {
+          // Solo la falta de internet pasa a la cola. Un 409 (caja cerrada) o un 422 (dato mal) se muestra como siempre.
+          // (401 sin internet: Supabase no pudo renovar el permiso de la cuenta, ver store/cuenta.ts)
+          const sinRed = error instanceof ErrorDeApi && (error.estado === 0 || (error.estado === 401 && Boolean(useCuenta.getState().cuenta?.sinConexion)));
+          // Con tarjeta o transferencia no se sabe si llegó: no se guarda en la cola (se vería si quedó en Ventas)
+          if (!sinRed || medioPago !== "efectivo") throw error;
+        }
+      }
+
+      // Sin internet: se guarda en esta compu (cifrada) y se manda sola cuando vuelva
+      if (yaSinInternet && medioPago !== "efectivo") throw new ErrorDeApi("Sin internet solo se puede cobrar en efectivo.", 0);
+      const caja = get().cajas.find((c) => c.comercioId === comercioId && !c.cerrada);
+      if (!caja) throw new ErrorDeApi("La caja está cerrada. Abrila cuando vuelva internet.", 409);
+      const email = useCuenta.getState().cuenta?.email;
+      if (!email) throw new ErrorDeApi("Se cerró la cuenta. Volvé a entrar con tu Gmail.", 401);
+      const enCola: VentaSinConexion = {
+        idCliente,
+        comercioId,
+        cajaId: caja.id,
+        cobradaEn: new Date().toISOString(),
+        dispositivo: dispositivo(),
+        numeroProvisorio: siguienteProvisorio(),
+        // Lo que se le cobró al cliente (el precio de esta pantalla): esa es la plata que está en la caja
+        items: items.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad, precioCobrado: i.precioUnitario, nombre: i.nombre })),
+        medioPago: "efectivo",
         vendidoPor,
         descuento: cuenta.descuento,
-        promos: cuenta.aplicadas.filter((a) => a.monto > 0),
-      });
-      const vendidos = new Map<number, number>();
-      for (const i of items) vendidos.set(i.productoId, (vendidos.get(i.productoId) ?? 0) + i.cantidad);
-      set((s) => ({
-        ventas: [...s.ventas, venta],
-        productos: s.productos.map((p) => (vendidos.has(p.id) ? { ...p, stock: p.stock - (vendidos.get(p.id) ?? 0) } : p)),
-        // La API ya sacó de las tandas más viejas; acá se hace la misma cuenta para no tener que pedirlas de nuevo
-        lotes: [...vendidos].reduce((lotes, [id, cantidad]) => sacarDeTandas(lotes, id, cantidad), s.lotes),
-      }));
-      return venta;
+        promos,
+      };
+      try {
+        await encolar(enCola, email);
+      } catch {
+        throw new ErrorDeApi("No hay internet y esta compu no deja guardar la venta. Anotala en papel y cargala cuando vuelva.", 0);
+      }
+      const productos = new Map(get().productos.map((p) => [p.id, p]));
+      const provisoria: Venta = {
+        id: -Date.now(), // negativo: todavía no está en la base
+        numero: 0,
+        comercioId,
+        cajaId: caja.id,
+        fecha: ahora(),
+        items: items.map((i) => ({ ...i, costoUnitario: 0, categoria: productos.get(i.productoId)?.categoria })),
+        subtotal: cuenta.subtotal,
+        descuento: cuenta.descuento,
+        total: cuenta.total,
+        medioPago: "efectivo",
+        vendidoPor,
+        promos,
+        idCliente,
+        provisorio: enCola.numeroProvisorio,
+      };
+      aplicarVenta(provisoria, items); // baja el stock en pantalla (queda "aproximado" hasta que se manda)
+      useConexionRed.setState((s) => ({ pendientes: s.pendientes + 1 }));
+      void import("@/lib/sin-conexion/sincronizar").then((m) => m.sincronizar()); // por si internet ya volvió
+      return provisoria;
     },
 
     abrirCaja: async (comercioId, responsable, montoInicial) => {
