@@ -25,6 +25,7 @@ const api = vi.hoisted(() => ({
   reservar: vi.fn(),
   cancelarReserva: vi.fn(),
   cerrarClasesPasadas: vi.fn(),
+  reservasDesde: vi.fn(),
   registrarIngreso: vi.fn(),
   cargarEjemplo: vi.fn(),
   actualizarClase: vi.fn(),
@@ -288,6 +289,19 @@ describe("modo nube, parte 4 (gimnasio)", () => {
     await datos().cerrarClasesPasadas(60);
     expect(api.cerrarClasesPasadas).toHaveBeenCalledWith(60);
     expect(datos().reservas[0].estado).toBe("falto");
+  });
+
+  it("al volver a leer las reservas aparecen las del celular del socio; las viejas y las de otro gimnasio no se tocan", async () => {
+    const vieja = reserva(1, { fecha: "2020-01-06", estado: "vino" });
+    const deOtro = reserva(2, { comercioId: 61 });
+    datos().usarNube({ ...GIM, reservas: [vieja, deOtro, reserva(3)] });
+    const delCelular = reserva(9, { hechaPor: "Celular del socio" });
+    api.reservasDesde.mockResolvedValue({ desde: "2026-10-25", reservas: [reserva(3, { estado: "cancelado" }), delCelular], socios: [{ ...SOCIO, clasesRestantes: 1 }] });
+
+    await datos().actualizarReservas(60);
+    expect(api.reservasDesde).toHaveBeenCalledWith(60, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    expect(datos().reservas).toEqual([vieja, deOtro, reserva(3, { estado: "cancelado" }), delCelular]);
+    expect(datos().socios[0].clasesRestantes).toBe(1);
   });
 
   it("la entrada por DNI suma la asistencia y deja la reserva en «vino»; si es repetida no cambia nada", async () => {

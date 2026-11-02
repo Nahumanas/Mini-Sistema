@@ -11,7 +11,7 @@ import { useComercioActivo, useEsJefe } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { Boton, Chip, claseInput, Encabezado, Kpi, Segmentado, Tarjeta, Vacio } from "../ui/base";
-import { AgregarCalendario, ElegirSocio, useIntentar, useQuien } from "../gimnasio/comun";
+import { AgregarCalendario, ElegirSocio, useIntentar, useQuien, useReservasAlDia } from "../gimnasio/comun";
 
 type Elegida = { claseId: number; fecha: string };
 
@@ -29,6 +29,7 @@ export function Clases() {
     // Si no se puede (por ejemplo, sin internet), se intenta de nuevo la próxima vez
     cerrarClasesPasadas(comercio.id).catch(() => {});
   }, [cerrarClasesPasadas, comercio.id]);
+  useReservasAlDia(comercio.id);
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">

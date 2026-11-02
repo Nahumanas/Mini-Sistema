@@ -343,6 +343,26 @@ def marcar_asistencia(reserva_id: int, datos: Asistencia, usuario: Usuario = Dep
     return a_camel(fila)
 
 
+@router.get("/comercios/{comercio_id}/reservas")
+def reservas_desde(comercio_id: int, desde: date, usuario: Usuario = Depends(usuario_actual),
+                   llave: Llave = Depends(llave_requerida)):
+    """Las reservas desde esa fecha y los socios que tienen. La pantalla de Clases las vuelve a pedir cada
+    tanto: así ve las que se hicieron en otra compu o desde el celular del socio sin recargar la página."""
+    desde = max(desde, g.hoy() - timedelta(days=62))  # como mucho, lo mismo que trae /inicio
+    with como_usuario(usuario) as con:
+        cofre = Cofre(con, llave)
+        cofre.comercio(comercio_id)
+        reservas = con.execute(
+            "select * from public.reservas where comercio_id = %s and fecha >= %s order by fecha, creada, id",
+            (comercio_id, desde),
+        ).fetchall()
+        ids = sorted({r["socio_id"] for r in reservas})
+        socios = cofre.abrir_todas("socios", con.execute(
+            "select * from public.socios where comercio_id = %s and id = any(%s)", (comercio_id, ids)
+        ).fetchall()) if ids else []
+    return {"desde": desde.isoformat(), "reservas": [a_camel(r) for r in reservas], "socios": [a_camel(s) for s in socios]}
+
+
 @router.post("/comercios/{comercio_id}/reservas/cerrar-pasadas")
 def cerrar_clases_pasadas(comercio_id: int, usuario: Usuario = Depends(usuario_actual),
                           llave: Llave = Depends(llave_requerida)):

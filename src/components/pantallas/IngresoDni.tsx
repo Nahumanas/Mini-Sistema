@@ -7,7 +7,7 @@ import { plural, verificarDni } from "@/lib/gimnasio";
 import { useComercioActivo } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
-import { AltaSocio, CobrarCuota, Semaforo, useIntentar, useQuien } from "../gimnasio/comun";
+import { AltaSocio, CobrarCuota, Semaforo, useIntentar, useQuien, useReservasAlDia } from "../gimnasio/comun";
 import { Boton, claseInput, Encabezado, Kpi, Tabla, Tarjeta, Vacio } from "../ui/base";
 
 // Recepción del gimnasio: se escribe el DNI (o se pasa por el lector) y aparece el socio en
@@ -29,6 +29,7 @@ export function IngresoDni() {
   useEffect(() => {
     cerrarClasesPasadas(comercio.id).catch(() => {}); // si falla (sin internet), se intenta la próxima vez
   }, [cerrarClasesPasadas, comercio.id]);
+  useReservasAlDia(comercio.id);
 
   // Anota la entrada sin trabar el casillero: en recepción pasan DNIs seguidos y no se puede perder ninguno.
   // El cartel dice "Entrada anotada" recién cuando quedó guardada (y solo si sigue mostrando a ese socio).
