@@ -1,11 +1,16 @@
 """Detalle 3: el socio reserva desde el celular con el link del gimnasio y su DNI (sin cuenta ni PIN)."""
 
 from app import config
+from app import gimnasio as g
 from app.rutas import reservas_web
 
 from .conftest import crear_usuario
 from .test_parte_3 import _sql
 from .test_parte_4 import _clase_de_manana, _gimnasio, _socio_al_dia
+
+
+def fecha_de_hoy() -> str:
+    return g.hoy().isoformat()
 
 
 def _clase(panel: dict, clase_id: int, fecha: str) -> dict:
@@ -63,6 +68,20 @@ def test_el_socio_reserva_cancela_y_la_espera_entra_sola(cliente):
     assert r["mensaje"] == "Listo: cancelaste y te devolvimos la clase." and r["socio"]["clasesRestantes"] == 8
     maria = cliente.post(f"/web/{codigo}/entrar", json={"dni": "40111222"}).json()
     assert _clase(maria, clase["id"], fecha)["mia"]["estado"] == "reservado"
+
+    # La pantalla de Clases las vuelve a pedir sola (sin recargar): ve el cambio y las clases que le quedan a cada uno
+    hoy = fecha_de_hoy()
+    al_dia = cliente.get(f"/comercios/{gid}/reservas", params={"desde": hoy}, headers=ana)
+    assert al_dia.status_code == 200, al_dia.text
+    al_dia = al_dia.json()
+    estados = {(x["socioId"], x["estado"]) for x in al_dia["reservas"]}
+    restantes = {x["nombre"]: x["clasesRestantes"] for x in al_dia["socios"]}
+    assert len(estados) == 2 and {e for _, e in estados} == {"cancelado", "reservado"}
+    assert restantes == {"Juan Pérez": 8, "María": 7}
+    # Nunca más atrás que lo que trae /inicio, y otro dueño no las ve
+    assert cliente.get(f"/comercios/{gid}/reservas", params={"desde": "2000-01-01"}, headers=ana).json()["desde"] > "2000-01-01"
+    beto = crear_usuario("beto.web@gmail.com")
+    assert cliente.get(f"/comercios/{gid}/reservas", params={"desde": hoy}, headers=beto).status_code in (403, 404, 423)
 
     # Juan no puede cancelar la reserva de María
     reserva_maria = _clase(maria, clase["id"], fecha)["mia"]["reservaId"]

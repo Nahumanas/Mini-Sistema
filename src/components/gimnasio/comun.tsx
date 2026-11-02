@@ -19,6 +19,25 @@ import { Boton, Campo, Chip, claseInput } from "../ui/base";
 // el cartel verde/amarillo/rojo, elegir un socio, darlo de alta, cobrar la cuota y "Agregar al calendario".
 
 /** Quién está usando el sistema (queda anotado en lo que cobra o anota). */
+/** Cada 30 segundos (y al volver a la pestaña) vuelve a leer las reservas de los últimos días, así la
+ * recepción ve las que se hicieron desde el celular del socio o en otra compu sin recargar la página.
+ * Si falla (por ejemplo, sin internet), no avisa nada: se intenta la próxima vez. */
+export function useReservasAlDia(comercioId: number) {
+  const actualizarReservas = useDatos((s) => s.actualizarReservas);
+  useEffect(() => {
+    const leer = () => {
+      if (document.visibilityState === "visible") actualizarReservas(comercioId).catch(() => {});
+    };
+    leer();
+    const cada = window.setInterval(leer, 30_000);
+    document.addEventListener("visibilitychange", leer);
+    return () => {
+      window.clearInterval(cada);
+      document.removeEventListener("visibilitychange", leer);
+    };
+  }, [actualizarReservas, comercioId]);
+}
+
 export function useQuien() {
   return useSesion((s) => s.sesion?.nombre ?? "");
 }

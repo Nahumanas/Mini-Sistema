@@ -1,6 +1,6 @@
 import { api, ErrorDeApi, type VentaSinConexion } from "@/lib/api";
 import { sacarDeTandas } from "@/lib/calculos";
-import { ahora, hoy } from "@/lib/fechas";
+import { ahora, hoy, sumarDias } from "@/lib/fechas";
 import type { BaseDemo } from "@/lib/datos-demo";
 import { ejemploGimnasio } from "@/lib/demo-gimnasio";
 import { horarioDe } from "@/lib/gimnasio";
@@ -63,6 +63,7 @@ export const ACCIONES_EN_LA_NUBE = [
   "cancelarReserva",
   "marcarAsistencia",
   "cerrarClasesPasadas",
+  "actualizarReservas",
   "registrarIngreso",
   "cargarEjemploGimnasio",
 ] as const;
@@ -452,6 +453,17 @@ function accionesGimnasioNube(set: Set, get: Get): AccionesGimnasio {
       if (!hayPasadas) return;
       const r = await api.cerrarClasesPasadas(comercioId);
       set((s) => ({ reservas: r.reservas.reduce(conCambio, s.reservas) }));
+    },
+
+    // Las reservas desde hace una semana, como están en la base: se reemplazan las de esos días
+    // (así aparecen las del celular del socio y las de otra compu, y se ven las que cancelaron)
+    actualizarReservas: async (comercioId) => {
+      const desde = sumarDias(ahora().slice(0, 10), -7);
+      const r = await api.reservasDesde(comercioId, desde);
+      set((s) => ({
+        reservas: [...s.reservas.filter((x) => x.comercioId !== comercioId || x.fecha < r.desde), ...r.reservas],
+        socios: r.socios.reduce(conCambio, s.socios),
+      }));
     },
 
     registrarIngreso: async (comercioId, socioId, registradoPor, resultado = "paso", motivo = "") => {

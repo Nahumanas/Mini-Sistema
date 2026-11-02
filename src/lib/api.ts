@@ -299,6 +299,8 @@ export const api = {
   cancelarReserva: (id: number, hechaPor: string, devolver?: boolean) =>
     pedir<{ devuelta: boolean; aTiempo: boolean; eraEspera: boolean; planLibre: boolean; entraron: Entraron } & Cambios>(`/reservas/${id}/cancelar`, "POST", { hechaPor, devolver: devolver ?? null }),
   marcarAsistencia: (id: number, vino: boolean) => pedir<Reserva>(`/reservas/${id}/asistencia`, "POST", { vino }),
+  reservasDesde: (comercioId: number, desde: string) =>
+    pedir<{ desde: string; reservas: Reserva[]; socios: Socio[] }>(`/comercios/${comercioId}/reservas?desde=${desde}`),
   cerrarClasesPasadas: (comercioId: number) => pedir<{ reservas: Reserva[] }>(`/comercios/${comercioId}/reservas/cerrar-pasadas`, "POST"),
   registrarIngreso: (comercioId: number, datos: { socioId: number; registradoPor: string; resultado: "paso" | "rechazado"; motivo: string }) =>
     pedir<{ repetido: boolean; asistencia: Asistencia | null; reserva: Reserva | null }>(`/comercios/${comercioId}/ingresos`, "POST", datos),
