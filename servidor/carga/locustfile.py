@@ -82,9 +82,12 @@ class Dueno(HttpUser):
             with self.client.get(ruta, name="Espía: comercio ajeno", catch_response=True) as r:
                 if r.status_code in (403, 404):
                     r.success()
-                else:
+                elif r.status_code < 300:
                     _espias_que_vieron += 1
-                    r.failure(f"¡Se pudo leer lo de otro dueño! {ruta} → {r.status_code}")
+                    r.failure(f"¡Se pudo leer lo de otro dueño! {ruta} -> {r.status_code}")
+                else:
+                    # 502, 500, 429…: el servidor no contestó, pero NO mostró nada ajeno. Cuenta como error común.
+                    r.failure(f"El servidor no contestó ({r.status_code})")
 
     def _abrir(self):
         with self.client.post(f"/comercios/{self.cid}/caja/abrir", json={"responsable": "Caja 1", "montoInicial": 10000},
