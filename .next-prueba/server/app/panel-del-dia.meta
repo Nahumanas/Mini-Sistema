@@ -1,0 +1,41 @@
+{
+  "status": 200,
+  "headers": {
+    "link": "</_next/static/media/07c7676b89ed2778-s.p.2bn3s6zvc0dyp.woff2>; rel=preload; as=\"font\"; crossorigin=\"\"; type=\"font/woff2\"",
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/(panel)/layout,_N_T_/(panel)/panel-del-dia/layout,_N_T_/(panel)/panel-del-dia/page,_N_T_/panel-del-dia"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/!KHBhbmVsKQ/panel-del-dia/__PAGE__"
+  ],
+  "prefetchHints": {
+    "hints": 49216,
+    "slots": {
+      "children": {
+        "hints": 49248,
+        "slots": {
+          "children": {
+            "hints": 49248,
+            "slots": {
+              "children": {
+                "hints": 49312,
+                "slots": null
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/037a326ff529856cca2a246f7e1e3d17225939fed03d84df2c8ceb8f6edeff3b/$/panel-del-dia",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/(panel)/panel-del-dia/page"
+    },
+    "isFallback": false
+  }
+}

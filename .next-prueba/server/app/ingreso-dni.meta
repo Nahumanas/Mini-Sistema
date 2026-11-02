@@ -1,0 +1,41 @@
+{
+  "status": 200,
+  "headers": {
+    "link": "</_next/static/media/07c7676b89ed2778-s.p.2bn3s6zvc0dyp.woff2>; rel=preload; as=\"font\"; crossorigin=\"\"; type=\"font/woff2\"",
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/(panel)/layout,_N_T_/(panel)/ingreso-dni/layout,_N_T_/(panel)/ingreso-dni/page,_N_T_/ingreso-dni"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/!KHBhbmVsKQ/ingreso-dni/__PAGE__"
+  ],
+  "prefetchHints": {
+    "hints": 49216,
+    "slots": {
+      "children": {
+        "hints": 49248,
+        "slots": {
+          "children": {
+            "hints": 49248,
+            "slots": {
+              "children": {
+                "hints": 49312,
+                "slots": null
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/ba64446e91172dcdd256d57f9a375c4f27b219e32361efdbb79f51c013f5a18f/$/ingreso-dni",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/(panel)/ingreso-dni/page"
+    },
+    "isFallback": false
+  }
+}

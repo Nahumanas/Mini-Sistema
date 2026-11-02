@@ -15,6 +15,7 @@ Al final dice si PASÓ: p95 menor a 0,5 s y 0 errores (y ningún espía pudo lee
 """
 
 import json
+import os
 import random
 from datetime import date, timedelta
 from pathlib import Path
@@ -22,7 +23,9 @@ from pathlib import Path
 from locust import HttpUser, between, events, task
 
 DATOS = json.loads((Path(__file__).resolve().parent / ".local" / "usuarios.json").read_text())
-P95_MAXIMO_MS = 500
+# El límite para pasar. Desde una compu en Argentina hay que sumar lo que tarda internet hasta Render (EE.UU.):
+# para eso se puede subir con la variable P95_MAXIMO_MS (la guía dice cuánto).
+P95_MAXIMO_MS = int(os.environ.get("P95_MAXIMO_MS", "500"))
 _libres = list(range(len(DATOS["duenos"])))
 random.shuffle(_libres)
 _espias_que_vieron = 0
@@ -105,5 +108,6 @@ def veredicto(environment, **_kw):
     pasa = total.num_failures == 0 and p95 < P95_MAXIMO_MS and _espias_que_vieron == 0
     if _espias_que_vieron:
         print(f"¡OJO! {_espias_que_vieron} veces un dueño pudo leer datos de otro.")
-    print("PASÓ ✅ (p95 < 0,5 s y 0 errores)" if pasa else "NO PASÓ ❌ (hace falta p95 < 0,5 s y 0 errores)")
+    limite = f"p95 < {P95_MAXIMO_MS / 1000:.2f} s".replace(".", ",")
+    print(f"PASÓ ✅ ({limite} y 0 errores)" if pasa else f"NO PASÓ ❌ (hace falta {limite} y 0 errores)")
     environment.process_exit_code = 0 if pasa else 1

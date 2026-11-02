@@ -1,0 +1,41 @@
+{
+  "status": 200,
+  "headers": {
+    "link": "</_next/static/media/07c7676b89ed2778-s.p.2bn3s6zvc0dyp.woff2>; rel=preload; as=\"font\"; crossorigin=\"\"; type=\"font/woff2\"",
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/(panel)/layout,_N_T_/(panel)/excel/layout,_N_T_/(panel)/excel/page,_N_T_/excel"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/!KHBhbmVsKQ/excel/__PAGE__"
+  ],
+  "prefetchHints": {
+    "hints": 49216,
+    "slots": {
+      "children": {
+        "hints": 49248,
+        "slots": {
+          "children": {
+            "hints": 49248,
+            "slots": {
+              "children": {
+                "hints": 49312,
+                "slots": null
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/f78e6b7922e2d627325e6a79e013ef757b377f2c3bacfa94b5c8021eef1ce8d9/$/excel",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/(panel)/excel/page"
+    },
+    "isFallback": false
+  }
+}
