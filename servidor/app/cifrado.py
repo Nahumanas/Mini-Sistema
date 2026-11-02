@@ -93,6 +93,12 @@ def pimienta() -> bytes:
     return _secreto(config.PIMIENTA_CIFRADO, "PIMIENTA_CIFRADO", "pimienta")
 
 
+def envoltura_web() -> bytes:
+    """Con lo que se envuelve la copia de la clave de un gimnasio con las reservas web prendidas
+    (sale de la pimienta, pero es otra clave: HKDF con otro "para")."""
+    return _secreto(config.PIMIENTA_CIFRADO, "PIMIENTA_CIFRADO", "reservas-web")
+
+
 def secreto_sesion() -> bytes:
     return _secreto(config.SECRETO_SESION, "SECRETO_SESION", "sesion")
 
@@ -176,7 +182,7 @@ def contexto_dueno(dueno_id: int, con: str) -> str:
 
 
 def contexto_comercio(comercio_id: int, con: str) -> str:
-    return f"comercio={comercio_id}|{con}"  # con: "dueno" o "empleado"
+    return f"comercio={comercio_id}|{con}"  # con: "dueno", "empleado" o "web"
 
 
 # ---------------------------------------------------------------- frase de recuperación
