@@ -17,15 +17,20 @@ NO_ABRE = (
 )
 
 
+FICHA = """select d.id, d.pin_sal, d.pin_huella, c.sal_pin, c.clave_pin, c.sal_frase, c.clave_frase, c.aceptado_en
+           from public.duenos d left join public.cifrado_duenos c on c.dueno_id = d.id"""
+
+
 def ficha_del_dueno(con: Connection) -> dict:
     """La ficha del dueño conectado con su PIN y sus llaves (si ya activó el cifrado). El RLS deja ver solo la suya."""
-    ficha = con.execute(
-        """select d.id, d.pin_sal, d.pin_huella, c.sal_pin, c.clave_pin, c.sal_frase, c.clave_frase, c.aceptado_en
-           from public.duenos d left join public.cifrado_duenos c on c.dueno_id = d.id"""
-    ).fetchone()
-    if ficha is None:
+    return ficha_de(con.execute(FICHA).fetchall())
+
+
+def ficha_de(filas: list[dict]) -> dict:
+    """La ficha, de lo que trajo la consulta FICHA (leída junto con otras cosas en un viaje)."""
+    if not filas:
         raise HTTPException(403, SIN_CUENTA)
-    return ficha
+    return filas[0]
 
 
 def sin_cambios(con: Connection, ficha: dict) -> None:
