@@ -58,6 +58,16 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
   lo vuelve a "sin avisar" sola (trigger). Sin mínimo cargado, avisa cuando se queda sin stock.
 - No hay avisos a hora fija: el servidor solo puede leer los datos cifrados mientras alguien usa el sistema.
 
+## Reservas desde el celular del socio (detalle 3)
+
+- El jefe las prende por gimnasio (Planes y actividades → "Reservas desde el celular"). Se arma un link
+  `/reservar/<código>` (y un QR) y el socio entra con su DNI, sin cuenta ni PIN.
+- Para abrir los datos cifrados sin PIN, al prenderlas la clave de ESE gimnasio se guarda en `reservas_web.clave_web`
+  envuelta con una clave que sale de `PIMIENTA_CIFRADO` (otra derivación, "reservas-web"). Al apagarlas se borra.
+  Con la base sola no se abre nada.
+- La API busca el link sin usuario (solo esa fila) y después trabaja como el dueño del gimnasio, con el RLS de siempre.
+- Freno a los que prueban DNIs: 5 mal desde un celular → 1 minuto; 20 DNIs que no existen en 10 minutos en un gimnasio → 10 minutos.
+
 ## Varias compus y prueba de carga (etapa 7)
 
 - `pruebas/test_concurrencia.py`: la API corre de verdad y 8 compus le pegan al mismo comercio a la vez (ventas,
@@ -81,6 +91,8 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 | `GET /yo/cifrado`, `GET /yo/cifrado/frase-nueva`, `POST /yo/cifrado/activar` | Cifrado: ver si está activado, la frase para anotar y activarlo (PIN + frase + casilla; crea las claves de todos sus comercios) |
 | `POST /yo/pin/recuperar` | "Me olvidé el PIN": con la frase elige uno nuevo (la frase también se traba con 5 errores) |
 | `GET /yo/telegram`, `POST /yo/telegram/enlace`, `POST /yo/telegram/confirmar` | Avisos por Telegram (solo jefe): ver si está conectado; el enlace al bot; guardar el chat después de apretar "Iniciar" |
+| `GET/PUT /comercios/{id}/reservas-web`, `POST …/reservas-web/link-nuevo` | Reservas desde el celular (solo jefe): ver, prender o apagar, cambiar el link |
+| `GET /web/{código}`, `POST /web/{código}/entrar`, `…/reservar`, `…/cancelar` | La página del socio (sin cuenta): con su DNI ve sus clases de 7 días, reserva y cancela |
 | `PUT /yo/telegram/avisos`, `POST /yo/telegram/prueba`, `DELETE /yo/telegram` | Elegir qué avisos llegan, mandar uno de prueba, desconectar |
 | `GET /yo/llave` | Si la llave de sesión todavía sirve y qué comercios abre |
 | `PUT /comercios/{id}/codigo-empleados`, `POST /comercios/{id}/llave-empleado` | El jefe elige el código de empleados de un comercio (pide el PIN otra vez); el empleado pone el código y recibe la llave de ese comercio solo |
