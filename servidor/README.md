@@ -58,6 +58,16 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
   lo vuelve a "sin avisar" sola (trigger). Sin mínimo cargado, avisa cuando se queda sin stock.
 - No hay avisos a hora fija: el servidor solo puede leer los datos cifrados mientras alguien usa el sistema.
 
+## Modo sin conexión (detalle 4, parte A: la API)
+
+- Cada venta puede traer `idCliente` (un número único que inventa la página). Si llega dos veces, la segunda no se
+  guarda: `POST /comercios/{id}/ventas` devuelve la que ya estaba (200 en vez de 201). Índice único en la base.
+- `POST /comercios/{id}/ventas/sin-conexion`: hasta 20 ventas en efectivo cobradas sin internet. Cada una en su propio
+  savepoint (una mala no frena a las otras) y contesta `guardada`, `ya_estaba` o `rechazada` por venta.
+- El stock se RESTA (`stock = stock - cantidad`): dos compus que vendieron sin internet no se pisan. Puede quedar negativo.
+- Se guarda el precio que se cobró; si no es el de ahora, la venta queda con `revisar` y la diferencia en el sobre.
+  La hora es la de la compu, nunca en el futuro. Si la caja ya se cerró, queda un ajuste `venta_tardia` en esa caja.
+
 ## Varias compus y prueba de carga (etapa 7)
 
 - `pruebas/test_concurrencia.py`: la API corre de verdad y 8 compus le pegan al mismo comercio a la vez (ventas,
