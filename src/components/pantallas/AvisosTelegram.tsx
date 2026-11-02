@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { BellRing, Check, ExternalLink, MessageCircle, Unlink } from "lucide-react";
-import { api, type EstadoTelegram, type TipoAviso } from "@/lib/api";
+import { api, ErrorDeApi, type EstadoTelegram, type TipoAviso } from "@/lib/api";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { Boton, Chip, Tarjeta } from "../ui/base";
@@ -116,25 +117,12 @@ function ConTelegram() {
           </div>
         </div>
       ) : enlace ? (
-        <ol className="flex list-decimal flex-col gap-3 pl-5">
-          <li>
-            <a href={enlace} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-medium text-primary underline underline-offset-2">
-              Abrir el bot en Telegram <ExternalLink className="size-4" />
-            </a>{" "}
-            <span className="text-texto-suave">(en la compu o en el celular) y apretá &quot;Iniciar&quot;.</span>
-          </li>
-          <li>
-            <span className="text-texto-suave">Volvé acá y tocá:</span>{" "}
-            <Boton
-              variante="primario"
-              icono={Check}
-              disabled={ocupado}
-              onClick={() => hacer(api.confirmarTelegram, (r) => { setEstado(r); setEnlace(null); avisar("¡Listo! Tu Telegram quedó conectado."); })}
-            >
-              Ya apreté Iniciar
-            </Boton>
-          </li>
-        </ol>
+        <Conectando
+          enlace={enlace}
+          ocupado={ocupado}
+          onConectado={(r) => { setEstado(r); setEnlace(null); avisar("¡Listo! Tu Telegram quedó conectado."); }}
+          onConfirmar={() => hacer(api.confirmarTelegram, (r) => { setEstado(r); setEnlace(null); avisar("¡Listo! Tu Telegram quedó conectado."); })}
+        />
       ) : (
         <div>
           <Boton variante="primario" icono={MessageCircle} disabled={ocupado} onClick={() => hacer(api.enlaceTelegram, (r) => setEnlace(r.enlace))}>
@@ -162,6 +150,76 @@ function ConTelegram() {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+// Cada cuánto se fija solo si ya apretó "Iniciar" (y hasta cuándo: después queda el botón)
+const CADA_MS = 4000;
+const VECES = 75; // 5 minutos
+
+/** El paso de conectar: un QR para escanear con el celular (o el enlace, si está en el celular) y
+ * "Ya apreté Iniciar". Mientras tanto se fija solo cada 4 segundos, así no hace falta volver a la compu. */
+function Conectando({ enlace, ocupado, onConectado, onConfirmar }: {
+  enlace: string;
+  ocupado: boolean;
+  onConectado: (r: EstadoTelegram) => void;
+  onConfirmar: () => void;
+}) {
+  const [qr, setQr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    QRCode.toDataURL(enlace, { width: 440, margin: 2, errorCorrectionLevel: "M", color: { dark: "#000000", light: "#ffffff" } })
+      .then((imagen) => vivo && setQr(imagen), () => vivo && setQr(null));
+    return () => { vivo = false; };
+  }, [enlace]);
+
+  useEffect(() => {
+    let veces = 0;
+    let parar = false;
+    const id = window.setInterval(async () => {
+      if (parar || ++veces > VECES) return window.clearInterval(id);
+      try {
+        const r = await api.confirmarTelegram();
+        if (!parar) { parar = true; window.clearInterval(id); onConectado(r); }
+      } catch (err) {
+        // 404 = todavía no apretó "Iniciar" (0 = se cortó internet un momento): se sigue esperando. Otro error: se deja de mirar (queda el botón)
+        if (!(err instanceof ErrorDeApi && (err.estado === 404 || err.estado === 0))) { parar = true; window.clearInterval(id); }
+      }
+    }, CADA_MS);
+    return () => { parar = true; window.clearInterval(id); };
+    // onConectado cambia en cada dibujo: lo que importa es el enlace
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enlace]);
+
+  return (
+    <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+      <div className="flex shrink-0 flex-col items-center gap-2">
+        {qr ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={qr} alt="Código QR para abrir el bot de Mantenete en Telegram" width={180} height={180} className="rounded-lg border border-borde" />
+        ) : (
+          <div className="size-[180px] rounded-lg border border-borde" />
+        )}
+        <span className="text-sm text-texto-suave">Escaneá con la cámara del celular</span>
+      </div>
+      <ol className="flex list-decimal flex-col gap-3 pl-5">
+        <li>
+          <span className="text-texto-suave">Apuntá la cámara del celular al código (o</span>{" "}
+          <a href={enlace} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-medium text-primary underline underline-offset-2">
+            abrí el bot acá <ExternalLink className="size-4" />
+          </a>
+          <span className="text-texto-suave">). Se abre Telegram con el bot de Mantenete.</span>
+        </li>
+        <li><span className="text-texto-suave">En Telegram apretá &quot;Iniciar&quot;.</span></li>
+        <li>
+          <span className="text-texto-suave">Listo: esta pantalla se da cuenta sola en unos segundos. Si no cambia, tocá:</span>{" "}
+          <Boton variante="primario" icono={Check} disabled={ocupado} onClick={onConfirmar}>
+            Ya apreté Iniciar
+          </Boton>
+        </li>
+      </ol>
     </div>
   );
 }

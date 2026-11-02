@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from .. import cifrado
 from ..autenticacion import Usuario, usuario_actual
-from ..base import como_usuario
+from ..base import como_usuario, leer
 from ..cifrado import ClaveIncorrecta, Llave
 from ..formato import a_camel
 from ..llaves import (
@@ -159,8 +159,7 @@ def recuperar(datos: Recuperacion, usuario: Usuario = Depends(usuario_actual)):
 @router.get("/yo/llave")
 def mi_llave(llave: Llave = Depends(llave_requerida), usuario: Usuario = Depends(usuario_actual)):
     """Para que la página sepa si la llave que guardó todavía sirve (y para qué comercios)."""
-    with como_usuario(usuario) as con:
-        filas = con.execute("select comercio_id, clave_dueno from public.claves_comercio order by comercio_id").fetchall()
+    (filas,) = leer(usuario, ("select comercio_id, clave_dueno from public.claves_comercio order by comercio_id", None))
     comercios = []
     for fila in filas:
         if fila["comercio_id"] in llave.comercios:
@@ -229,11 +228,14 @@ def llave_de_empleado(comercio_id: int, datos: Codigo, usuario: Usuario = Depend
     """El empleado pone el código del comercio y recibe la llave de ESE comercio (no la de los otros)."""
     traba = f"{usuario.id}|empleados={comercio_id}"
     revisar_traba(traba, "el código")
-    with como_usuario(usuario) as con:
-        comercio_mio(con, comercio_id)
-        claves = con.execute(
-            "select sal_empleado, clave_empleado from public.claves_comercio where comercio_id = %s", (comercio_id,)
-        ).fetchone()
+    comercio, filas = leer(
+        usuario,
+        ("select id from public.comercios where id = %s", (comercio_id,)),
+        ("select sal_empleado, clave_empleado from public.claves_comercio where comercio_id = %s", (comercio_id,)),
+    )
+    if not comercio:
+        raise HTTPException(404, "No existe ese comercio.")
+    claves = filas[0] if filas else None
     if claves is None or claves["clave_empleado"] is None:
         raise HTTPException(409, "El jefe todavía no eligió el código de empleados de este comercio.")
     try:

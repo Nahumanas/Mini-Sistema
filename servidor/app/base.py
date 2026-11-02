@@ -113,3 +113,10 @@ def en_viajes(usuario: Usuario) -> Iterator[Viaje]:
             if viaje.abierta or con.info.transaction_status != 0:
                 con.execute("rollback")
             raise
+
+
+def leer(usuario: Usuario, *consultas: tuple[str, tuple | dict | None]) -> list[list[dict]]:
+    """Solo lectura, en UN viaje: abre la transacción, se pone el traje del usuario, corre las consultas y cierra.
+    (Con como_usuario serían 3 viajes de más: abrir, ponerse el traje y cerrar.)"""
+    with en_viajes(usuario) as viaje:
+        return viaje(*consultas, terminar=True)

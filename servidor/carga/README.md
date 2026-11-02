@@ -35,6 +35,13 @@ una venta tardaba 1,8 s. Juntando las consultas en pocos viajes: **8.571 pedidos
 La guía paso a paso para Nahuel está en `/mnt/project-files/paso-5/guia-prueba-de-carga.md` (proyecto `mantenete-pruebas`,
 una API de pruebas aparte en Render, las variables y cómo borrar todo al terminar).
 
+Las tablas del proyecto de pruebas se crean de una sola vez con `python carga/migrar_pruebas.py` (corre todas las
+migraciones de `supabase/migrations` en orden y se acuerda de cuáles ya corrió). **Solo para el proyecto de pruebas**:
+en el de los clientes, los cambios de base siguen yendo por PR y se pegan a mano en el SQL Editor.
+
+Si Locust corre desde una compu en Argentina, cada pedido suma lo que tarda internet hasta Render (unos 0,2 s).
+Para que el veredicto no lo cuente: `P95_MAXIMO_MS=700` (en PowerShell: `$env:P95_MAXIMO_MS="700"`).
+
 Variables (solo en tu compu, nunca en GitHub ni en el chat):
 
 | Variable | De dónde sale (en el proyecto **de pruebas**) |
@@ -45,6 +52,7 @@ Variables (solo en tu compu, nunca en GitHub ni en el chat):
 | `DATABASE_URL` | Connect → Transaction pooler (**secreta**) |
 
 ```bash
+python carga/migrar_pruebas.py                      # las tablas (la primera vez, y después de cada migración nueva)
 python carga/preparar.py --supabase --api https://<api-de-pruebas>.onrender.com --ventas 50
 python carga/preparar.py --supabase --renovar         # si pasó casi una hora (los tokens vencen)
 locust -f carga/locustfile.py --headless -u 100 -r 10 -t 5m --csv carga/.local/resultado

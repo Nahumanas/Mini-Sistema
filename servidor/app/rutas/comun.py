@@ -30,3 +30,16 @@ def existe(comercios: list[dict]) -> dict:
     if not comercios:
         raise HTTPException(404, "No existe ese comercio.")
     return comercios[0]
+
+
+def insertar_ajuste(con: Connection, cofre, caja: dict, hecho_por: str, tipo: str, venta_id: int | None, monto,
+                    motivo: str) -> dict:
+    """Un ajuste de una caja (anular una venta, recontar, una venta sin conexión que llegó tarde), ya abierto.
+    cofre es un sobres.Cofre (no se importa acá: sobres importa este archivo)."""
+    sobre = cofre.cerrar("ajustes_caja", caja["comercio_id"], {"monto": monto, "motivo": motivo})
+    fila = con.execute(
+        """insert into public.ajustes_caja (comercio_id, caja_id, hecho_por, tipo, venta_id, sobre)
+           values (%s, %s, %s, %s, %s, %s) returning *""",
+        (caja["comercio_id"], caja["id"], hecho_por.strip(), tipo, venta_id, sobre),
+    ).fetchone()
+    return cofre.abrir("ajustes_caja", fila)
