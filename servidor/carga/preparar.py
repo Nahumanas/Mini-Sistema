@@ -71,11 +71,22 @@ def _proyecto_de_pruebas() -> str:
 
 
 def entrar(c: httpx.Client, url: str, email: str, clave: str) -> str:
-    r = c.post(f"{url}/auth/v1/token?grant_type=password", headers={"apikey": os.environ["SUPABASE_PUBLISHABLE_KEY"]},
-               json={"email": email, "password": clave})
+    # Supabase deja entrar unas 30 veces cada 5 minutos desde la misma compu (Authentication → Rate Limits).
+    # Si se llega al límite (429), se espera y se sigue solo, en vez de cortar la preparación a la mitad.
+    for intento in range(12):
+        r = c.post(f"{url}/auth/v1/token?grant_type=password", headers={"apikey": os.environ["SUPABASE_PUBLISHABLE_KEY"]},
+                   json={"email": email, "password": clave})
+        if r.status_code != 429:
+            break
+        if intento == 0:
+            print("  Supabase pidió esperar (límite de ingresos). Sigo solo en un ratito… "
+                  "(Para que no pase: Authentication → Rate Limits → sign-ups and sign-ins = 500, solo en el de pruebas)")
+        time.sleep(30)
     if r.status_code != 200:
         sys.exit(f"No se pudo entrar con {email}: {r.status_code} {r.text}\n"
-                 "¿Está prendido Email (con contraseña) en Authentication → Sign In / Providers?")
+                 + ("Supabase sigue frenando los ingresos: subí el límite en Authentication → Rate Limits."
+                    if r.status_code == 429 else
+                    "¿Está prendido Email (con contraseña) en Authentication → Sign In / Providers?"))
     return r.json()["access_token"]
 
 
