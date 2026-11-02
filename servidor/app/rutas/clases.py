@@ -254,60 +254,65 @@ def reservar(comercio_id: int, datos: NuevaReserva, usuario: Usuario = Depends(u
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id, bloquear=True)
-        clase = con.execute(
-            "select * from public.clases where id = %s and comercio_id = %s", (datos.claseId, comercio_id)
-        ).fetchone()
-        if clase is None:
-            raise HTTPException(404, "No se encontró la clase.")
-        if not clase["activa"]:
-            raise HTTPException(409, "Esa clase ya no está en la grilla.")
-        if datos.fecha.weekday() != clase["dia_semana"]:
-            raise HTTPException(422, "Esa clase no es ese día de la semana.")
-        if g.horario(clase, datos.fecha)[1] <= g.ahora():
-            raise HTTPException(409, "Esa clase ya terminó.")
+        return nueva_reserva(con, cofre, comercio_id, datos.claseId, datos.socioId, datos.fecha, datos.hechaPor)
+
+
+def nueva_reserva(con, cofre: Cofre, comercio_id: int, clase_id: int, socio_id: int, fecha: date, hecha_por: str) -> dict:
+    """La reserva (el comercio ya tiene que estar trabado). La usan la recepción y la página del socio."""
+    clase = con.execute(
+        "select * from public.clases where id = %s and comercio_id = %s", (clase_id, comercio_id)
+    ).fetchone()
+    if clase is None:
+        raise HTTPException(404, "No se encontró la clase.")
+    if not clase["activa"]:
+        raise HTTPException(409, "Esa clase ya no está en la grilla.")
+    if fecha.weekday() != clase["dia_semana"]:
+        raise HTTPException(422, "Esa clase no es ese día de la semana.")
+    if g.horario(clase, fecha)[1] <= g.ahora():
+        raise HTTPException(409, "Esa clase ya terminó.")
+    socio = cofre.abrir("socios", con.execute(
+        "select * from public.socios where id = %s and comercio_id = %s for update", (socio_id, comercio_id)
+    ).fetchone())
+    if socio is None:
+        raise HTTPException(404, "No se encontró el socio.")
+    plan = plan_de(con, cofre, socio["plan_id"])
+    problema = g.problema_para_la_clase(socio, plan, clase, fecha)
+    if problema:
+        raise HTTPException(409, problema)
+    ya = con.execute(
+        """select estado from public.reservas where clase_id = %s and socio_id = %s and fecha = %s
+           and estado in ('reservado', 'vino', 'espera')""",
+        (clase["id"], socio["id"], fecha),
+    ).fetchone()
+    if ya:
+        espera = " (en la lista de espera)" if ya["estado"] == "espera" else ""
+        raise HTTPException(409, f"{socio['nombre']} ya está anotado en esa clase{espera}.")
+    por_clases = g.es_por_clases(plan)
+    ocupados, espera = _ocupacion(con, clase["id"], fecha)
+    hay_lugar = ocupados < clase["cupo_maximo"]
+    if por_clases and socio["clases_restantes"] <= 0:
+        raise HTTPException(409, f"A {socio['nombre']} no le quedan clases. Cobrale la cuota para cargarle más." if hay_lugar
+                            else f"La clase está llena y a {socio['nombre']} no le quedan clases.")
+    if hay_lugar and por_clases:
         socio = cofre.abrir("socios", con.execute(
-            "select * from public.socios where id = %s and comercio_id = %s for update", (datos.socioId, comercio_id)
+            "update public.socios set clases_restantes = clases_restantes - 1 where id = %s returning *", (socio["id"],)
         ).fetchone())
-        if socio is None:
-            raise HTTPException(404, "No se encontró el socio.")
-        plan = plan_de(con, cofre, socio["plan_id"])
-        problema = g.problema_para_la_clase(socio, plan, clase, datos.fecha)
-        if problema:
-            raise HTTPException(409, problema)
-        ya = con.execute(
-            """select estado from public.reservas where clase_id = %s and socio_id = %s and fecha = %s
-               and estado in ('reservado', 'vino', 'espera')""",
-            (clase["id"], socio["id"], datos.fecha),
+    try:
+        reserva = con.execute(
+            """insert into public.reservas (comercio_id, clase_id, socio_id, fecha, estado, hecha_por, clase_descontada)
+               values (%s, %s, %s, %s, %s, %s, %s) returning *""",
+            (comercio_id, clase["id"], socio["id"], fecha, "reservado" if hay_lugar else "espera",
+             hecha_por.strip(), hay_lugar and por_clases),
         ).fetchone()
-        if ya:
-            espera = " (en la lista de espera)" if ya["estado"] == "espera" else ""
-            raise HTTPException(409, f"{socio['nombre']} ya está anotado en esa clase{espera}.")
-        por_clases = g.es_por_clases(plan)
-        ocupados, espera = _ocupacion(con, clase["id"], datos.fecha)
-        hay_lugar = ocupados < clase["cupo_maximo"]
-        if por_clases and socio["clases_restantes"] <= 0:
-            raise HTTPException(409, f"A {socio['nombre']} no le quedan clases. Cobrale la cuota para cargarle más." if hay_lugar
-                                else f"La clase está llena y a {socio['nombre']} no le quedan clases.")
-        if hay_lugar and por_clases:
-            socio = cofre.abrir("socios", con.execute(
-                "update public.socios set clases_restantes = clases_restantes - 1 where id = %s returning *", (socio["id"],)
-            ).fetchone())
-        try:
-            reserva = con.execute(
-                """insert into public.reservas (comercio_id, clase_id, socio_id, fecha, estado, hecha_por, clase_descontada)
-                   values (%s, %s, %s, %s, %s, %s, %s) returning *""",
-                (comercio_id, clase["id"], socio["id"], datos.fecha, "reservado" if hay_lugar else "espera",
-                 datos.hechaPor.strip(), hay_lugar and por_clases),
-            ).fetchone()
-        except errors.UniqueViolation as error:
-            raise HTTPException(409, f"{socio['nombre']} ya estuvo anotado en esa clase ese día.") from error
-        return {
-            "reserva": a_camel(reserva),
-            "estado": reserva["estado"],
-            "posicion": None if hay_lugar else espera + 1,
-            "clasesRestantes": socio["clases_restantes"] if por_clases else None,
-            "socio": a_camel(socio),
-        }
+    except errors.UniqueViolation as error:
+        raise HTTPException(409, f"{socio['nombre']} ya estuvo anotado en esa clase ese día.") from error
+    return {
+        "reserva": a_camel(reserva),
+        "estado": reserva["estado"],
+        "posicion": None if hay_lugar else espera + 1,
+        "clasesRestantes": socio["clases_restantes"] if por_clases else None,
+        "socio": a_camel(socio),
+    }
 
 
 def _reserva_trabada(con, cofre: Cofre, reserva_id: int) -> dict:

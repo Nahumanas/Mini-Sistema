@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus, Smartphone, Sparkles } from "lucide-react";
+import { Pencil, Plus, Sparkles } from "lucide-react";
 import { pesos } from "@/lib/formato";
 import { CLASES_SOBRANTES, DURACIONES, reglasDe, textoPlan, VENCIMIENTO } from "@/lib/gimnasio";
 import type { Comercio, Plan, ReglasGimnasio } from "@/lib/tipos";
@@ -10,6 +10,7 @@ import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { Boton, Campo, Chip, claseInput, Encabezado, Segmentado, Tabla, Tarjeta } from "../ui/base";
 import { useIntentar } from "../gimnasio/comun";
+import { ReservasWeb } from "../gimnasio/ReservasWeb";
 
 type Pestana = "planes" | "actividades" | "reglas" | "celular";
 
@@ -41,19 +42,7 @@ export function Planes() {
       {pestana === "planes" && <PestanaPlanes comercio={comercio} />}
       {pestana === "actividades" && <PestanaActividades key={comercio.id} comercio={comercio} />}
       {pestana === "reglas" && <PestanaReglas key={comercio.id} comercio={comercio} />}
-      {pestana === "celular" && (
-        <Tarjeta>
-          <div className="flex gap-4">
-            <Smartphone className="mt-1 size-6 shrink-0 text-texto-suave" strokeWidth={1.5} />
-            <div className="flex flex-col gap-2">
-              <p>En Streamlit los socios podían reservar solos desde el celular: abrían un link (o escaneaban el QR del mostrador), escribían su DNI y elegían la clase.</p>
-              <p className="text-texto-suave">
-                Acá todavía no se puede: los datos de la web nueva están guardados en esta computadora, y para que un socio reserve desde su casa tienen que estar en la nube (Supabase). Llega con ese paso. Mientras tanto, se anota a los socios desde <b className="text-texto">Clases</b>, la ficha en <b className="text-texto">Socios</b> o el <b className="text-texto">Ingreso por DNI</b>, con el mismo cupo y la misma lista de espera.
-              </p>
-            </div>
-          </div>
-        </Tarjeta>
-      )}
+      {pestana === "celular" && <ReservasWeb key={comercio.id} comercio={comercio} />}
     </div>
   );
 }
