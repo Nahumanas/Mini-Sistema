@@ -44,7 +44,8 @@ async function mandar() {
   if (!cuenta || useConexionRed.getState().estado === "sin_conexion") return;
   const listas = await listasParaMandar(cuenta);
   if (!listas.length) return recontarCola();
-  if (!llaveGuardada()) {
+  // Con el cifrado activado la API necesita la llave para guardar las ventas (sin cifrado, no)
+  if (useDatos.getState().cifradoActivo && !llaveGuardada()) {
     useConexionRed.setState({ faltaLlave: true });
     return recontarCola();
   }

@@ -187,7 +187,10 @@ function guardarFotoDespues(ms = 5000) {
     relojFoto = null;
     const cuenta = useCuenta.getState().cuenta;
     const d = useDatos.getState();
-    if (!cuenta || d.modo !== "nube" || useNube.getState().estado !== "lista" || !llaveGuardada()) return;
+    const { estado, guardada } = useNube.getState();
+    // Sin internet también se guarda (así las ventas cobradas siguen en pantalla si se recarga), con la hora de la foto vieja
+    if (!cuenta || d.modo !== "nube" || (estado !== "lista" && estado !== "sin_conexion")) return;
+    if (estado === "lista" && !llaveGuardada()) return;
     const datos: DatosDeInicio = {
       dueno: { nombre: cuenta.nombre, email: cuenta.email, pinConfigurado: d.pinConfigurado, cifradoActivo: d.cifradoActivo },
       codigos: Object.entries(d.codigos).map(([comercioId, codigoCambiado]) => ({ comercioId: Number(comercioId), codigoCambiado })),
@@ -196,7 +199,7 @@ function guardarFotoDespues(ms = 5000) {
       ajustes: [], proveedores: [], compras: [], gastos: [], retiros: [], disciplinas: [], planes: [], clases: [],
       reglasGimnasio: [], socios: [], reservas: [], cuotas: [], asistencias: [],
     };
-    void guardarFoto(cuenta.email, datos).catch(() => {});
+    void guardarFoto(cuenta.email, datos, estado === "sin_conexion" && guardada ? guardada : undefined).catch(() => {});
   }, ms);
 }
 

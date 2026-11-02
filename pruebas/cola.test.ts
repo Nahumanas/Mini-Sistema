@@ -202,12 +202,23 @@ describe("el sincronizador", () => {
     expect(await contar("ana@gmail.com")).toMatchObject({ pendientes: 1 });
   });
 
-  it("sin llave no manda (y avisa que falta el PIN)", async () => {
+  it("con el cifrado activado, sin llave no manda (y avisa que falta el PIN)", async () => {
     await unaVentaGuardada();
+    useDatos.setState({ cifradoActivo: true });
     localStorage.removeItem("mantenete-llave");
     await sincronizar();
     expect(api.sincronizarVentas).not.toHaveBeenCalled();
     expect(red().faltaLlave).toBe(true);
+  });
+
+  it("sin el cifrado activado no hace falta la llave", async () => {
+    const provisoria = await unaVentaGuardada();
+    useDatos.setState({ cifradoActivo: false });
+    localStorage.removeItem("mantenete-llave");
+    api.sincronizarVentas.mockResolvedValue({ resultados: [{ idCliente: provisoria.idCliente, estado: "guardada", venta: real(provisoria.idCliente!) }], productos: [] });
+    await sincronizar();
+    expect(api.sincronizarVentas).toHaveBeenCalled();
+    expect(red().faltaLlave).toBe(false);
   });
 
   it("si el servidor falla (500), queda para más tarde", async () => {
