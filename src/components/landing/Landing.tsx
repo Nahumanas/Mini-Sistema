@@ -1,10 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, CalendarClock, Check, Dumbbell, FileSpreadsheet, Globe, Lock, LogIn, MessageCircle, Package, Percent, RefreshCw, Send, ShoppingCart, Store, Users } from "lucide-react";
+import { ArrowRight, CalendarClock, Check, Dumbbell, FileSpreadsheet, Gift, Globe, Lock, LogIn, MessageCircle, Package, Percent, RefreshCw, Send, ShoppingCart, Store, Users } from "lucide-react";
 import { CONTACTO_PRINCIPAL, linkWhatsapp, whatsappLegible } from "@/lib/contacto";
 import { pesos } from "@/lib/formato";
-import { PRECIO_MENSUAL } from "@/lib/plan";
+import { PRECIO_MENSUAL, PROMO_PLAN } from "@/lib/plan";
 import { LINK_INGRESAR } from "@/lib/direcciones";
 import { MenuCelular } from "./MenuCelular";
 import { FormularioContacto } from "./FormularioContacto";
@@ -250,7 +250,9 @@ function Caracteristicas() {
 const INCLUYE = ["Caja con lector de código de barras", "Stock, compras, gastos y vencimientos", "Reportes de ganancias y Excel", "Empleados con permisos y relevos", "Sucursales sin costo extra"];
 
 function Planes() {
-  const whatsappContratar = linkWhatsapp("Hola, quiero contratar el Plan Mantenete para mi comercio.");
+  const whatsappContratar = linkWhatsapp(
+    PROMO_PLAN ? "Hola, quiero contratar el Plan Mantenete con el primer mes gratis para mi comercio." : "Hola, quiero contratar el Plan Mantenete para mi comercio.",
+  );
   return (
     <section id="planes" className="scroll-mt-16 border-y border-[#DCE6F0] bg-[#F3F7FB]">
       <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-24">
@@ -260,6 +262,12 @@ function Planes() {
           <p className="mt-4 text-lg text-[#475569]">Abono mensual, sin tope de ventas. Las sucursales no se cobran aparte.</p>
         </div>
         <div className="mx-auto mt-12 max-w-3xl rounded-2xl border-2 border-[#1C7BD6] bg-white p-7 shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#1767b4] hover:shadow-xl hover:shadow-[#1C7BD6]/15 sm:p-9">
+          {PROMO_PLAN && (
+            <p className="mb-6 flex items-center gap-2.5 rounded-xl border border-[#43DDE3]/50 bg-gradient-to-r from-[#E6F4FB] to-[#E3FAFB] px-4 py-3 font-semibold text-[#0F2340]">
+              <Gift className="size-5 flex-none text-[#1C7BD6]" />
+              {PROMO_PLAN}
+            </p>
+          )}
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div className="max-w-md">
               <h3 className="text-2xl font-bold text-[#0F2340]">Plan Mantenete</h3>
