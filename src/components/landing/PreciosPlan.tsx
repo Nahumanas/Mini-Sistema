@@ -64,7 +64,10 @@ export function PreciosPlan() {
         {EXTRAS.map((x) => (
           <li key={x.texto} className="flex flex-wrap justify-between gap-x-4">
             <span>{x.texto}</span>
-            <span className="font-semibold text-[#0F2340]">+ {pesos(x.precio)}</span>
+            <span className="font-semibold text-[#0F2340]">
+              + {pesos(x.precio)}
+              {x.detalle && <span className="font-normal text-[#475569]"> {x.detalle}</span>}
+            </span>
           </li>
         ))}
       </ul>

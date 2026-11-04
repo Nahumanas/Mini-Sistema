@@ -15,8 +15,8 @@ export const PERIODOS: Periodo[] = [
 export const PERIODO_INICIAL = "1";
 
 // Costos que se suman según el comercio.
-export const EXTRAS: { texto: string; precio: number }[] = [
-  { texto: "Negocio o rubro adicional del mismo dueño", precio: 6500 },
+export const EXTRAS: { texto: string; precio: number; detalle?: string }[] = [
+  { texto: "Negocio o rubro adicional del mismo dueño", precio: 6500, detalle: "/ mes" },
   { texto: "Personalización a medida", precio: 20000 },
 ];
 
