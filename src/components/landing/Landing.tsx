@@ -1,29 +1,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import {
-  ArrowRight,
-  CalendarClock,
-  Check,
-  Dumbbell,
-  FileSpreadsheet,
-  Globe,
-  Lock,
-  LogIn,
-  Mail,
-  MessageCircle,
-  Package,
-  Percent,
-  RefreshCw,
-  Send,
-  ShoppingCart,
-  Store,
-  Users,
-} from "lucide-react";
-import { EQUIPO, linkWhatsapp, whatsappLegible, type Persona } from "@/lib/contacto";
+import { ArrowRight, CalendarClock, Check, Dumbbell, FileSpreadsheet, Gift, Globe, Lock, LogIn, MessageCircle, Package, Percent, RefreshCw, Send, ShoppingCart, Store, Users } from "lucide-react";
+import { CONTACTO_PRINCIPAL, linkWhatsapp, whatsappLegible } from "@/lib/contacto";
+import { PROMO_PLAN } from "@/lib/plan";
+import { PreciosPlan } from "./PreciosPlan";
 import { LINK_INGRESAR } from "@/lib/direcciones";
 import { MenuCelular } from "./MenuCelular";
 import { FormularioContacto } from "./FormularioContacto";
+import { MailProtegido } from "./MailProtegido";
+import { Cascada, CascadaItem, ConfigAnimaciones, EntradaSuave, Presionable } from "./Animaciones";
 
 // Página de presentación de Mantenete (lo primero que ve alguien que entra a la dirección).
 // Tiene colores propios, los del folleto, y no cambia con el modo oscuro del sistema.
@@ -34,7 +20,7 @@ const LINKS_MENU = [
   { href: "#contacto", texto: "Contacto" },
 ];
 
-function Logo({ claro = false }: { claro?: boolean }) {
+export function Logo({ claro = false }: { claro?: boolean }) {
   return (
     <Link href="/" className="flex items-center gap-2.5">
       <Image src="/landing/isotipo.svg" alt="" width={34} height={34} priority />
@@ -43,17 +29,21 @@ function Logo({ claro = false }: { claro?: boolean }) {
   );
 }
 
-function BotonDemo({ grande = false }: { grande?: boolean }) {
+// El botón principal de toda la página: color lleno, brillo que lo cruza cada tanto
+// y un leve "rebote" al pasar el mouse o tocarlo.
+const TAMANO_DEMO = { chico: "h-10 px-4 text-[15px]", medio: "h-12 px-6 text-base", grande: "h-13 px-7 text-lg" };
+
+function BotonDemo({ tamano = "chico", className = "" }: { tamano?: keyof typeof TAMANO_DEMO; className?: string }) {
   return (
-    <Link
-      href="/ingresar?demo"
-      className={`inline-flex items-center justify-center gap-2 rounded-lg bg-[#1C7BD6] font-semibold text-white transition-colors hover:bg-[#1767b4] ${
-        grande ? "h-13 px-7 text-lg" : "h-10 px-4 text-[15px]"
-      }`}
-    >
-      Probar Demo Gratis
-      <ArrowRight className={grande ? "size-5" : "size-4"} />
-    </Link>
+    <Presionable className={className || undefined}>
+      <Link
+        href="/ingresar?demo"
+        className={`brillo-boton inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#1C7BD6] font-semibold text-white shadow-sm shadow-[#1C7BD6]/30 transition-colors hover:bg-[#1767b4] ${TAMANO_DEMO[tamano]}`}
+      >
+        Probar Demo Gratis
+        <ArrowRight className={tamano === "chico" ? "size-4" : "size-5"} />
+      </Link>
+    </Presionable>
   );
 }
 
@@ -74,8 +64,8 @@ function Etiqueta({ children }: { children: React.ReactNode }) {
   return <p className="text-sm font-semibold tracking-[0.18em] text-[#1C7BD6] uppercase">{children}</p>;
 }
 
-function Proximamente() {
-  return <span className="rounded-full border border-[#DCE6F0] bg-[#F3F7FB] px-2 py-0.5 text-xs font-semibold text-[#475569]">Próximamente</span>;
+function Proximamente({ pulso = false }: { pulso?: boolean }) {
+  return <span className={`${pulso ? "pulso-suave " : ""}rounded-full border border-[#DCE6F0] bg-[#F3F7FB] px-2 py-0.5 text-xs font-semibold text-[#475569]`}>Próximamente</span>;
 }
 
 // ---------- 1. Encabezado ----------
@@ -129,20 +119,26 @@ function Portada() {
       <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#1C7BD6] via-[#2A9FDA] to-[#43DDE3]" />
       <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 pt-14 pb-20 sm:px-6 lg:grid-cols-[1fr_1.1fr] lg:pt-20 lg:pb-28">
         <div className="text-center lg:text-left">
-          <h1 className="text-[2.6rem] leading-[1.05] font-extrabold tracking-tight text-[#0F2340] sm:text-6xl">
-            Que los números no sean un <span className="text-[#1C7BD6]">dolor de cabeza.</span>
-          </h1>
-          <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-[#475569] lg:mx-0 sm:text-xl">
-            Mantené el control total de tu mercado, stock y ganancias en una sola pantalla, sin instalar nada.
-          </p>
-          <div className="mt-9 flex flex-col items-center gap-2.5 lg:items-start">
-            <BotonDemo grande />
+          <EntradaSuave>
+            <h1 className="text-[2.6rem] leading-[1.05] font-extrabold tracking-tight text-[#0F2340] sm:text-6xl">
+              Que los números no sean un <span className="text-[#1C7BD6]">dolor de cabeza.</span>
+            </h1>
+          </EntradaSuave>
+          <EntradaSuave demora={0.1}>
+            <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-[#475569] lg:mx-0 sm:text-xl">
+              Mantené el control total de tu mercado, stock y ganancias en una sola pantalla, sin instalar nada.
+            </p>
+          </EntradaSuave>
+          <EntradaSuave demora={0.2} className="mt-9 flex flex-col items-center gap-2.5 lg:items-start">
+            <BotonDemo tamano="grande" />
             <p className="text-sm text-[#475569]">
               Ingresá con el PIN <b className="font-semibold text-[#0F2340]">1234</b>
             </p>
-          </div>
+          </EntradaSuave>
         </div>
-        <VistaDelSistema />
+        <EntradaSuave demora={0.3}>
+          <VistaDelSistema />
+        </EntradaSuave>
       </div>
     </section>
   );
@@ -162,22 +158,23 @@ function Problema() {
       <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-24">
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-sm font-semibold tracking-[0.18em] text-[#43DDE3] uppercase">El caos del mostrador</p>
-          <h2 className="mt-4 text-3xl leading-tight font-extrabold tracking-tight sm:text-[2.6rem]">
-            ¿Te falta plata en la caja al cerrar? ¿Tenés stock que no cierra o ganancias calculadas a ojo?
-          </h2>
+          <h2 className="mt-4 text-3xl leading-tight font-extrabold tracking-tight sm:text-[2.6rem]">¿Te falta plata en la caja al cerrar? ¿Tenés stock que no cierra o ganancias calculadas a ojo?</h2>
           <p className="mt-5 text-lg text-[#B9C7DA]">Mantenete ordena el día a día de tu local para que cada peso tenga explicación.</p>
         </div>
-        <div className="mt-14 grid gap-5 md:grid-cols-3">
+        <Cascada className="mt-14 grid gap-5 md:grid-cols-3">
           {SOLUCIONES.map(({ icono: Icono, titulo, texto }) => (
-            <div key={titulo} className="rounded-xl border border-white/10 bg-white/[0.04] p-6">
+            <CascadaItem
+              key={titulo}
+              className="h-full rounded-xl border border-white/10 bg-white/[0.04] p-6 transition-all duration-300 ease-out hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl hover:shadow-black/30"
+            >
               <div className="flex size-12 items-center justify-center rounded-lg bg-gradient-to-br from-[#1C7BD6] to-[#2A9FDA]">
                 <Icono className="size-6 text-white" />
               </div>
               <h3 className="mt-5 text-xl font-bold">{titulo}</h3>
               <p className="mt-2 leading-relaxed text-[#B9C7DA]">{texto}</p>
-            </div>
+            </CascadaItem>
           ))}
-        </div>
+        </Cascada>
       </div>
     </section>
   );
@@ -188,7 +185,11 @@ function Problema() {
 const CARACTERISTICAS: { icono: LucideIcon; titulo: string; texto: string; pronto?: boolean }[] = [
   { icono: RefreshCw, titulo: "Relevos sin cerrar caja", texto: "Cambiá de turno sin frenar el negocio. Controlá qué empleado operó y si hubo faltantes en ese tramo." },
   { icono: Store, titulo: "Varios comercios, un solo panel", texto: "Si tenés más de un local, controlá todos desde tu celular en un solo panel. Las sucursales no se cobran aparte." },
-  { icono: Send, titulo: "Avisos a tu Telegram", texto: "Recibí un aviso cuando se abre o se cierra la caja (con el resumen del día), hay un relevo o se está terminando un producto, estés donde estés." },
+  {
+    icono: Send,
+    titulo: "Avisos a tu Telegram",
+    texto: "Recibí un aviso cuando se abre o se cierra la caja (con el resumen del día), hay un relevo o se está terminando un producto, estés donde estés.",
+  },
   { icono: Globe, titulo: "Cero instalación", texto: "Funciona desde el navegador de la compu, la tablet o el celular, sin descargar programas pesados." },
 ];
 
@@ -209,9 +210,12 @@ function Caracteristicas() {
           <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-[#0F2340] sm:text-4xl">Pensado para el mostrador de verdad</h2>
           <p className="mt-4 text-lg text-[#475569]">Kioscos, ferreterías, ropa, panaderías y gimnasios: el mismo sistema se adapta a cada rubro.</p>
         </div>
-        <div className="mt-12 grid gap-5 sm:grid-cols-2">
+        <Cascada className="mt-12 grid gap-5 sm:grid-cols-2">
           {CARACTERISTICAS.map(({ icono: Icono, titulo, texto, pronto }) => (
-            <div key={titulo} className="flex gap-5 rounded-xl border border-[#DCE6F0] bg-white p-6">
+            <CascadaItem
+              key={titulo}
+              className="flex h-full gap-5 rounded-xl border border-[#DCE6F0] bg-white p-6 transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#B9D3EE] hover:shadow-xl hover:shadow-[#0F2340]/8"
+            >
               <div className="flex size-12 flex-none items-center justify-center rounded-lg border border-[#DCE6F0] bg-[#F3F7FB]">
                 <Icono className="size-6 text-[#1C7BD6]" />
               </div>
@@ -222,9 +226,9 @@ function Caracteristicas() {
                 </div>
                 <p className="mt-1.5 leading-relaxed text-[#475569]">{texto}</p>
               </div>
-            </div>
+            </CascadaItem>
           ))}
-        </div>
+        </Cascada>
         <div className="mt-8 rounded-xl border border-[#DCE6F0] bg-[#F3F7FB] p-6">
           <p className="font-semibold text-[#0F2340]">Y además:</p>
           <ul className="mt-4 flex flex-wrap gap-2.5">
@@ -246,29 +250,25 @@ function Caracteristicas() {
 const INCLUYE = ["Caja con lector de código de barras", "Stock, compras, gastos y vencimientos", "Reportes de ganancias y Excel", "Empleados con permisos y relevos", "Sucursales sin costo extra"];
 
 function Planes() {
-  const whatsappCotizacion = linkWhatsapp("Hola, quiero pedir una cotización de Mantenete para mi comercio.");
   return (
     <section id="planes" className="scroll-mt-16 border-y border-[#DCE6F0] bg-[#F3F7FB]">
       <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-24">
         <div className="mx-auto max-w-2xl text-center">
           <Etiqueta>Planes</Etiqueta>
           <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-[#0F2340] sm:text-4xl">Un solo plan, todo incluido</h2>
-          <p className="mt-4 text-lg text-[#475569]">Abono mensual, sin tope de ventas. Las sucursales no se cobran aparte.</p>
+          <p className="mt-4 text-lg text-[#475569]">Abono mensual, sin tope de ventas. Si contratás varios meses juntos, pagás menos.</p>
         </div>
-        <div className="mx-auto mt-12 max-w-3xl rounded-2xl border-2 border-[#1C7BD6] bg-white p-7 sm:p-9">
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div className="max-w-md">
-              <h3 className="text-2xl font-bold text-[#0F2340]">Plan Mantenete</h3>
-              <p className="mt-1.5 text-[#475569]">Todo lo necesario para operar la caja, controlar el stock y ver tus ganancias.</p>
-            </div>
-            <a
-              href={whatsappCotizacion}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-12 items-center justify-center rounded-lg bg-[#1C7BD6] px-6 font-semibold text-white hover:bg-[#1767b4]"
-            >
-              Pedir cotización
-            </a>
+        <div className="mx-auto mt-12 max-w-3xl rounded-2xl border-2 border-[#1C7BD6] bg-white p-7 shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#1767b4] hover:shadow-xl hover:shadow-[#1C7BD6]/15 sm:p-9">
+          {PROMO_PLAN && (
+            <p className="mb-6 flex items-center gap-2.5 rounded-xl border border-[#43DDE3]/50 bg-gradient-to-r from-[#E6F4FB] to-[#E3FAFB] px-4 py-3 font-semibold text-[#0F2340]">
+              <Gift className="size-5 flex-none text-[#1C7BD6]" />
+              {PROMO_PLAN}
+            </p>
+          )}
+          <h3 className="text-2xl font-bold text-[#0F2340]">Plan Mantenete</h3>
+          <p className="mt-1.5 text-[#475569]">Todo lo necesario para operar la caja, controlar el stock y ver tus ganancias.</p>
+          <div className="mt-6">
+            <PreciosPlan />
           </div>
           <ul className="mt-8 grid gap-x-8 gap-y-3 sm:grid-cols-2">
             {INCLUYE.map((t) => (
@@ -280,7 +280,7 @@ function Planes() {
           </ul>
           <div className="mt-8 flex flex-wrap items-center gap-2 border-t border-[#DCE6F0] pt-5 text-[#475569]">
             <span>Factura electrónica ARCA desde la caja</span>
-            <Proximamente />
+            <Proximamente pulso />
           </div>
         </div>
         <p className="mt-8 text-center text-[#475569]">Incluye actualizaciones automáticas, hosting en la nube y soporte.</p>
@@ -300,45 +300,33 @@ function DatoDeContacto({ icono: Icono, valor, href }: { icono: LucideIcon; valo
   );
 }
 
-function TarjetaPersona({ persona }: { persona: Persona }) {
+// Segunda opción, para quien prefiere escribir directo en lugar de usar el formulario.
+function TarjetaContacto() {
+  const c = CONTACTO_PRINCIPAL;
   return (
     <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.04] p-5">
-      <p className="text-lg font-bold">{persona.nombre}</p>
+      <p className="text-sm font-semibold tracking-[0.18em] text-[#43DDE3] uppercase">{c.nombre}</p>
+      <p className="mt-1 text-[15px] text-[#B9C7DA]">¿Preferís escribirnos directo?</p>
       <div className="mt-3 space-y-2.5">
-        <DatoDeContacto icono={MessageCircle} valor={whatsappLegible(persona.whatsapp)} href={linkWhatsapp("Hola, quiero saber más sobre Mantenete.", persona)} />
-        <DatoDeContacto icono={Mail} valor={persona.mail} href={`mailto:${persona.mail}`} />
-        {persona.linkedin && <DatoDeContacto icono={Globe} valor="LinkedIn" href={persona.linkedin} />}
+        <DatoDeContacto icono={MessageCircle} valor={`WhatsApp Comercial ${whatsappLegible(c.whatsapp)}`} href={linkWhatsapp("Hola, quiero saber más sobre Mantenete.")} />
+        <MailProtegido className="flex min-w-0 items-center gap-2.5 text-[15px] hover:text-[#43DDE3]" />
       </div>
     </div>
   );
 }
 
 function Contacto() {
-  const whatsapp = linkWhatsapp("Hola, quiero saber más sobre Mantenete.");
   return (
     <section id="contacto" className="scroll-mt-16 bg-[#0F2340] text-white">
       <div className="mx-auto grid max-w-6xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:py-24">
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight sm:text-[2.6rem]">¿Listo para ordenar tu local?</h2>
-          <p className="mt-4 text-lg text-[#B9C7DA]">Escribinos y te ayudamos a cargar tu comercio. O probá la demo ahora mismo, sin registrarte.</p>
+          <p className="mt-4 text-lg text-[#B9C7DA]">Completá el formulario y te contactamos para ayudarte a cargar tu comercio. Mientras tanto, probá la demo sin registrarte (PIN 1234).</p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <a
-              href={whatsapp}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-12 items-center gap-2 rounded-lg bg-gradient-to-r from-[#1C7BD6] to-[#2A9FDA] px-6 font-semibold text-white hover:opacity-90"
-            >
-              <MessageCircle className="size-5" />
-              Hablar por WhatsApp
-            </a>
-            <Link href="/ingresar?demo" className="inline-flex h-12 items-center rounded-lg border border-white/20 px-6 font-semibold hover:bg-white/5">
-              Probar Demo Gratis
-            </Link>
+            <BotonDemo tamano="medio" />
           </div>
-          <div className="mt-10 grid gap-4 sm:grid-cols-2">
-            {EQUIPO.map((p) => (
-              <TarjetaPersona key={p.nombre} persona={p} />
-            ))}
+          <div className="mt-10 max-w-md">
+            <TarjetaContacto />
           </div>
         </div>
         <FormularioContacto />
@@ -347,15 +335,21 @@ function Contacto() {
   );
 }
 
-function Pie() {
+export function Pie() {
   return (
     <footer className="border-t border-white/10 bg-[#0B1A30] text-[#B9C7DA]">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-5 px-4 py-8 text-sm sm:flex-row sm:px-6">
         <Logo claro />
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-          <a href="#caracteristicas" className="hover:text-white">Características</a>
-          <a href="#planes" className="hover:text-white">Planes</a>
-          <span title="Próximamente">Términos y condiciones (próximamente)</span>
+          <Link href="/#caracteristicas" className="hover:text-white">
+            Características
+          </Link>
+          <Link href="/#planes" className="hover:text-white">
+            Planes
+          </Link>
+          <Link href="/condiciones" className="hover:text-white">
+            Términos y condiciones
+          </Link>
         </div>
         <p>© 2026 Mantenete</p>
       </div>
@@ -365,16 +359,18 @@ function Pie() {
 
 export function Landing() {
   return (
-    <div className="min-h-full bg-white text-[#0F2340]">
-      <Encabezado />
-      <main>
-        <Portada />
-        <Problema />
-        <Caracteristicas />
-        <Planes />
-        <Contacto />
-      </main>
-      <Pie />
-    </div>
+    <ConfigAnimaciones>
+      <div className="min-h-full bg-white text-[#0F2340]">
+        <Encabezado />
+        <main>
+          <Portada />
+          <Problema />
+          <Caracteristicas />
+          <Planes />
+          <Contacto />
+        </main>
+        <Pie />
+      </div>
+    </ConfigAnimaciones>
   );
 }

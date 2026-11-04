@@ -1,33 +1,37 @@
 // Datos de contacto que muestra la página de presentación (la landing).
 // Para cambiarlos alcanza con tocar este archivo.
 
-export type Persona = {
+export type Contacto = {
   nombre: string;
   // WhatsApp solo con números y con código de país (54 9 + característica sin 0 + número sin 15)
   whatsapp: string;
-  mail: string;
-  linkedin?: string;
+  // El correo va partido en dos (usuario y dominio) para que no aparezca entero en el código
+  // ni en la página: así los robots que juntan correos para mandar spam no lo encuentran.
+  // Se arma recién en el navegador de la persona (ver MailProtegido.tsx).
+  mail: { usuario: string; dominio: string };
 };
 
-export const EQUIPO: Persona[] = [
-  {
-    nombre: "Nahuel",
-    whatsapp: "5492974435601",
-    mail: "nahumansilla2@gmail.com",
-    linkedin: "https://www.linkedin.com/in/nahuel-lautaro-mansilla-astudillo-818857375/",
-  },
-  {
-    nombre: "Sebastián",
-    whatsapp: "5491161803033",
-    mail: "sebasfdezsantos@gmail.com",
-  },
-];
+// Una sola vía de contacto con nombre de marca (no de una persona).
+// Cuando haya un número o un correo de la empresa, se cambian acá y listo.
+export const CONTACTO_PRINCIPAL: Contacto = {
+  nombre: "Atención al Cliente",
+  whatsapp: "5492974435601",
+  mail: { usuario: "nahumansilla2", dominio: "gmail.com" },
+};
 
-// A quién le llegan los botones de WhatsApp y el formulario de la página
-export const CONTACTO_PRINCIPAL = EQUIPO[0];
+// Arma el correo completo. Usarlo SOLO en el navegador (componentes "use client"),
+// nunca en lo que se arma en el servidor, para que no quede escrito en la página.
+export function armarMail(c: Contacto = CONTACTO_PRINCIPAL): string {
+  return [c.mail.usuario, c.mail.dominio].join(String.fromCharCode(64));
+}
+
+// Link para abrir el correo con el asunto y el mensaje ya escritos.
+export function linkMail(asunto: string, cuerpo = "", c: Contacto = CONTACTO_PRINCIPAL): string {
+  return `mailto:${armarMail(c)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+}
 
 // Arma el link de WhatsApp con un mensaje ya escrito.
-export function linkWhatsapp(mensaje: string, persona: Persona = CONTACTO_PRINCIPAL): string {
+export function linkWhatsapp(mensaje: string, persona: Contacto = CONTACTO_PRINCIPAL): string {
   return `https://wa.me/${persona.whatsapp}?text=${encodeURIComponent(mensaje)}`;
 }
 
