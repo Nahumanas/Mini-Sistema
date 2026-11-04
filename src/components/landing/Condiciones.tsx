@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { VERSION_TERMINOS_LARGA } from "@/lib/terminos";
 import { Logo, Pie } from "./Landing";
 
-// Página "Condiciones del servicio". El texto sale de la cotización (Cotizacion_Servicio.docx).
-// Si cambia algo de la cotización, cambiarlo también acá y actualizar la fecha.
-const ACTUALIZADO = "4 de noviembre de 2026";
+// Página "Términos y condiciones". El texto sale de la cotización (Cotizacion_Servicio.docx).
+// Si cambia algo de la cotización, cambiarlo también acá y actualizar la fecha en src/lib/terminos.ts.
+const ACTUALIZADO = VERSION_TERMINOS_LARGA;
 
 function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
@@ -30,7 +31,7 @@ export function Condiciones() {
 
       <main className="mx-auto max-w-3xl space-y-8 px-4 py-14 sm:px-6 lg:py-20">
         <div>
-          <p className="text-sm font-semibold tracking-[0.18em] text-[#1C7BD6] uppercase">Condiciones del servicio</p>
+          <p className="text-sm font-semibold tracking-[0.18em] text-[#1C7BD6] uppercase">Términos y condiciones</p>
           <h1 className="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">Lo que tenés que saber antes de contratar</h1>
           <p className="mt-3 text-[#475569]">Última actualización: {ACTUALIZADO}.</p>
         </div>

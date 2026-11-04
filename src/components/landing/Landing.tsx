@@ -348,7 +348,7 @@ export function Pie() {
             Planes
           </Link>
           <Link href="/condiciones" className="hover:text-white">
-            Condiciones del servicio
+            Términos y condiciones
           </Link>
         </div>
         <p>© 2026 Mantenete</p>
