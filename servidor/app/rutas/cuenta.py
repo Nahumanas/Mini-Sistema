@@ -7,7 +7,7 @@ from .. import cifrado
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario, leer
 from ..formato import a_camel
-from ..llaves import FICHA, SIN_CUENTA, abrir_dueno_con_pin, ficha_de, ficha_del_dueno, respuesta, sin_cambios
+from ..llaves import CUENTA, FICHA, SIN_CUENTA, abrir_dueno_con_pin, ficha_de, ficha_del_dueno, respuesta, sin_cambios
 from ..pin import anotar_intento, coincide, huella, revisar_traba, validar_pin_nuevo
 
 router = APIRouter(tags=["Cuenta"])
@@ -17,9 +17,9 @@ router = APIRouter(tags=["Cuenta"])
 def yo(usuario: Usuario = Depends(usuario_actual)):
     """La ficha del dueño conectado. Si no tiene (no fue invitado), no tiene cuenta."""
     (filas,) = leer(usuario, (
-        """select id, nombre, email, pin_huella is not null as pin_configurado,
-                  exists (select 1 from public.cifrado_duenos) as cifrado_activo
-           from public.duenos""", None))
+        f"""select id, nombre, email, pin_huella is not null as pin_configurado,
+                   exists (select 1 from public.cifrado_duenos) as cifrado_activo, {CUENTA}
+            from public.duenos""", None))
     if not filas:
         raise HTTPException(403, SIN_CUENTA)
     return a_camel(filas[0])

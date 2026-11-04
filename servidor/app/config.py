@@ -36,3 +36,11 @@ ORIGENES_VISTA_PREVIA = r"https://mantenete-[a-z0-9-]+-nahuel-900e\.vercel\.app"
 # Avisos al celular del jefe (etapa 6). La clave del bot de Telegram (la da @BotFather) es SECRETA:
 # solo va en Render. Sin ella la API anda igual, solo que no manda avisos.
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+
+# Pantalla de administrador (solo Nahuel): para INVITAR clientes desde la pantalla hace falta la clave
+# "secret" (o "service_role") de Supabase (Project Settings → API Keys). Es MUY SECRETA: saltea todas las
+# reglas RLS. Va solo en Render; la API la usa para una sola cosa: mandar la invitación por mail.
+# Sin ella, la pantalla anda igual, pero el botón "Invitar" avisa que falta.
+SUPABASE_SECRET_KEY = os.environ.get("SUPABASE_SECRET_KEY", "").strip()
+# A dónde lleva el link del mail de invitación.
+URL_SISTEMA = os.environ.get("URL_SISTEMA", "https://mantenete-app.vercel.app").rstrip("/")

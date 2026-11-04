@@ -4,7 +4,7 @@ from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario, en_viajes
 from ..cifrado import Llave
 from ..formato import a_camel
-from ..llaves import SIN_CUENTA, crear_clave_comercio, llave_opcional
+from ..llaves import CUENTA, SIN_CUENTA, crear_clave_comercio, llave_opcional
 from ..sobres import Cofre, por_nombre
 from .compras import armar_items as compras_armar_items
 from .ventas import _DETALLE, armar_items
@@ -32,9 +32,9 @@ def inicio(usuario: Usuario = Depends(usuario_actual), llave: Llave | None = Dep
     el dueño, sus comercios, los empleados y qué comercios tienen código. Con la llave del jefe van los datos
     de todos sus comercios; con la de un empleado, solo los de su comercio."""
     basicas = [
-        ("""select nombre, email, pin_huella is not null as pin_configurado,
-                   exists (select 1 from public.cifrado_duenos) as cifrado_activo
-            from public.duenos""", None),
+        (f"""select nombre, email, pin_huella is not null as pin_configurado,
+                    exists (select 1 from public.cifrado_duenos) as cifrado_activo, {CUENTA}
+             from public.duenos""", None),
         ("select * from public.comercios order by id", None),
         ("select * from public.empleados where activo order by nombre", None),
         # Qué comercios ya tienen código de empleados (cifrado): sin código, el empleado no puede entrar

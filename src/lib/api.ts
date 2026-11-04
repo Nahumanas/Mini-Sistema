@@ -121,7 +121,7 @@ export type PanelSocio = {
 /** Lo que trae /inicio: todo lo del dueño que la página necesita al entrar
  * (ventas, cajas, compras, gastos, retiros, reservas y entradas de los últimos 2 meses; cuotas del último año). */
 export type DatosDeInicio = {
-  dueno: { nombre: string; email: string; pinConfigurado: boolean; cifradoActivo?: boolean };
+  dueno: { nombre: string; email: string; pinConfigurado: boolean; cifradoActivo?: boolean } & Partial<EstadoDeCuenta>;
   /** Los comercios que ya tienen código de empleados, y desde cuándo (sin código, con el cifrado activado, no entra nadie como empleado). */
   codigos?: { comercioId: number; codigoCambiado: string }[];
   comercios: Comercio[];
@@ -192,6 +192,28 @@ type Cambios = { reservas: Reserva[]; socios: Socio[] };
 type Entraron = { socio: string; telefono: string }[];
 /** La llave de sesión del cifrado (la página no la puede leer: solo la guarda y la manda) y cuándo vence. */
 export type LlaveNueva = { llave: string; vence: string };
+
+/** El plan del dueño y si está suspendido (solo lectura). admin: es Nahuel (ve la pantalla de administrador). */
+export type EstadoDeCuenta = { admin: boolean; suspendido: boolean; plan: PlanCliente | null; vence: string | null };
+
+/** Pantalla de administrador (solo Nahuel): los planes que se cobran y cada cliente. */
+export type PlanCliente = "prueba" | "mensual" | "trimestral" | "semestral";
+export type ClienteAdmin = {
+  duenoId: number;
+  email: string;
+  nombreDueno: string;
+  nombre: string;
+  plan: PlanCliente | null;
+  vence: string | null;
+  suspendido: boolean;
+  comercios: number;
+  pinConfigurado: boolean;
+  cifrado: boolean;
+  ingreso: string | null;
+  creado: string;
+  esAdmin: boolean;
+};
+export type DatosCliente = { email: string; nombre: string; plan: PlanCliente; vence: string | null };
 
 /** Los avisos al Telegram del jefe (etapa 6). */
 export type TipoAviso = "apertura" | "cierre" | "relevo" | "stock_bajo";
@@ -304,6 +326,18 @@ export const api = {
   cerrarClasesPasadas: (comercioId: number) => pedir<{ reservas: Reserva[] }>(`/comercios/${comercioId}/reservas/cerrar-pasadas`, "POST"),
   registrarIngreso: (comercioId: number, datos: { socioId: number; registradoPor: string; resultado: "paso" | "rechazado"; motivo: string }) =>
     pedir<{ repetido: boolean; asistencia: Asistencia | null; reserva: Reserva | null }>(`/comercios/${comercioId}/ingresos`, "POST", datos),
+};
+
+/** Pantalla de administrador (solo Nahuel). La API revisa en la base que la cuenta sea de administrador:
+ * a cualquier otro le contesta 404, como si la página no existiera. */
+export const apiAdmin = {
+  soy: () => pedir<{ ok: true }>("/admin/soy"),
+  clientes: () => pedir<{ clientes: ClienteAdmin[]; puedeInvitar: boolean }>("/admin/clientes"),
+  invitar: (datos: DatosCliente) => pedir<{ ok: true; resultado: "invitado" | "ya_tenia_cuenta" }>("/admin/clientes/invitar", "POST", datos),
+  guardarPlan: (datos: DatosCliente) => pedir<{ ok: true }>("/admin/clientes/plan", "PUT", datos),
+  suspender: (duenoId: number, suspendido: boolean) =>
+    pedir<{ ok: true; suspendido: boolean }>(`/admin/clientes/${duenoId}/suspension`, "PUT", { suspendido }),
+  resetearPin: (duenoId: number) => pedir<{ ok: true }>(`/admin/clientes/${duenoId}/resetear-pin`, "POST"),
 };
 
 /** La página del socio (sin cuenta): el link del gimnasio y su DNI. */
