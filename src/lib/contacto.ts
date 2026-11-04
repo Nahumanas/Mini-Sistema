@@ -1,33 +1,23 @@
 // Datos de contacto que muestra la página de presentación (la landing).
 // Para cambiarlos alcanza con tocar este archivo.
 
-export type Persona = {
+export type Contacto = {
   nombre: string;
   // WhatsApp solo con números y con código de país (54 9 + característica sin 0 + número sin 15)
   whatsapp: string;
   mail: string;
-  linkedin?: string;
 };
 
-export const EQUIPO: Persona[] = [
-  {
-    nombre: "Nahuel",
-    whatsapp: "5492974435601",
-    mail: "nahumansilla2@gmail.com",
-    linkedin: "https://www.linkedin.com/in/nahuel-lautaro-mansilla-astudillo-818857375/",
-  },
-  {
-    nombre: "Sebastián",
-    whatsapp: "5491161803033",
-    mail: "sebasfdezsantos@gmail.com",
-  },
-];
-
-// A quién le llegan los botones de WhatsApp y el formulario de la página
-export const CONTACTO_PRINCIPAL = EQUIPO[0];
+// Una sola vía de contacto con nombre de marca (no de una persona).
+// Cuando haya un número o un correo de la empresa, se cambian acá y listo.
+export const CONTACTO_PRINCIPAL: Contacto = {
+  nombre: "Atención al Cliente",
+  whatsapp: "5492974435601",
+  mail: "nahumansilla2@gmail.com",
+};
 
 // Arma el link de WhatsApp con un mensaje ya escrito.
-export function linkWhatsapp(mensaje: string, persona: Persona = CONTACTO_PRINCIPAL): string {
+export function linkWhatsapp(mensaje: string, persona: Contacto = CONTACTO_PRINCIPAL): string {
   return `https://wa.me/${persona.whatsapp}?text=${encodeURIComponent(mensaje)}`;
 }
 
