@@ -20,7 +20,7 @@ const LINKS_MENU = [
   { href: "#contacto", texto: "Contacto" },
 ];
 
-function Logo({ claro = false }: { claro?: boolean }) {
+export function Logo({ claro = false }: { claro?: boolean }) {
   return (
     <Link href="/" className="flex items-center gap-2.5">
       <Image src="/landing/isotipo.svg" alt="" width={34} height={34} priority />
@@ -335,19 +335,21 @@ function Contacto() {
   );
 }
 
-function Pie() {
+export function Pie() {
   return (
     <footer className="border-t border-white/10 bg-[#0B1A30] text-[#B9C7DA]">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-5 px-4 py-8 text-sm sm:flex-row sm:px-6">
         <Logo claro />
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-          <a href="#caracteristicas" className="hover:text-white">
+          <Link href="/#caracteristicas" className="hover:text-white">
             Características
-          </a>
-          <a href="#planes" className="hover:text-white">
+          </Link>
+          <Link href="/#planes" className="hover:text-white">
             Planes
-          </a>
-          <span title="Próximamente">Términos y condiciones (próximamente)</span>
+          </Link>
+          <Link href="/condiciones" className="hover:text-white">
+            Condiciones del servicio
+          </Link>
         </div>
         <p>© 2026 Mantenete</p>
       </div>
