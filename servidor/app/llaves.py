@@ -8,6 +8,7 @@ from psycopg import Connection
 from . import cifrado
 from .autenticacion import Usuario, usuario_actual
 from .cifrado import ClaveIncorrecta, Llave
+from .cuenta_suspendida import frenar_empleado
 
 SIN_CUENTA = "Ese Gmail todavía no tiene cuenta en Mantenete."
 VOLVER_A_PONER = "Por seguridad, volvé a poner tu PIN de jefe (o el código de empleados)."
@@ -16,6 +17,11 @@ NO_ABRE = (
     "(\"Me olvidé el PIN\") y elegí un PIN nuevo."
 )
 
+
+# Lo que la página necesita saber de la cuenta (plan, vencimiento, si está suspendida y si es el administrador)
+CUENTA = """privado.soy_admin() as admin,
+            coalesce((select suspendido from privado.mi_cuenta()), false) as suspendido,
+            (select plan from privado.mi_cuenta()) as plan, (select vence from privado.mi_cuenta()) as vence"""
 
 FICHA = """select d.id, d.pin_sal, d.pin_huella, c.sal_pin, c.clave_pin, c.sal_frase, c.clave_frase, c.aceptado_en
            from public.duenos d left join public.cifrado_duenos c on c.dueno_id = d.id"""
@@ -77,10 +83,13 @@ def llave_opcional(usuario: Usuario = Depends(usuario_actual), x_llave: str | No
     if not x_llave:
         return None
     try:
-        return cifrado.abrir_llave(x_llave, usuario.id)
+        llave = cifrado.abrir_llave(x_llave, usuario.id)
     except ClaveIncorrecta as error:
         # 423 = "bajo llave": la página vuelve a pedir el PIN o el código (no cierra la cuenta de Gmail).
         raise HTTPException(423, VOLVER_A_PONER) from error
+    if llave.rol == "empleado":
+        frenar_empleado(usuario)  # cuenta suspendida: el empleado queda afuera (el dueño puede mirar)
+    return llave
 
 
 def llave_requerida(llave: Llave | None = Depends(llave_opcional)) -> Llave:

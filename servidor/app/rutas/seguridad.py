@@ -20,6 +20,7 @@ from .. import cifrado
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario, leer
 from ..cifrado import ClaveIncorrecta, Llave
+from ..cuenta_suspendida import MENSAJE_EMPLEADO
 from ..formato import a_camel
 from ..llaves import (
     abrir_comercio_con_dueno,
@@ -230,11 +231,14 @@ def llave_de_empleado(comercio_id: int, datos: Codigo, usuario: Usuario = Depend
     revisar_traba(traba, "el código")
     comercio, filas = leer(
         usuario,
-        ("select id from public.comercios where id = %s", (comercio_id,)),
+        # De paso (en el mismo viaje): si la cuenta está suspendida, los empleados no entran
+        ("select id, privado.estoy_suspendido() as suspendida from public.comercios where id = %s", (comercio_id,)),
         ("select sal_empleado, clave_empleado from public.claves_comercio where comercio_id = %s", (comercio_id,)),
     )
     if not comercio:
         raise HTTPException(404, "No existe ese comercio.")
+    if comercio[0]["suspendida"]:
+        raise HTTPException(403, MENSAJE_EMPLEADO)
     claves = filas[0] if filas else None
     if claves is None or claves["clave_empleado"] is None:
         raise HTTPException(409, "El jefe todavía no eligió el código de empleados de este comercio.")

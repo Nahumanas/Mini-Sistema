@@ -45,6 +45,20 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 - Las sumas que antes hacía la base (efectivo del arqueo, del relevo) y los "ordenar por nombre" ahora los hace la API,
   porque la base ya no ve esos números.
 
+## Pantalla de administrador y cuentas suspendidas
+
+- `/admin` en la página, rutas `/admin/...` en la API. Solo para las cuentas de la tabla `privado.administradores`
+  (se carga a mano en el SQL Editor, ver el final de la migración `20261106000000_super_admin.sql`). A cualquier otro
+  la API le contesta 404. Cada función `privado.admin_*` de la base revisa lo mismo por su cuenta.
+- Plan, vencimiento y suspensión de cada dueño: tabla `privado.clientes` (un dueño no la puede leer ni cambiar directo).
+- **Suspendido = solo lectura**: un disparador en cada tabla de `public` corta altas, cambios y borrados de ese dueño
+  (error `CUENTA_SUSPENDIDA` → 403 con un mensaje claro). Ver y exportar sigue andando. Los empleados no entran
+  (ni con una llave que ya tenían). Las ventas sin conexión quedan en la cola y se mandan al reactivar.
+  Si se crea una tabla nueva en `public`, su migración tiene que agregarle el mismo disparador.
+- Resetear PIN: solo si el dueño NO tiene los datos cifrados (si los tiene, solo él puede, con su código de recuperación).
+- Invitar: la API llama a Supabase (`/auth/v1/invite`) con `SUPABASE_SECRET_KEY`. Sin esa variable, se invita con
+  "Invite user" en Supabase y después se carga el plan con el lápiz.
+
 ## Avisos por Telegram (etapa 6)
 
 - Un solo bot para todo Mantenete; su clave (`TELEGRAM_BOT_TOKEN`) va solo en Render. Sin ella la API anda igual, sin avisos.
@@ -141,6 +155,8 @@ Con la API corriendo, la lista completa está en `/docs`.
 | `PIMIENTA_CIFRADO` | Botón **Generate** de Render (32 caracteres o más). **No se cambia nunca** y se guarda una copia en papel: si se pierde, los PIN dejan de abrir los datos y cada dueño tiene que usar su frase | **Sí** |
 | `SECRETO_SESION` | Botón **Generate** de Render. Si se cambia no se pierde nada: todos vuelven a poner su PIN o código | **Sí** |
 | `TELEGRAM_BOT_TOKEN` | La clave del bot de Telegram (la da @BotFather). Sin ella no se mandan avisos | **Sí** |
+| `SUPABASE_SECRET_KEY` | Supabase → Project Settings → **API Keys** → *Secret keys* (`sb_secret_...`). Solo para "Invitar cliente" desde la pantalla de administrador. Saltea todas las reglas RLS: **nunca** en Vercel ni en GitHub | **Sí** |
+| `URL_SISTEMA` | Opcional: a dónde lleva el mail de invitación (por defecto `https://mantenete-app.vercel.app`) | No |
 
 Y en **Vercel**, para que la página use la API: `NEXT_PUBLIC_API_URL` = la dirección de la API (no es secreta).
 Sin esa variable la página sigue como demo aunque el dueño entre con Gmail.

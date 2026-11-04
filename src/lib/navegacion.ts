@@ -13,6 +13,7 @@ import {
   Package,
   Receipt,
   Settings,
+  ShieldCheck,
   Users,
   Store,
   Tag,
@@ -73,6 +74,9 @@ export const MENU: Grupo[] = [
 
 // "Configuración" no va en el menú de arriba: queda anclada abajo de todo en la barra lateral
 export const CONFIGURACION: Seccion = { titulo: "Configuración", ruta: "/configuracion", icono: Settings, soloJefe: true };
+
+// La pantalla de administrador (solo Nahuel): va aparte, fuera del marco del sistema (ver app/admin)
+export const ADMINISTRADOR: Seccion = { titulo: "Administrador", ruta: "/admin", icono: ShieldCheck, soloJefe: true };
 
 export const SECCIONES: Seccion[] = [...MENU.flatMap((g) => g.secciones), CONFIGURACION];
 

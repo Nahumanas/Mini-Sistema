@@ -11,6 +11,7 @@ import { useInterfaz } from "@/store/interfaz";
 import { useConexion, useNube } from "@/store/nube";
 import { Boton } from "../ui/base";
 import { BannerSinConexion } from "./BannerSinConexion";
+import { BannerSuspendida } from "./BannerSuspendida";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
@@ -76,6 +77,7 @@ export function Marco({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />
         <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8">
+          <BannerSuspendida />
           <BannerSinConexion />
           <ConPermiso>{children}</ConPermiso>
         </main>

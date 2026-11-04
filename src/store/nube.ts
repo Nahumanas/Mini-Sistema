@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { api, type DatosDeInicio, ErrorDeApi, hayApi } from "@/lib/api";
-import { alGuardarLlave, llaveGuardada } from "@/lib/llave";
+import { alGuardarLlave, borrarLlave, llaveGuardada } from "@/lib/llave";
 import { guardarFoto, leerFoto } from "@/lib/sin-conexion/foto";
 import { recontarCola, sincronizar } from "@/lib/sin-conexion/sincronizar";
 import { hayNube } from "@/lib/supabase";
@@ -10,6 +10,7 @@ import { useSesion } from "./comercio";
 import { useConexionRed, vigilarConexion } from "./conexion";
 import { useCuenta } from "./cuenta";
 import { useDatos } from "./datos";
+import { SIN_PLAN, useSuscripcion } from "./suscripcion";
 
 // La conexión con la nube (paso 5, etapa 4): cuando el dueño tiene la cuenta abierta (Gmail) y está
 // configurada la API, se traen sus datos de la API y las pantallas trabajan con ellos.
@@ -26,12 +27,20 @@ import { useDatos } from "./datos";
  * pedir() la borra sola y se pide de nuevo sin ella.
  */
 async function traerInicio() {
+  let datos: DatosDeInicio;
   try {
-    return await api.inicio();
+    datos = await api.inicio();
   } catch (err) {
-    if (err instanceof ErrorDeApi && err.estado === 423) return api.inicio();
-    throw err;
+    if (!(err instanceof ErrorDeApi)) throw err;
+    // 403 con una llave de empleado: la cuenta está suspendida y los empleados no entran. Se borra la llave
+    // (se cierra el turno) y se traen los datos sin ella: la pantalla de ingreso le explica por qué.
+    if (err.estado === 403 && llaveGuardada()) borrarLlave();
+    else if (err.estado !== 423) throw err;
+    datos = await api.inicio();
   }
+  const { admin = false, suspendido = false, plan = null, vence = null } = datos.dueno;
+  useSuscripcion.setState({ admin, suspendido, plan, vence });
+  return datos;
 }
 
 /** Después de poner el PIN o el código (ya hay llave): se traen los datos del negocio, ahora abiertos. */
@@ -107,6 +116,7 @@ export const useNube = create<EstadoNube>()((set, get) => ({
   apagar: () => {
     if (get().estado === "apagada") return;
     set({ estado: "apagada", error: "" });
+    useSuscripcion.setState(SIN_PLAN);
     if (useDatos.getState().modo === "nube") {
       useCarrito.setState({ carritos: {} });
       void useDatos.getState().volverALaDemo();

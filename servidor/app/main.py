@@ -9,12 +9,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from psycopg import errors
 
-from . import config
+from . import config, cuenta_suspendida
 from .base import cerrar_pool, pool
 from .cifrado import FaltaConfigurar
-from .rutas import (caja, clases, comercios, compras, cuenta, inicio, productos, promos, reservas_web, seguridad, socios, telegram,
-                    vencimientos, ventas)
+from .rutas import (admin, caja, clases, comercios, compras, cuenta, inicio, productos, promos, reservas_web, seguridad, socios,
+                    telegram, vencimientos, ventas)
 
 
 @asynccontextmanager
@@ -41,6 +42,10 @@ def cifrado_sin_configurar(_pedido: Request, error: FaltaConfigurar):
     return JSONResponse(status_code=503, content={"detail": "El cifrado todavía no está listo en el servidor. Avisale a Nahuel."})
 
 
+# Cuenta suspendida (solo lectura): la base frena el cambio y acá se convierte en un mensaje claro (403).
+app.add_exception_handler(errors.RaiseException, cuenta_suspendida.manejar)
+
+
 @app.get("/salud", tags=["Salud"])
 def salud():
     """Render la consulta para saber si la API está viva (y si llega a la base)."""
@@ -49,5 +54,5 @@ def salud():
     return {"ok": True}
 
 
-for modulo in (inicio, cuenta, seguridad, telegram, comercios, productos, caja, ventas, compras, vencimientos, promos, socios, clases, reservas_web):
+for modulo in (admin, inicio, cuenta, seguridad, telegram, comercios, productos, caja, ventas, compras, vencimientos, promos, socios, clases, reservas_web):
     app.include_router(modulo.router)
