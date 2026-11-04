@@ -3,8 +3,8 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight, CalendarClock, Check, Dumbbell, FileSpreadsheet, Gift, Globe, Lock, LogIn, MessageCircle, Package, Percent, RefreshCw, Send, ShoppingCart, Store, Users } from "lucide-react";
 import { CONTACTO_PRINCIPAL, linkWhatsapp, whatsappLegible } from "@/lib/contacto";
-import { pesos } from "@/lib/formato";
-import { PRECIO_MENSUAL, PROMO_PLAN } from "@/lib/plan";
+import { PROMO_PLAN } from "@/lib/plan";
+import { PreciosPlan } from "./PreciosPlan";
 import { LINK_INGRESAR } from "@/lib/direcciones";
 import { MenuCelular } from "./MenuCelular";
 import { FormularioContacto } from "./FormularioContacto";
@@ -250,16 +250,13 @@ function Caracteristicas() {
 const INCLUYE = ["Caja con lector de código de barras", "Stock, compras, gastos y vencimientos", "Reportes de ganancias y Excel", "Empleados con permisos y relevos", "Sucursales sin costo extra"];
 
 function Planes() {
-  const whatsappContratar = linkWhatsapp(
-    PROMO_PLAN ? "Hola, quiero contratar el Plan Mantenete con el primer mes gratis para mi comercio." : "Hola, quiero contratar el Plan Mantenete para mi comercio.",
-  );
   return (
     <section id="planes" className="scroll-mt-16 border-y border-[#DCE6F0] bg-[#F3F7FB]">
       <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-24">
         <div className="mx-auto max-w-2xl text-center">
           <Etiqueta>Planes</Etiqueta>
           <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-[#0F2340] sm:text-4xl">Un solo plan, todo incluido</h2>
-          <p className="mt-4 text-lg text-[#475569]">Abono mensual, sin tope de ventas. Las sucursales no se cobran aparte.</p>
+          <p className="mt-4 text-lg text-[#475569]">Abono mensual, sin tope de ventas. Si contratás varios meses juntos, pagás menos.</p>
         </div>
         <div className="mx-auto mt-12 max-w-3xl rounded-2xl border-2 border-[#1C7BD6] bg-white p-7 shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#1767b4] hover:shadow-xl hover:shadow-[#1C7BD6]/15 sm:p-9">
           {PROMO_PLAN && (
@@ -268,26 +265,10 @@ function Planes() {
               {PROMO_PLAN}
             </p>
           )}
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div className="max-w-md">
-              <h3 className="text-2xl font-bold text-[#0F2340]">Plan Mantenete</h3>
-              {PRECIO_MENSUAL !== null && (
-                <p className="mt-2 flex items-baseline gap-1.5">
-                  <span className="text-4xl font-extrabold tracking-tight text-[#0F2340]">{pesos(PRECIO_MENSUAL)}</span>
-                  <span className="text-lg font-medium text-[#475569]">/ mes</span>
-                </p>
-              )}
-              <p className="mt-2 text-[#475569]">Todo lo necesario para operar la caja, controlar el stock y ver tus ganancias.</p>
-            </div>
-            <a
-              href={whatsappContratar}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#1C7BD6] px-6 font-semibold text-white transition-colors hover:bg-[#1767b4]"
-            >
-              <MessageCircle className="size-5" />
-              Contratar plan
-            </a>
+          <h3 className="text-2xl font-bold text-[#0F2340]">Plan Mantenete</h3>
+          <p className="mt-1.5 text-[#475569]">Todo lo necesario para operar la caja, controlar el stock y ver tus ganancias.</p>
+          <div className="mt-6">
+            <PreciosPlan />
           </div>
           <ul className="mt-8 grid gap-x-8 gap-y-3 sm:grid-cols-2">
             {INCLUYE.map((t) => (
