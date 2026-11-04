@@ -1,13 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, CalendarClock, Check, Dumbbell, FileSpreadsheet, Globe, Lock, LogIn, Mail, MessageCircle, Package, Percent, RefreshCw, Send, ShoppingCart, Store, Users } from "lucide-react";
+import { ArrowRight, CalendarClock, Check, Dumbbell, FileSpreadsheet, Globe, Lock, LogIn, MessageCircle, Package, Percent, RefreshCw, Send, ShoppingCart, Store, Users } from "lucide-react";
 import { CONTACTO_PRINCIPAL, linkWhatsapp, whatsappLegible } from "@/lib/contacto";
 import { pesos } from "@/lib/formato";
 import { PRECIO_MENSUAL } from "@/lib/plan";
 import { LINK_INGRESAR } from "@/lib/direcciones";
 import { MenuCelular } from "./MenuCelular";
 import { FormularioContacto } from "./FormularioContacto";
+import { MailProtegido } from "./MailProtegido";
 import { Cascada, CascadaItem, ConfigAnimaciones, EntradaSuave, Presionable } from "./Animaciones";
 
 // Página de presentación de Mantenete (lo primero que ve alguien que entra a la dirección).
@@ -310,39 +311,30 @@ function DatoDeContacto({ icono: Icono, valor, href }: { icono: LucideIcon; valo
   );
 }
 
-// Una sola vía de contacto, con nombre de marca.
+// Segunda opción, para quien prefiere escribir directo en lugar de usar el formulario.
 function TarjetaContacto() {
   const c = CONTACTO_PRINCIPAL;
   return (
     <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.04] p-5">
       <p className="text-sm font-semibold tracking-[0.18em] text-[#43DDE3] uppercase">{c.nombre}</p>
+      <p className="mt-1 text-[15px] text-[#B9C7DA]">¿Preferís escribirnos directo?</p>
       <div className="mt-3 space-y-2.5">
         <DatoDeContacto icono={MessageCircle} valor={`WhatsApp Comercial ${whatsappLegible(c.whatsapp)}`} href={linkWhatsapp("Hola, quiero saber más sobre Mantenete.")} />
-        <DatoDeContacto icono={Mail} valor={c.mail} href={`mailto:${c.mail}`} />
+        <MailProtegido className="flex min-w-0 items-center gap-2.5 text-[15px] hover:text-[#43DDE3]" />
       </div>
     </div>
   );
 }
 
 function Contacto() {
-  const whatsapp = linkWhatsapp("Hola, quiero saber más sobre Mantenete.");
   return (
     <section id="contacto" className="scroll-mt-16 bg-[#0F2340] text-white">
       <div className="mx-auto grid max-w-6xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:py-24">
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight sm:text-[2.6rem]">¿Listo para ordenar tu local?</h2>
-          <p className="mt-4 text-lg text-[#B9C7DA]">Probá la demo ahora mismo, sin registrarte (PIN 1234). Y si querés, escribinos y te ayudamos a cargar tu comercio.</p>
+          <p className="mt-4 text-lg text-[#B9C7DA]">Completá el formulario y te contactamos para ayudarte a cargar tu comercio. Mientras tanto, probá la demo sin registrarte (PIN 1234).</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <BotonDemo tamano="medio" />
-            <a
-              href={whatsapp}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-12 items-center gap-2 rounded-lg border border-white/20 px-6 font-semibold transition-colors hover:bg-white/5"
-            >
-              <MessageCircle className="size-5" />
-              Hablar por WhatsApp
-            </a>
           </div>
           <div className="mt-10 max-w-md">
             <TarjetaContacto />

@@ -52,12 +52,7 @@ export function CascadaItem({ children, className }: { children: React.ReactNode
 // Se agranda un poquito al pasar el mouse y se achica al tocarlo.
 export function Presionable({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <motion.div
-      className={className ?? "inline-flex"}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ type: "spring", stiffness: 400, damping: 25 }}
-    >
+    <motion.div className={className ?? "inline-flex"} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} transition={{ type: "spring", stiffness: 400, damping: 25 }}>
       {children}
     </motion.div>
   );

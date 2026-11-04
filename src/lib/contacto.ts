@@ -5,7 +5,10 @@ export type Contacto = {
   nombre: string;
   // WhatsApp solo con números y con código de país (54 9 + característica sin 0 + número sin 15)
   whatsapp: string;
-  mail: string;
+  // El correo va partido en dos (usuario y dominio) para que no aparezca entero en el código
+  // ni en la página: así los robots que juntan correos para mandar spam no lo encuentran.
+  // Se arma recién en el navegador de la persona (ver MailProtegido.tsx).
+  mail: { usuario: string; dominio: string };
 };
 
 // Una sola vía de contacto con nombre de marca (no de una persona).
@@ -13,8 +16,19 @@ export type Contacto = {
 export const CONTACTO_PRINCIPAL: Contacto = {
   nombre: "Atención al Cliente",
   whatsapp: "5492974435601",
-  mail: "nahumansilla2@gmail.com",
+  mail: { usuario: "nahumansilla2", dominio: "gmail.com" },
 };
+
+// Arma el correo completo. Usarlo SOLO en el navegador (componentes "use client"),
+// nunca en lo que se arma en el servidor, para que no quede escrito en la página.
+export function armarMail(c: Contacto = CONTACTO_PRINCIPAL): string {
+  return [c.mail.usuario, c.mail.dominio].join(String.fromCharCode(64));
+}
+
+// Link para abrir el correo con el asunto y el mensaje ya escritos.
+export function linkMail(asunto: string, cuerpo = "", c: Contacto = CONTACTO_PRINCIPAL): string {
+  return `mailto:${armarMail(c)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+}
 
 // Arma el link de WhatsApp con un mensaje ya escrito.
 export function linkWhatsapp(mensaje: string, persona: Contacto = CONTACTO_PRINCIPAL): string {
