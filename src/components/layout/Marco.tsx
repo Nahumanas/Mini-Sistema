@@ -9,6 +9,7 @@ import { MINUTOS_SIN_USO_JEFE, sesionVencida, useComercioActivo, useSesion } fro
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { useConexion, useNube } from "@/store/nube";
+import { useSuscripcion } from "@/store/suscripcion";
 import { Boton } from "../ui/base";
 import { BannerSinConexion } from "./BannerSinConexion";
 import { BannerSuspendida } from "./BannerSuspendida";
@@ -61,12 +62,15 @@ export function Marco({ children }: { children: ReactNode }) {
   const sesion = useSesion((s) => s.sesion);
   const router = useRouter();
 
+  // La cuenta del administrador (Nahuel) no usa el sistema de los comercios: va a su panel
+  const admin = useSuscripcion((s) => s.admin);
   useEffect(() => {
-    if (listos && !conexion.esperando && !sesion) router.replace("/ingresar");
-  }, [listos, conexion.esperando, sesion, router]);
+    if (admin) router.replace("/admin");
+    else if (listos && !conexion.esperando && !sesion) router.replace("/ingresar");
+  }, [admin, listos, conexion.esperando, sesion, router]);
   useCierrePorInactividad(listos);
 
-  if (conexion.esperando) return <Conectando />;
+  if (conexion.esperando || admin) return <Conectando />;
   if (!listos || !sesion) {
     return <div className="h-full bg-fondo" aria-busy />;
   }

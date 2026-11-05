@@ -6,11 +6,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { LogOut, Moon, Sun, X } from "lucide-react";
 import { SelectorSucursal } from "./Topbar";
-import { ADMINISTRADOR, CONFIGURACION, estaEnLaNube, MENU, pantallaDeEntrada, puedeVer, type Seccion } from "@/lib/navegacion";
+import { CONFIGURACION, estaEnLaNube, MENU, pantallaDeEntrada, puedeVer, type Seccion } from "@/lib/navegacion";
 import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
-import { useSuscripcion } from "@/store/suscripcion";
 
 // La barra de la izquierda, en tres partes (de arriba abajo):
 // 1. Fija arriba: el logo y el selector de comercio (así se ve siempre en qué comercio se está trabajando).
@@ -25,7 +24,6 @@ export function Sidebar() {
   const comercio = useComercioActivo();
   const esJefe = sesion?.rol === "jefe";
   const enNube = useDatos((s) => s.modo === "nube");
-  const admin = useSuscripcion((s) => s.admin);
 
   useEffect(leerTema, [leerTema]);
   useEffect(leerMenu, [leerMenu]);
@@ -96,8 +94,6 @@ export function Sidebar() {
 
         {/* Anclado abajo de todo: no se mueve aunque el menú se desplace */}
         <div className={`flex shrink-0 flex-col gap-0.5 border-t border-borde px-3 pb-3 pt-3 ${menuAchicado ? "lg:px-2" : ""}`}>
-          {/* Solo en la cuenta de Nahuel (la API igual revisa que sea administrador) */}
-          {esJefe && admin && enNube && <ItemMenu seccion={ADMINISTRADOR} activo={false} chico={menuAchicado} />}
           {esJefe && <ItemMenu seccion={CONFIGURACION} activo={ruta === CONFIGURACION.ruta} chico={menuAchicado} />}
           <button
             onClick={() => {

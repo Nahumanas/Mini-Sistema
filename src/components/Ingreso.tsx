@@ -14,6 +14,7 @@ import { useConexionRed } from "@/store/conexion";
 import { useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { traerDatosConLlave, useConexion } from "@/store/nube";
+import { useSuscripcion } from "@/store/suscripcion";
 import { Conectando, SinConexion, useDatosListos } from "./layout/Marco";
 import { RUBROS } from "./layout/Topbar";
 import { ActivarCifrado } from "./seguridad/ActivarCifrado";
@@ -78,6 +79,12 @@ export function Ingreso() {
   const pideDemo = useSearchParams().has("demo");
   const [yendoAGoogle, setYendoAGoogle] = useState(false);
 
+  // La cuenta del administrador (Nahuel) va directo a su panel: no elige comercio, ni pone PIN de turno
+  const admin = useSuscripcion((s) => s.admin);
+  useEffect(() => {
+    if (admin) router.replace("/admin");
+  }, [admin, router]);
+
   useEffect(() => {
     // Se lee la sesión recién (la conexión pudo cerrarla en este mismo momento por ser de la demo)
     const actual = useSesion.getState().sesion;
@@ -91,7 +98,7 @@ export function Ingreso() {
     return () => clearTimeout(t);
   }, [restante]);
 
-  if (conexion.esperando) return <Conectando />;
+  if (conexion.esperando || admin) return <Conectando />;
   if (!listos) return <div className="min-h-full bg-fondo" aria-busy />;
   if (conexion.estado === "error") {
     return (
