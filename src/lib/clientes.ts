@@ -31,3 +31,22 @@ export function estadoDe(c: Pick<ClienteAdmin, "suspendido" | "vence">, dia = ho
   if (faltan < 0) return "vencido";
   return faltan <= 5 ? "por_vencer" : "activo";
 }
+
+/** Cuánto se le cobra al vencer: su plan; si está en prueba (o sin plan), lo que sale 1 mes. */
+export function precioACobrar(c: Pick<ClienteAdmin, "plan">) {
+  return c.plan && c.plan !== "prueba" ? PLANES[c.plan].precio : PLANES.mensual.precio;
+}
+
+/** Lo que entra por mes con los clientes que pagan (el de 3 y 6 meses se reparte por mes). Los suspendidos no cuentan. */
+export function ingresoMensual(clientes: Pick<ClienteAdmin, "plan" | "suspendido">[]) {
+  return Math.round(
+    clientes.reduce((t, c) => (c.suspendido || !c.plan || c.plan === "prueba" ? t : t + PLANES[c.plan].precio / PLANES[c.plan].meses), 0),
+  );
+}
+
+/** Los cobros que vienen: vencidos y los que vencen en los próximos `dias` días (sin los suspendidos), del más urgente al menos. */
+export function paraCobrar<T extends Pick<ClienteAdmin, "vence" | "suspendido">>(clientes: T[], dias = 30, dia = hoy()) {
+  return clientes
+    .filter((c) => c.vence && !c.suspendido && diasEntre(dia, c.vence) <= dias)
+    .sort((a, b) => (a.vence ?? "").localeCompare(b.vence ?? ""));
+}
