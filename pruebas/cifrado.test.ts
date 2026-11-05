@@ -102,14 +102,22 @@ describe("la nube con cifrado", () => {
     expect(llaveGuardada()).toBe("llave-jefe");
   });
 
-  it("el empleado entra con el código: bien guarda la llave de su comercio, mal no", async () => {
+  it("el empleado entra con su nombre de la lista y el código: bien guarda la llave de su comercio, mal no", async () => {
     datos().usarNube(NUBE);
     api.llaveEmpleado.mockResolvedValueOnce({ ok: false });
-    expect(await entrarConCodigo(50, "111111")).toBe(false);
+    expect(await entrarConCodigo(50, "111111", 3)).toBeNull();
     expect(llaveGuardada()).toBeNull();
-    api.llaveEmpleado.mockResolvedValueOnce({ ok: true, llave: "llave-kiosco", vence: MAÑANA });
-    expect(await entrarConCodigo(50, "739152")).toBe(true);
+    api.llaveEmpleado.mockResolvedValueOnce({ ok: true, empleado: { id: 3, nombre: "Laura" }, llave: "llave-kiosco", vence: MAÑANA });
+    expect(await entrarConCodigo(50, "739152", 3)).toBe("Laura");
+    expect(api.llaveEmpleado).toHaveBeenLastCalledWith(50, "739152", 3);
     expect(llaveGuardada()).toBe("llave-kiosco");
+  });
+
+  it("si el nombre ya no está en la lista, la API no lo deja entrar y no queda llave", async () => {
+    datos().usarNube(NUBE);
+    api.llaveEmpleado.mockRejectedValueOnce(new Error("Tu nombre no está en la lista de empleados de este comercio."));
+    await expect(entrarConCodigo(50, "739152", 99)).rejects.toThrow("no está en la lista");
+    expect(llaveGuardada()).toBeNull();
   });
 
   it("el jefe elige el código: se revisa antes de mandarlo y queda anotado", async () => {

@@ -3,7 +3,7 @@ los horarios, el relevo de turno y el Excel de productos. Siempre con un dueño 
 
 import re
 
-from .conftest import crear_usuario
+from .conftest import cargar_empleado, crear_usuario
 from .test_api import _kiosco
 
 FECHA_CON_HORA = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")  # como ahora() de la página: "2026-10-31T18:05"
@@ -115,6 +115,7 @@ def test_horarios_turnos_y_permisos(cliente):
 
 
 def test_relevo_de_turno(cliente):
+    """El relevo, y que la caja solo la reciba alguien de la lista de empleados (o el jefe)."""
     ana = crear_usuario("ana.relevo@gmail.com")
     beto = crear_usuario("beto.relevo@gmail.com")
     comercio, alfajor = _kiosco(cliente, ana)
@@ -128,16 +129,26 @@ def test_relevo_de_turno(cliente):
 
     assert cliente.post(f"/comercios/{cid}/caja/relevo", json={**relevo, "entra": "ana"}, headers=ana).status_code == 422
     assert cliente.post(f"/comercios/{cid}/caja/relevo", json=relevo, headers=beto).status_code == 404
+    # Solo recibe la caja alguien de la lista que cargó el jefe (o el jefe): Martina todavía no está cargada
+    r = cliente.post(f"/comercios/{cid}/caja/relevo", json=relevo, headers=ana)
+    assert r.status_code == 422 and "no está en la lista" in r.json()["detail"]
+    cargar_empleado(cliente, ana, cid, "Martina")
+    pepe = cargar_empleado(cliente, ana, cid, "Pepe")
+    cliente.delete(f"/empleados/{pepe}", headers=ana)  # dado de baja: ya no puede recibir
+    assert cliente.post(f"/comercios/{cid}/caja/relevo", json={**relevo, "entra": "Pepe"}, headers=ana).status_code == 422
+    assert cliente.post(f"/comercios/{cid}/caja/relevo", json={**relevo, "entra": "Inventado"}, headers=ana).status_code == 422
 
-    r = cliente.post(f"/comercios/{cid}/caja/relevo", json={**relevo, "efectivoContado": 3800, "turno": "Mañana"}, headers=ana).json()
+    r = cliente.post(f"/comercios/{cid}/caja/relevo", json={**relevo, "entra": " martina ", "efectivoContado": 3800, "turno": "Mañana"},
+                     headers=ana).json()
     assert r["relevo"]["sale"] == "Ana" and r["relevo"]["entra"] == "Martina" and r["relevo"]["turno"] == "Mañana"
     assert r["relevo"]["esperado"] == 4000 and r["relevo"]["diferencia"] == -200
     assert r["caja"]["responsable"] == "Martina" and r["caja"]["cerrada"] is None
 
     # El turno de Martina arranca con lo que se contó (3800) y suma solo lo que ella cobró
     cliente.post(f"/comercios/{cid}/ventas", json=_venta(alfajor["id"]), headers=ana)  # 1500 en efectivo
-    r2 = cliente.post(f"/comercios/{cid}/caja/relevo", json={"entra": "Ana", "efectivoContado": 5300}, headers=ana).json()
-    assert r2["relevo"]["esperado"] == 5300 and r2["relevo"]["diferencia"] == 0
+    # El jefe también puede recibir la caja (sin nombre en su ficha, entra como "Jefe")
+    r2 = cliente.post(f"/comercios/{cid}/caja/relevo", json={"entra": "Jefe", "efectivoContado": 5300}, headers=ana).json()
+    assert r2["relevo"]["esperado"] == 5300 and r2["relevo"]["diferencia"] == 0 and r2["caja"]["responsable"] == "Jefe"
     assert len(cliente.get("/inicio", headers=ana).json()["relevos"]) == 2
 
 

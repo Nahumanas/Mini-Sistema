@@ -193,6 +193,7 @@ def test_dos_compus_abren_la_caja_a_la_vez(api):
 def test_relevo_mientras_se_vende(api):
     """El que se va cuenta la plata mientras la otra compu sigue cobrando: ninguna venta queda sin contar."""
     c, cid, (cafe,) = _local(api, "relevo@gmail.com", [{"nombre": "Café", "precioVenta": 800, "stock": 1000}], caja=2000)
+    assert c.post(f"/comercios/{cid}/empleados", json={"nombre": "Beto"}).status_code == 201  # recibe la caja: tiene que estar cargado
     pedidos = [lambda: c.post(f"/comercios/{cid}/ventas", json=_venta(cafe["id"]))] * (COMPUS - 1)
     pedidos.insert(2, lambda: c.post(f"/comercios/{cid}/caja/relevo", json={"entra": "Beto", "efectivoContado": 0}))
     respuestas = a_la_vez(pedidos)

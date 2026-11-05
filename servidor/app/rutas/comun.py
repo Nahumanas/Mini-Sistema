@@ -25,6 +25,26 @@ LEER_COMERCIO = "select * from public.comercios where id = %s"
 LEER_CLAVES = "select comercio_id, clave_dueno from public.claves_comercio"
 
 
+# Los empleados que el jefe cargó en el comercio (los dados de baja no cuentan): con eso se controla quién abre
+# la caja o la recibe en un relevo (no vale un nombre inventado).
+LEER_EMPLEADOS = "select nombre from public.empleados where comercio_id = %s and activo"
+# Lo mismo y, además, el nombre del jefe (él también puede recibir la caja). Si el dueño no tiene nombre,
+# entra como "Jefe", igual que en la página (Ingreso.tsx).
+LEER_QUIENES_ATIENDEN = """
+  select coalesce(nullif(trim((select nombre from public.duenos where usuario_id = (select auth.uid()))), ''), 'Jefe') as jefe,
+         coalesce((select array_agg(nombre) from public.empleados where comercio_id = %s and activo), '{}') as empleados"""
+
+
+def de_la_lista(nombre: str, validos: list[str]) -> str:
+    """El nombre tal como lo cargó el jefe (sin importar mayúsculas), o 422 si no está en la lista."""
+    buscado = nombre.strip().lower()
+    for valido in validos:
+        if valido.strip().lower() == buscado:
+            return valido.strip()
+    raise HTTPException(422, f"{nombre.strip() or 'Ese nombre'} no está en la lista de empleados de este comercio. "
+                             "El jefe lo puede agregar en Mis comercios.")
+
+
 def existe(comercios: list[dict]) -> dict:
     """El comercio leído con LEER_COMERCIO, o 404 como comercio_mio."""
     if not comercios:
