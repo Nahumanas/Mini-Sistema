@@ -5,7 +5,9 @@ no la página: la página solo esconde el menú. Cada función admin_* de la bas
 llama sea administrador; si no lo es, acá se contesta 404 (como si la página no existiera).
 
 Lo que puede hacer: ver todos los clientes con su plan y vencimiento, suspender (solo lectura) o reactivar,
-borrar el PIN de jefe (si el cliente no tiene los datos cifrados) e invitar clientes nuevos por mail.
+borrar el PIN de jefe (si el cliente no tiene los datos cifrados), invitar clientes nuevos por mail y borrar un
+cliente: una invitación que nunca se usó (por ejemplo, un mail mal escrito) o, si ya está suspendido y se escribe
+su mail para confirmar, un cliente que se dio de baja (se borran todos sus datos).
 Nunca ve los datos de los comercios: están cifrados y el administrador no tiene sus llaves.
 """
 
@@ -31,6 +33,9 @@ router = APIRouter(prefix="/admin", tags=["Administrador"])
 NO_EXISTE = "No existe esa página."
 PLANES = Literal["prueba", "mensual", "trimestral", "semestral"]
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# Errores de tipeo comunes en el mail (un "gmail.con" no le llega a nadie): se avisan antes de invitar.
+TERMINACIONES_MAL = (".con", ".cmo", ".ocm", ".vom", ".comm", ".cm")
+GMAIL_MAL_ESCRITO = {"gmial", "gamil", "gmal", "gmai", "gnail", "gmaill", "gmail"}
 
 
 def administrador(usuario: Usuario = Depends(usuario_actual)) -> Usuario:
@@ -53,7 +58,16 @@ def _llamar(usuario: Usuario, sql: str, params: tuple):
     except errors.NoDataFound:
         raise HTTPException(404, "No existe ese cliente.") from None
     except errors.RaiseException as error:
-        if (error.diag.message_primary or "") == "CIFRADO":
+        mensaje = error.diag.message_primary or ""
+        if mensaje == "NO_SUSPENDIDO":
+            raise HTTPException(
+                409, "Ese cliente ya entró o tiene comercios: para borrarlo, primero suspendelo (por ejemplo, cuando avisa la baja)."
+            ) from None
+        if mensaje == "CONFIRMAR_MAIL":
+            raise HTTPException(422, "Para borrarlo, escribí su mail exacto. Se borran todos sus datos y no se puede deshacer.") from None
+        if mensaje == "ES_ADMIN":
+            raise HTTPException(409, "No podés borrar tu propia cuenta de administrador.") from None
+        if mensaje == "CIFRADO":
             raise HTTPException(
                 409,
                 "Este cliente tiene sus datos cifrados: su PIN abre sus datos y ni vos podés cambiarlo. "
@@ -117,6 +131,33 @@ def resetear_pin(dueno_id: int, admin: Usuario = Depends(administrador)):
     return {"ok": True}
 
 
+def _revisar_tipeo(email: str) -> None:
+    """Frena los errores de tipeo más comunes del mail, para no invitar a un mail que no existe."""
+    dominio = email.rsplit("@", 1)[-1]
+    nombre_dominio = dominio.split(".", 1)[0]
+    sugerencia = None
+    if dominio.endswith(TERMINACIONES_MAL):
+        sugerencia = dominio.rsplit(".", 1)[0] + ".com"
+    if nombre_dominio in GMAIL_MAL_ESCRITO and dominio != "gmail.com":
+        sugerencia = "gmail.com"
+    if sugerencia:
+        usuario = email.rsplit("@", 1)[0]
+        raise HTTPException(422, f"Revisá el mail: ¿quisiste decir {usuario}@{sugerencia}?")
+
+
+class Borrar(BaseModel):
+    confirmarEmail: str = Field(default="", max_length=200)
+
+
+@router.post("/clientes/{dueno_id}/borrar")
+def borrar_cliente(dueno_id: int, datos: Borrar, admin: Usuario = Depends(administrador)):
+    """Borra un cliente. Una invitación que no se usó (nunca entró, sin comercios) se borra directo.
+    Un cliente que ya trabajó, solo si está suspendido y con su mail escrito para confirmar:
+    se borran TODOS sus datos y no se puede deshacer (la base lo revisa: privado.admin_borrar_cliente)."""
+    (fila,) = _llamar(admin, "select privado.admin_borrar_cliente(%s, %s) as email", (dueno_id, datos.confirmarEmail))
+    return {"ok": True, "email": fila["email"]}
+
+
 def invitar_en_supabase(email: str, nombre: str) -> str:
     """Le pide a Supabase que mande el mail de invitación (lo mismo que el botón "Invite user").
     Devuelve "invitado" o "ya_tenia_cuenta". Las pruebas reemplazan esta función."""
@@ -161,6 +202,7 @@ def invitar(datos: Plan, admin: Usuario = Depends(administrador)):
     """Manda el mail de invitación y anota el plan y el vencimiento. El cliente entra con Google con ese mail
     y crea sus comercios él mismo (así sus datos quedan cifrados con SU PIN desde el primer día)."""
     email = _validar(datos)
+    _revisar_tipeo(email)
     resultado = invitar_en_supabase(email, datos.nombre.strip())
     try:
         _llamar(admin, "select privado.admin_guardar_cliente(%s, %s, %s, %s)", (email, datos.nombre, datos.plan, datos.vence))

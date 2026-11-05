@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Lock } from "lucide-react";
 import { apiAdmin, type ClienteAdmin, type DatosCliente, type PlanCliente } from "@/lib/api";
 import { type Estado, PLANES, sumarMeses } from "@/lib/clientes";
@@ -55,7 +56,12 @@ export type Formulario = {
   reactivar?: boolean;
   duenoId?: number;
 };
-export type Confirmar = { tipo: "suspender" | "reactivar" | "pin"; cliente: ClienteAdmin };
+export type Confirmar = { tipo: "suspender" | "reactivar" | "pin" | "borrar"; cliente: ClienteAdmin };
+
+/** Una invitación que nunca se usó (no entró y no tiene comercios): se borra directo, por ejemplo si el mail estaba mal escrito. */
+export const invitacionSinUsar = (c: ClienteAdmin) => !c.esAdmin && !c.ingreso && c.comercios === 0;
+/** Se puede borrar: una invitación sin usar, o un cliente suspendido (por ejemplo, porque se dio de baja). */
+export const sePuedeBorrar = (c: ClienteAdmin) => !c.esAdmin && (invitacionSinUsar(c) || c.suspendido);
 
 export const formularioNuevo = (): Formulario => ({
   modo: "invitar",
@@ -137,7 +143,8 @@ export function FormularioCliente({ formulario, puedeInvitar, enviando, alCambia
         )}
         {!pago && (
           <>
-            <Campo etiqueta="Mail del cliente (Gmail)">
+            <Campo etiqueta="Mail del cliente (Gmail)"
+              ayuda={invitando ? "Revisalo bien: la invitación llega a este mail." : "El mail no se cambia. Si está mal escrito y todavía no entró, borrá la invitación (tacho) e invitá el correcto."}>
               <input type="email" required value={datos.email} disabled={!invitando} placeholder="cliente@gmail.com"
                 onChange={(e) => cambiar({ email: e.target.value })} className={claseInput} />
             </Campo>
@@ -184,10 +191,14 @@ export function ConfirmarAccion({ confirmar, enviando, alCerrar, alConfirmar }: 
   confirmar: Confirmar;
   enviando: boolean;
   alCerrar: () => void;
-  alConfirmar: () => void;
+  alConfirmar: (confirmarEmail?: string) => void;
 }) {
   const { tipo, cliente } = confirmar;
   const nombre = cliente.nombre || cliente.nombreDueno || cliente.email;
+  // Borrar a un cliente que ya trabajó borra todos sus datos: hay que escribir su mail para confirmar
+  const borraDatos = tipo === "borrar" && !invitacionSinUsar(cliente);
+  const [escrito, setEscrito] = useState("");
+  const mailOk = escrito.trim().toLowerCase() === cliente.email.toLowerCase();
   const textos = {
     suspender: {
       titulo: `¿Suspender a ${nombre}?`,
@@ -204,6 +215,17 @@ export function ConfirmarAccion({ confirmar, enviando, alCerrar, alConfirmar }: 
       detalle: "Se borra su PIN de jefe. La próxima vez que entre con su Gmail elige uno nuevo.",
       boton: "Resetear PIN",
     },
+    borrar: borraDatos
+      ? {
+          titulo: `¿Borrar a ${nombre} y TODOS sus datos?`,
+          detalle: `Se borran sus ${cliente.comercios === 1 ? "datos del comercio" : `${cliente.comercios} comercios`} (ventas, cajas, stock, gastos, socios…) y su cuenta. No se puede deshacer: los datos están cifrados y no queda ninguna copia. Si quiere guardarlos, que antes exporte su Excel (estando suspendido igual puede).`,
+          boton: "Borrar para siempre",
+        }
+      : {
+          titulo: `¿Borrar la invitación a ${cliente.email}?`,
+          detalle: "Ese mail ya no va a poder entrar. Se puede porque todavía no entró ni creó comercios, así que no se pierde ningún dato. Si el mail estaba mal escrito, después invitá el correcto.",
+          boton: "Borrar invitación",
+        },
   }[tipo];
   return (
     <Dialogo
@@ -213,12 +235,20 @@ export function ConfirmarAccion({ confirmar, enviando, alCerrar, alConfirmar }: 
       pie={
         <>
           <Boton variante="fantasma" onClick={alCerrar}>Cancelar</Boton>
-          <Boton variante={tipo === "suspender" ? "peligro" : "primario"} data-principal disabled={enviando} onClick={alConfirmar}>
+          <Boton variante={tipo === "suspender" || tipo === "borrar" ? "peligro" : "primario"} data-principal
+            disabled={enviando || (borraDatos && !mailOk)} onClick={() => alConfirmar(borraDatos ? escrito.trim() : undefined)}>
             {enviando ? "Un momento…" : textos.boton}
           </Boton>
         </>
       }
-    />
+    >
+      {borraDatos && (
+        <Campo etiqueta={`Para confirmar, escribí su mail: ${cliente.email}`}>
+          <input id="confirmar-mail" value={escrito} onChange={(e) => setEscrito(e.target.value)} autoComplete="off" spellCheck={false}
+            placeholder={cliente.email} className={claseInput} />
+        </Campo>
+      )}
+    </Dialogo>
   );
 }
 

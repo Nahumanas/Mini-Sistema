@@ -343,6 +343,10 @@ export const apiAdmin = {
   suspender: (duenoId: number, suspendido: boolean) =>
     pedir<{ ok: true; suspendido: boolean }>(`/admin/clientes/${duenoId}/suspension`, "PUT", { suspendido }),
   resetearPin: (duenoId: number) => pedir<{ ok: true }>(`/admin/clientes/${duenoId}/resetear-pin`, "POST"),
+  // Una invitación que nunca se usó (por ejemplo, un mail mal escrito) se borra directo. Un cliente que ya trabajó,
+  // solo si está suspendido y con su mail escrito para confirmar: se borran TODOS sus datos (la base lo revisa).
+  borrarCliente: (duenoId: number, confirmarEmail = "") =>
+    pedir<{ ok: true; email: string }>(`/admin/clientes/${duenoId}/borrar`, "POST", { confirmarEmail }),
 };
 
 /** La página del socio (sin cuenta): el link del gimnasio y su DNI. */

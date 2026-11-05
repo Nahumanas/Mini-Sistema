@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { KeyRound, Lock, LockOpen, Pencil, Plus, Search, Users } from "lucide-react";
+import { KeyRound, Lock, LockOpen, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
 import { apiAdmin, type ClienteAdmin } from "@/lib/api";
 import { estadoDe, PLANES } from "@/lib/clientes";
 import { ddmm } from "@/lib/fechas";
@@ -10,11 +10,13 @@ import { useAdmin } from "@/store/admin";
 import { Boton, claseInput, Encabezado, Kpi, Tabla, Vacio } from "../ui/base";
 import {
   type Confirmar, ConfirmarAccion, cuandoVence, EtiquetaEstado, type Formulario, FormularioCliente, formularioEditar, formularioNuevo,
-  guardarFormulario,
+  guardarFormulario, sePuedeBorrar,
 } from "./comun";
 
 // Panel de administrador → Clientes: todos los dueños con su plan, vencimiento y estado. Desde acá se invita,
-// se suspende (solo lectura) o reactiva, se resetea el PIN y se edita el plan.
+// se suspende (solo lectura) o reactiva, se resetea el PIN, se edita el plan y se borra: una invitación sin usar
+// (por ejemplo, un mail mal escrito: el mail no se edita, se borra y se invita el correcto) o un cliente suspendido
+// que se dio de baja (escribiendo su mail para confirmar: se borran todos sus datos).
 
 export function Clientes() {
   const { clientes, puedeInvitar, enviando, hacer } = useAdmin();
@@ -33,12 +35,14 @@ export function Clientes() {
     return n;
   }, [clientes]);
 
-  async function confirmarAccion() {
+  async function confirmarAccion(confirmarEmail?: string) {
     if (!confirmar) return;
     const { tipo, cliente } = confirmar;
     const nombre = cliente.nombre || cliente.email;
     const ok =
-      tipo === "pin"
+      tipo === "borrar"
+        ? await hacer(() => apiAdmin.borrarCliente(cliente.duenoId, confirmarEmail), `Listo: se borró ${cliente.email}.`)
+        : tipo === "pin"
         ? await hacer(() => apiAdmin.resetearPin(cliente.duenoId), `Listo: ${nombre} elige un PIN nuevo la próxima vez que entre.`)
         : await hacer(
             () => apiAdmin.suspender(cliente.duenoId, tipo === "suspender"),
@@ -176,6 +180,11 @@ function AccionesCliente({ cliente: c, enviando, alEditar, alConfirmar, clase }:
       />
       <Boton variante="fantasma" icono={Pencil} disabled={enviando} title="Editar plan y vencimiento" aria-label={`Editar plan de ${c.email}`}
         onClick={alEditar} className="!px-2 !py-1.5" />
+      {sePuedeBorrar(c) && (
+        <Boton variante="fantasma" icono={Trash2} disabled={enviando}
+          title={c.suspendido ? "Borrar el cliente y todos sus datos (se dio de baja)" : "Borrar la invitación (todavía no entró): por ejemplo, si el mail está mal escrito"}
+          aria-label={`Borrar ${c.email}`} onClick={() => alConfirmar("borrar")} className="!px-2 !py-1.5 text-peligro" />
+      )}
     </div>
   );
 }
