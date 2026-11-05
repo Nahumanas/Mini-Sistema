@@ -148,3 +148,51 @@ def test_invitar(cliente, monkeypatch):
     monkeypatch.setattr(rutas_admin, "invitar_en_supabase", lambda e, n: "ya_tenia_cuenta")
     r = cliente.post("/admin/clientes/invitar", json={**datos, "email": "creado-a-mano@gmail.com"}, headers=admin)
     assert r.status_code == 409 and "invited_at" in r.json()["detail"]
+
+
+def test_mail_mal_escrito_y_borrar_invitacion(cliente, monkeypatch):
+    """Un mail mal escrito se frena antes de invitar; y una invitación que no se usó se puede borrar
+    (solo si ese mail nunca entró y no tiene comercios: los datos de un cliente de verdad no se tocan)."""
+    admin = _admin("nahuel-admin-6@gmail.com")
+    invitados = []
+
+    def supabase_falso(email, nombre):
+        invitados.append(email)
+        _psql("-d", BASE, "-c", f"insert into auth.users (id, email, invited_at) values ('{uuid.uuid4()}', '{email}', now())")
+        return "invitado"
+
+    monkeypatch.setattr(config, "SUPABASE_SECRET_KEY", "clave-de-prueba")
+    monkeypatch.setattr(rutas_admin, "invitar_en_supabase", supabase_falso)
+    datos = {"nombre": "Pruebas", "plan": "prueba"}
+
+    # Errores de tipeo comunes: no se manda nada y sugiere el bueno
+    for malo, bueno in (("pruebas.mal@gmail.con", "pruebas.mal@gmail.com"), ("pruebas.mal@gmial.com", "pruebas.mal@gmail.com"),
+                        ("pruebas.mal@hotmail.cmo", "pruebas.mal@hotmail.com")):
+        r = cliente.post("/admin/clientes/invitar", json={**datos, "email": malo}, headers=admin)
+        assert r.status_code == 422 and bueno in r.json()["detail"], malo
+    assert invitados == []
+
+    # Una invitación que nunca se usó se borra, y el mail se puede volver a invitar
+    assert cliente.post("/admin/clientes/invitar", json={**datos, "email": "sin-usar@empresa.com.ar"}, headers=admin).status_code == 200
+    sin_usar = _cliente_de(cliente, admin, "sin-usar@empresa.com.ar")
+    r = cliente.delete(f"/admin/clientes/{sin_usar['duenoId']}", headers=admin)
+    assert r.status_code == 200 and r.json()["email"] == "sin-usar@empresa.com.ar"
+    assert all(c["email"] != "sin-usar@empresa.com.ar" for c in cliente.get("/admin/clientes", headers=admin).json()["clientes"])
+    assert cliente.delete(f"/admin/clientes/{sin_usar['duenoId']}", headers=admin).status_code == 404
+    assert cliente.post("/admin/clientes/invitar", json={**datos, "email": "sin-usar@empresa.com.ar"}, headers=admin).status_code == 200
+
+    # Un cliente que ya tiene comercios (o que ya entró) NO se borra
+    ana = crear_usuario("ana-con-datos@gmail.com")
+    _kiosco(cliente, ana)
+    con_datos = _cliente_de(cliente, admin, "ana-con-datos@gmail.com")
+    r = cliente.delete(f"/admin/clientes/{con_datos['duenoId']}", headers=admin)
+    assert r.status_code == 409 and "suspendelo" in r.json()["detail"]
+    _psql("-d", BASE, "-c", "update auth.users set last_sign_in_at = now() where email = 'sin-usar@empresa.com.ar'")
+    entro = _cliente_de(cliente, admin, "sin-usar@empresa.com.ar")
+    assert cliente.delete(f"/admin/clientes/{entro['duenoId']}", headers=admin).status_code == 409
+
+    # Ni a sí mismo, ni un dueño común
+    yo = next(c for c in cliente.get("/admin/clientes", headers=admin).json()["clientes"] if c["email"] == "nahuel-admin-6@gmail.com")
+    assert cliente.delete(f"/admin/clientes/{yo['duenoId']}", headers=admin).status_code == 409
+    assert cliente.delete(f"/admin/clientes/{entro['duenoId']}", headers=ana).status_code == 404
+    assert _cliente_de(cliente, admin, "ana-con-datos@gmail.com")["comercios"] == 1

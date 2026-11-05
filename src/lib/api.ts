@@ -343,6 +343,8 @@ export const apiAdmin = {
   suspender: (duenoId: number, suspendido: boolean) =>
     pedir<{ ok: true; suspendido: boolean }>(`/admin/clientes/${duenoId}/suspension`, "PUT", { suspendido }),
   resetearPin: (duenoId: number) => pedir<{ ok: true }>(`/admin/clientes/${duenoId}/resetear-pin`, "POST"),
+  // Solo una invitación que nunca se usó (no entró y no tiene comercios): por ejemplo, un mail mal escrito
+  borrarInvitacion: (duenoId: number) => pedir<{ ok: true; email: string }>(`/admin/clientes/${duenoId}`, "DELETE"),
 };
 
 /** La página del socio (sin cuenta): el link del gimnasio y su DNI. */
