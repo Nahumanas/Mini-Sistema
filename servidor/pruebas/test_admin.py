@@ -7,6 +7,7 @@ from app.rutas import admin as rutas_admin
 
 from .conftest import BASE, _psql, cargar_empleado, crear_usuario
 from .test_api import _kiosco
+from .test_parte_3 import _sql
 
 
 def _admin(email: str) -> dict:
@@ -172,27 +173,55 @@ def test_mail_mal_escrito_y_borrar_invitacion(cliente, monkeypatch):
         assert r.status_code == 422 and bueno in r.json()["detail"], malo
     assert invitados == []
 
-    # Una invitación que nunca se usó se borra, y el mail se puede volver a invitar
+    def borrar(dueno_id, confirmar="", quien=None):
+        return cliente.post(f"/admin/clientes/{dueno_id}/borrar", json={"confirmarEmail": confirmar}, headers=quien or admin)
+
+    # Una invitación que nunca se usó se borra directo, y el mail se puede volver a invitar
     assert cliente.post("/admin/clientes/invitar", json={**datos, "email": "sin-usar@empresa.com.ar"}, headers=admin).status_code == 200
     sin_usar = _cliente_de(cliente, admin, "sin-usar@empresa.com.ar")
-    r = cliente.delete(f"/admin/clientes/{sin_usar['duenoId']}", headers=admin)
+    r = borrar(sin_usar["duenoId"])
     assert r.status_code == 200 and r.json()["email"] == "sin-usar@empresa.com.ar"
     assert all(c["email"] != "sin-usar@empresa.com.ar" for c in cliente.get("/admin/clientes", headers=admin).json()["clientes"])
-    assert cliente.delete(f"/admin/clientes/{sin_usar['duenoId']}", headers=admin).status_code == 404
+    assert borrar(sin_usar["duenoId"]).status_code == 404
     assert cliente.post("/admin/clientes/invitar", json={**datos, "email": "sin-usar@empresa.com.ar"}, headers=admin).status_code == 200
 
-    # Un cliente que ya tiene comercios (o que ya entró) NO se borra
+    # Un cliente que ya trabajó (tiene comercio con ventas y caja) NO se borra si no está suspendido...
     ana = crear_usuario("ana-con-datos@gmail.com")
-    _kiosco(cliente, ana)
+    comercio, alfajor = _kiosco(cliente, ana)
+    cid = comercio["id"]
+    cliente.post(f"/comercios/{cid}/caja/abrir", json={"responsable": "Ana", "montoInicial": 100}, headers=ana)
+    venta = {"items": [{"productoId": alfajor["id"], "cantidad": 1}], "medioPago": "efectivo", "vendidoPor": "Ana"}
+    assert cliente.post(f"/comercios/{cid}/ventas", json=venta, headers=ana).status_code == 201
+    # ...y un gimnasio con plan, socio y cuota (tablas que no se borran en cascada sueltas)
+    gym = cliente.post("/comercios", json={"nombre": "Gym", "rubro": "gimnasio"}, headers=ana).json()["id"]
+    cliente.post(f"/comercios/{gym}/caja/abrir", json={"responsable": "Ana"}, headers=ana)
+    plan = cliente.post(f"/comercios/{gym}/planes", json={"nombre": "Libre", "precio": 1000, "duracionMeses": 1}, headers=ana).json()
+    socio = cliente.post(f"/comercios/{gym}/socios", json={"nombre": "Lucía", "dni": "30111222"}, headers=ana).json()
+    cuota = cliente.post(f"/comercios/{gym}/cuotas", json={"socioId": socio["id"], "planId": plan["id"], "medioPago": "efectivo",
+                                                           "monto": 1000, "vence": "2027-01-01"}, headers=ana)
+    assert cuota.status_code == 201, cuota.text
     con_datos = _cliente_de(cliente, admin, "ana-con-datos@gmail.com")
-    r = cliente.delete(f"/admin/clientes/{con_datos['duenoId']}", headers=admin)
+    r = borrar(con_datos["duenoId"], "ana-con-datos@gmail.com")
     assert r.status_code == 409 and "suspendelo" in r.json()["detail"]
+    # ...y suspendido, solo escribiendo su mail exacto
+    assert cliente.put(f"/admin/clientes/{con_datos['duenoId']}/suspension", json={"suspendido": True}, headers=admin).status_code == 200
+    for mal in ("", "ana@gmail.com"):
+        assert borrar(con_datos["duenoId"], mal).status_code == 422
+    assert borrar(con_datos["duenoId"], "ana-con-datos@gmail.com", quien=ana).status_code == 404  # un dueño no puede
+    assert _sql(f"select count(*) from public.ventas where comercio_id = {cid}") == "1"
+    r = borrar(con_datos["duenoId"], " Ana-Con-Datos@gmail.com ")
+    assert r.status_code == 200, r.text
+    for tabla in ("comercios where id", "ventas where comercio_id", "cajas where comercio_id", "productos where comercio_id"):
+        assert _sql(f"select count(*) from public.{tabla} in ({cid}, {gym})") == "0", tabla
+    for tabla in ("socios", "planes", "cuotas"):
+        assert _sql(f"select count(*) from public.{tabla} where comercio_id = {gym}") == "0", tabla
+    assert _sql("select count(*) from auth.users where email = 'ana-con-datos@gmail.com'") == "0"
+
+    # Uno que ya entró (aunque no tenga comercios) tampoco se borra sin suspender
     _psql("-d", BASE, "-c", "update auth.users set last_sign_in_at = now() where email = 'sin-usar@empresa.com.ar'")
     entro = _cliente_de(cliente, admin, "sin-usar@empresa.com.ar")
-    assert cliente.delete(f"/admin/clientes/{entro['duenoId']}", headers=admin).status_code == 409
+    assert borrar(entro["duenoId"]).status_code == 409
 
-    # Ni a sí mismo, ni un dueño común
+    # Ni a sí mismo
     yo = next(c for c in cliente.get("/admin/clientes", headers=admin).json()["clientes"] if c["email"] == "nahuel-admin-6@gmail.com")
-    assert cliente.delete(f"/admin/clientes/{yo['duenoId']}", headers=admin).status_code == 409
-    assert cliente.delete(f"/admin/clientes/{entro['duenoId']}", headers=ana).status_code == 404
-    assert _cliente_de(cliente, admin, "ana-con-datos@gmail.com")["comercios"] == 1
+    assert borrar(yo["duenoId"], "nahuel-admin-6@gmail.com").status_code == 409

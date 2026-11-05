@@ -10,12 +10,13 @@ import { useAdmin } from "@/store/admin";
 import { Boton, claseInput, Encabezado, Kpi, Tabla, Vacio } from "../ui/base";
 import {
   type Confirmar, ConfirmarAccion, cuandoVence, EtiquetaEstado, type Formulario, FormularioCliente, formularioEditar, formularioNuevo,
-  guardarFormulario, invitacionSinUsar,
+  guardarFormulario, sePuedeBorrar,
 } from "./comun";
 
 // Panel de administrador → Clientes: todos los dueños con su plan, vencimiento y estado. Desde acá se invita,
-// se suspende (solo lectura) o reactiva, se resetea el PIN, se edita el plan y se borra una invitación sin usar
-// (por ejemplo, un mail mal escrito: el mail no se edita, se borra y se invita el correcto).
+// se suspende (solo lectura) o reactiva, se resetea el PIN, se edita el plan y se borra: una invitación sin usar
+// (por ejemplo, un mail mal escrito: el mail no se edita, se borra y se invita el correcto) o un cliente suspendido
+// que se dio de baja (escribiendo su mail para confirmar: se borran todos sus datos).
 
 export function Clientes() {
   const { clientes, puedeInvitar, enviando, hacer } = useAdmin();
@@ -34,13 +35,13 @@ export function Clientes() {
     return n;
   }, [clientes]);
 
-  async function confirmarAccion() {
+  async function confirmarAccion(confirmarEmail?: string) {
     if (!confirmar) return;
     const { tipo, cliente } = confirmar;
     const nombre = cliente.nombre || cliente.email;
     const ok =
       tipo === "borrar"
-        ? await hacer(() => apiAdmin.borrarInvitacion(cliente.duenoId), `Listo: se borró la invitación a ${cliente.email}.`)
+        ? await hacer(() => apiAdmin.borrarCliente(cliente.duenoId, confirmarEmail), `Listo: se borró ${cliente.email}.`)
         : tipo === "pin"
         ? await hacer(() => apiAdmin.resetearPin(cliente.duenoId), `Listo: ${nombre} elige un PIN nuevo la próxima vez que entre.`)
         : await hacer(
@@ -179,9 +180,10 @@ function AccionesCliente({ cliente: c, enviando, alEditar, alConfirmar, clase }:
       />
       <Boton variante="fantasma" icono={Pencil} disabled={enviando} title="Editar plan y vencimiento" aria-label={`Editar plan de ${c.email}`}
         onClick={alEditar} className="!px-2 !py-1.5" />
-      {invitacionSinUsar(c) && (
-        <Boton variante="fantasma" icono={Trash2} disabled={enviando} title="Borrar la invitación (todavía no entró): por ejemplo, si el mail está mal escrito"
-          aria-label={`Borrar la invitación a ${c.email}`} onClick={() => alConfirmar("borrar")} className="!px-2 !py-1.5 text-peligro" />
+      {sePuedeBorrar(c) && (
+        <Boton variante="fantasma" icono={Trash2} disabled={enviando}
+          title={c.suspendido ? "Borrar el cliente y todos sus datos (se dio de baja)" : "Borrar la invitación (todavía no entró): por ejemplo, si el mail está mal escrito"}
+          aria-label={`Borrar ${c.email}`} onClick={() => alConfirmar("borrar")} className="!px-2 !py-1.5 text-peligro" />
       )}
     </div>
   );
