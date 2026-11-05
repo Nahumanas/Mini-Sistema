@@ -5,7 +5,7 @@ Cómo se usa desde la página:
   2. POST /yo/cifrado/activar               → con el PIN, la frase y la casilla marcada: crea las llaves
   3. POST /yo/pin/verificar                 → (en cuenta.py) con el PIN devuelve la llave de sesión del jefe
   4. PUT  /comercios/{id}/codigo-empleados  → el jefe elige el código de 6 números de ese comercio
-  5. POST /comercios/{id}/llave-empleado    → el empleado pone el código y recibe la llave de ese comercio
+  5. POST /comercios/{id}/llave-empleado    → el empleado elige su nombre de la lista y pone el código: recibe la llave de ese comercio
   6. POST /yo/pin/recuperar                 → "Me olvidé el PIN": con la frase elige uno nuevo
 """
 
@@ -55,6 +55,9 @@ class CodigoNuevo(BaseModel):
 
 class Codigo(BaseModel):
     codigo: str = Field(max_length=6)
+    # Quién entra: lo elige de la lista de empleados que cargó el jefe en ESE comercio (no se escribe a mano).
+    # Opcional solo para avisar bien si la página quedó vieja (antes se mandaba solo el código).
+    empleadoId: int | None = None
 
 
 @router.get("/yo/cifrado")
@@ -226,14 +229,20 @@ def cambiar_codigo(comercio_id: int, datos: CodigoNuevo, usuario: Usuario = Depe
 
 @router.post("/comercios/{comercio_id}/llave-empleado")
 def llave_de_empleado(comercio_id: int, datos: Codigo, usuario: Usuario = Depends(usuario_actual)):
-    """El empleado pone el código del comercio y recibe la llave de ESE comercio (no la de los otros)."""
+    """El empleado elige su nombre de la lista y pone el código del comercio: recibe la llave de ESE comercio
+    (no la de los otros). Doble control: primero el código y después que el empleado esté cargado en ese
+    comercio y no esté dado de baja. Si no, no entra aunque sepa el código."""
+    if datos.empleadoId is None:
+        raise HTTPException(409, "Actualizá la página (F5): ahora el empleado elige su nombre de la lista.")
     traba = f"{usuario.id}|empleados={comercio_id}"
     revisar_traba(traba, "el código")
-    comercio, filas = leer(
+    comercio, filas, empleado = leer(
         usuario,
         # De paso (en el mismo viaje): si la cuenta está suspendida, los empleados no entran
         ("select id, privado.estoy_suspendido() as suspendida from public.comercios where id = %s", (comercio_id,)),
         ("select sal_empleado, clave_empleado from public.claves_comercio where comercio_id = %s", (comercio_id,)),
+        ("select id, nombre from public.empleados where id = %s and comercio_id = %s and activo",
+         (datos.empleadoId, comercio_id)),
     )
     if not comercio:
         raise HTTPException(404, "No existe ese comercio.")
@@ -252,4 +261,8 @@ def llave_de_empleado(comercio_id: int, datos: Codigo, usuario: Usuario = Depend
         anotar_intento(traba, False)
         return {"ok": False}
     anotar_intento(traba, True)
-    return {"ok": True, **respuesta(cifrado.nueva_llave(usuario.id, "empleado", comercios={comercio_id: clave}))}
+    if not empleado:
+        raise HTTPException(403, "Tu nombre no está en la lista de empleados de este comercio (o el jefe te dio de baja). "
+                                 "Pedile al jefe que te agregue en Mis comercios.")
+    llave = cifrado.nueva_llave(usuario.id, "empleado", comercios={comercio_id: clave})
+    return {"ok": True, "empleado": a_camel(empleado[0]), **respuesta(llave)}

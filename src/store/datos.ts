@@ -197,7 +197,7 @@ export const useDatos = create<EstadoDatos>()(
           const caja = s.cajas.find((c) => c.comercioId === comercioId && !c.cerrada);
           if (!caja) throw new Error("La caja ya está cerrada. Abrí una nueva para seguir cobrando.");
           const quien = entra.trim().slice(0, 100);
-          if (!quien) throw new Error("Escribí quién recibe la caja.");
+          if (!quien) throw new Error("Elegí quién recibe la caja.");
           if (quien.toLowerCase() === caja.responsable.toLowerCase()) throw new Error(`${caja.responsable} ya está atendiendo: el relevo es para cuando entra otra persona.`);
           if (!(efectivoContado >= 0)) throw new Error("Escribí el efectivo que contaste (puede ser 0).");
           const actual = turnoEnCurso(caja, s.ventas, s.relevos);

@@ -5,7 +5,7 @@ import uuid
 from app import config
 from app.rutas import admin as rutas_admin
 
-from .conftest import BASE, _psql, crear_usuario
+from .conftest import BASE, _psql, cargar_empleado, crear_usuario
 from .test_api import _kiosco
 
 
@@ -61,7 +61,8 @@ def test_plan_suspender_y_reactivar(cliente):
     codigo = f"/comercios/{comercio['id']}/codigo-empleados"
     assert cliente.put(codigo, json={"pin": "4826", "codigo": "739152"}, headers=ana).status_code == 200
     entrar = f"/comercios/{comercio['id']}/llave-empleado"
-    llave_empleado = cliente.post(entrar, json={"codigo": "739152"}, headers=ana).json()["llave"]
+    martina = cargar_empleado(cliente, ana, comercio["id"])
+    llave_empleado = cliente.post(entrar, json={"codigo": "739152", "empleadoId": martina}, headers=ana).json()["llave"]
     empleado = {**ana, "X-Llave": llave_empleado}
     assert cliente.get("/inicio", headers=empleado).status_code == 200
 
@@ -81,7 +82,7 @@ def test_plan_suspender_y_reactivar(cliente):
     assert cliente.put("/yo/pin", json={"actual": "4826", "nuevo": "5937"}, headers=ana).status_code == 403
     # El empleado queda afuera al instante: ni con la llave que ya tenía ni pidiendo una nueva
     assert cliente.get("/inicio", headers=empleado).status_code == 403
-    assert cliente.post(entrar, json={"codigo": "739152"}, headers=ana).status_code == 403
+    assert cliente.post(entrar, json={"codigo": "739152", "empleadoId": martina}, headers=ana).status_code == 403
     # Nada se borró
     assert cliente.get("/admin/clientes", headers=admin).json()  # sigue andando
     assert _cliente_de(cliente, admin, "ana-cliente@gmail.com")["suspendido"] is True

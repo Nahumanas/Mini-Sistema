@@ -233,7 +233,12 @@ export const api = {
   recuperarPin: (frase: string, nuevo: string) => pedir<{ ok: true } & LlaveNueva>("/yo/pin/recuperar", "POST", { frase, nuevo }),
   cambiarCodigo: (comercioId: number, pin: string, codigo: string) =>
     pedir<{ ok: true; codigoCambiado: string }>(`/comercios/${comercioId}/codigo-empleados`, "PUT", { pin, codigo }),
-  llaveEmpleado: (comercioId: number, codigo: string) => pedir<{ ok: boolean } & Partial<LlaveNueva>>(`/comercios/${comercioId}/llave-empleado`, "POST", { codigo }),
+  // El empleado elige su nombre de la lista (empleadoId) y pone el código del comercio. La API revisa las dos cosas.
+  llaveEmpleado: (comercioId: number, codigo: string, empleadoId: number) =>
+    pedir<{ ok: boolean; empleado?: { id: number; nombre: string } } & Partial<LlaveNueva>>(`/comercios/${comercioId}/llave-empleado`, "POST", {
+      codigo,
+      empleadoId,
+    }),
 
   // Avisos por Telegram (solo el jefe): conectar el bot, elegir los avisos, probar y desconectar
   telegram: () => pedir<EstadoTelegram>("/yo/telegram"),

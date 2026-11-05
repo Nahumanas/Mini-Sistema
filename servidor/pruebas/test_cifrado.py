@@ -10,7 +10,7 @@ import pytest
 from app import cifrado, config
 from app.cifrado import ClaveIncorrecta, FaltaConfigurar
 
-from .conftest import crear_usuario
+from .conftest import cargar_empleado, crear_usuario
 from .test_parte_3 import _sql
 
 # ---------------------------------------------------------------- cuentas sueltas
@@ -158,22 +158,34 @@ def test_activar_entrar_codigo_cambiar_y_recuperar(cliente):
     codigos = cliente.get("/inicio", headers=ana).json()["codigos"]
     assert [c["comercioId"] for c in codigos] == [kiosco] and codigos[0]["codigoCambiado"]  # el gimnasio todavía no tiene
 
-    # --- El empleado entra al kiosco con el código: su llave abre SOLO el kiosco
+    # --- El empleado entra al kiosco eligiendo su nombre y con el código: su llave abre SOLO el kiosco
+    jefe = _con(ana, llave_jefe)
+    martina = cargar_empleado(cliente, jefe, kiosco, "Martina")
+    del_gym = cargar_empleado(cliente, jefe, gym, "Diego")
+    dado_de_baja = cargar_empleado(cliente, jefe, kiosco, "Pepe")
+    assert cliente.delete(f"/empleados/{dado_de_baja}", headers=jefe).status_code == 200
     entrar = f"/comercios/{kiosco}/llave-empleado"
-    assert cliente.post(entrar, json={"codigo": "739153"}, headers=ana).json() == {"ok": False}
-    r = cliente.post(entrar, json={"codigo": "739152"}, headers=ana).json()
-    assert r["ok"] is True
+    assert cliente.post(entrar, json={"codigo": "739153", "empleadoId": martina}, headers=ana).json() == {"ok": False}
+    # Sin elegir el nombre (una página vieja) no entra: pide actualizar
+    sin_nombre = cliente.post(entrar, json={"codigo": "739152"}, headers=ana)
+    assert sin_nombre.status_code == 409 and "lista" in sin_nombre.json()["detail"]
+    # Con el código bien pero alguien que no está en la lista del kiosco: no entra
+    for colado in (del_gym, dado_de_baja, 999999):
+        r = cliente.post(entrar, json={"codigo": "739152", "empleadoId": colado}, headers=ana)
+        assert r.status_code == 403 and "llave" not in r.json(), colado
+    r = cliente.post(entrar, json={"codigo": "739152", "empleadoId": martina}, headers=ana).json()
+    assert r["ok"] is True and r["empleado"] == {"id": martina, "nombre": "Martina"}
     llave_empleado = r["llave"]
     mia = cliente.get("/yo/llave", headers=_con(ana, llave_empleado)).json()
     assert mia == {"rol": "empleado", "vence": mia["vence"], "comercios": [kiosco]}
     nuevo = cliente.post("/comercios", json={"nombre": "Otro", "rubro": "kiosco"}, headers=_con(ana, llave_empleado))
     assert nuevo.status_code == 403  # el empleado no crea comercios
     # El gimnasio no tiene código todavía
-    assert cliente.post(f"/comercios/{gym}/llave-empleado", json={"codigo": "739152"}, headers=ana).status_code == 409
+    assert cliente.post(f"/comercios/{gym}/llave-empleado", json={"codigo": "739152", "empleadoId": del_gym}, headers=ana).status_code == 409
 
     # --- Beto (otro dueño) no puede tocar nada de esto
     assert cliente.put(codigo, json={"pin": "4826", "codigo": "580317"}, headers=beto).status_code == 404
-    assert cliente.post(entrar, json={"codigo": "739152"}, headers=beto).status_code == 404
+    assert cliente.post(entrar, json={"codigo": "739152", "empleadoId": martina}, headers=beto).status_code == 404
     assert cliente.get("/yo/cifrado", headers=beto).json()["comercios"] == []
 
     # --- Cambiar el PIN: la clave del dueño es la misma, así que las llaves viejas y el código siguen andando
@@ -182,7 +194,7 @@ def test_activar_entrar_codigo_cambiar_y_recuperar(cliente):
     r = cliente.post("/yo/pin/verificar", json={"pin": "5937"}, headers=ana).json()
     assert cliente.get("/yo/llave", headers=_con(ana, r["llave"])).json()["comercios"] == [kiosco, gym, ropa]
     assert cliente.get("/yo/llave", headers=_con(ana, llave_jefe)).status_code == 200
-    assert cliente.post(entrar, json={"codigo": "739152"}, headers=ana).json()["ok"] is True
+    assert cliente.post(entrar, json={"codigo": "739152", "empleadoId": martina}, headers=ana).json()["ok"] is True
     # El código no puede ser igual a un PIN de 6 números
     assert cliente.put("/yo/pin", json={"actual": "5937", "nuevo": "582941"}, headers=ana).status_code == 200
     assert cliente.put(codigo, json={"pin": "582941", "codigo": "582941"}, headers=ana).status_code == 422
@@ -199,7 +211,7 @@ def test_activar_entrar_codigo_cambiar_y_recuperar(cliente):
     assert cliente.get("/yo/llave", headers=_con(ana, r.json()["llave"])).json()["comercios"] == [kiosco, gym, ropa]
     r = cliente.post("/yo/pin/verificar", json={"pin": "6184"}, headers=ana).json()
     assert r["ok"] is True and r["llave"]
-    assert cliente.post(entrar, json={"codigo": "739152"}, headers=ana).json()["ok"] is True  # el código no cambió
+    assert cliente.post(entrar, json={"codigo": "739152", "empleadoId": martina}, headers=ana).json()["ok"] is True  # el código no cambió
 
 
 def test_codigo_y_frase_se_traban(cliente):
@@ -207,13 +219,14 @@ def test_codigo_y_frase_se_traban(cliente):
     cliente.put("/yo/pin", json={"nuevo": "4826"}, headers=ana)
     tienda = cliente.post("/comercios", json={"nombre": "Tienda", "rubro": "ropa"}, headers=ana).json()["id"]
     frase = cliente.get("/yo/cifrado/frase-nueva", headers=ana).json()["frase"]
-    cliente.post("/yo/cifrado/activar", json={"pin": "4826", "frase": frase, "acepto": True}, headers=ana)
+    llave = cliente.post("/yo/cifrado/activar", json={"pin": "4826", "frase": frase, "acepto": True}, headers=ana).json()["llave"]
     cliente.put(f"/comercios/{tienda}/codigo-empleados", json={"pin": "4826", "codigo": "739152"}, headers=ana)
+    martina = cargar_empleado(cliente, _con(ana, llave), tienda)
 
     entrar = f"/comercios/{tienda}/llave-empleado"
     for _ in range(5):
-        assert cliente.post(entrar, json={"codigo": "000001"}, headers=ana).json() == {"ok": False}
-    assert cliente.post(entrar, json={"codigo": "739152"}, headers=ana).status_code == 429
+        assert cliente.post(entrar, json={"codigo": "000001", "empleadoId": martina}, headers=ana).json() == {"ok": False}
+    assert cliente.post(entrar, json={"codigo": "739152", "empleadoId": martina}, headers=ana).status_code == 429
     for _ in range(5):
         r = cliente.post("/yo/pin/recuperar", json={"frase": cifrado.nueva_frase(), "nuevo": "6184"}, headers=ana)
         assert r.status_code == 403

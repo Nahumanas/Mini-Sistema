@@ -24,11 +24,14 @@ export async function recuperarPin(frase: string, nuevo: string, repetido: strin
   useDatos.setState({ pinConfigurado: true });
 }
 
-/** El empleado entra con el código del comercio. false si el código no es el correcto. */
-export async function entrarConCodigo(comercioId: number, codigo: string) {
-  const r = await api.llaveEmpleado(comercioId, codigo);
-  if (r.ok && r.llave && r.vence) guardarLlave(r.llave, r.vence);
-  return r.ok;
+/** El empleado entra con su nombre (elegido de la lista que cargó el jefe) y el código del comercio.
+ *  Devuelve su nombre tal como lo tiene la API, o null si el código no es el correcto. Si el nombre ya no está
+ *  en la lista (por ejemplo, el jefe lo dio de baja) la API contesta con un error y no entra. */
+export async function entrarConCodigo(comercioId: number, codigo: string, empleadoId: number) {
+  const r = await api.llaveEmpleado(comercioId, codigo, empleadoId);
+  if (!r.ok) return null;
+  if (r.llave && r.vence) guardarLlave(r.llave, r.vence);
+  return r.empleado?.nombre ?? ""; // "" = entró, pero la API todavía no manda el nombre (se usa el elegido)
 }
 
 /** El jefe elige (o cambia) el código de empleados de un comercio. Pide su PIN otra vez. */

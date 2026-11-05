@@ -11,6 +11,7 @@ import { useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useConexionRed } from "@/store/conexion";
 import { useInterfaz } from "@/store/interfaz";
+import { useNombreJefe } from "@/store/jefe";
 import { useSinInternet } from "@/store/nube";
 import { Boton, Campo, claseInput, Tarjeta } from "../ui/base";
 
@@ -209,7 +210,11 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
   // Si el local tiene turnos, se propone el que corresponde a lo que atendió (se puede cambiar)
   const turnos = comercios.find((c) => c.id === caja.comercioId)?.turnos ?? [];
   const [nombreTurno, setNombreTurno] = useState(() => turnoEntre(turnos, turno.desde, ahora())?.nombre ?? "");
-  const otros = empleados.filter((e) => e.comercioId === caja.comercioId && e.activo && e.nombre !== caja.responsable);
+  // Quién puede recibir la caja: los empleados que cargó el jefe en este comercio, o el jefe (no un nombre inventado)
+  const nombreJefe = useNombreJefe();
+  const mismo = (nombre: string) => nombre.trim().toLowerCase() === caja.responsable.trim().toLowerCase();
+  const otros = empleados.filter((e) => e.comercioId === caja.comercioId && e.activo && !mismo(e.nombre));
+  const jefeRecibe = !mismo(nombreJefe) && !otros.some((e) => e.nombre.trim().toLowerCase() === nombreJefe.toLowerCase());
 
   return (
     <div className="grid gap-5 md:grid-cols-[1fr_1fr]">
@@ -273,13 +278,18 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
               </select>
             </Campo>
           )}
-          <Campo etiqueta="¿Quién recibe la caja?" ayuda={otros.length ? `Empleados de este comercio: ${otros.map((e) => e.nombre).join(", ")}` : undefined}>
-            <input id="entra" list="empleados-relevo" value={entra} onChange={(e) => setEntra(e.target.value)} placeholder="Ej.: Martina" className={claseInput} autoComplete="off" required autoFocus />
-            <datalist id="empleados-relevo">
+          <Campo etiqueta="¿Quién recibe la caja?" ayuda="Si no está en la lista, el jefe lo agrega en Mis comercios.">
+            <select id="entra" value={entra} onChange={(e) => setEntra(e.target.value)} className={claseInput} required autoFocus>
+              <option value="" disabled>
+                Elegí quién entra
+              </option>
               {otros.map((e) => (
-                <option key={e.id} value={e.nombre} />
+                <option key={e.id} value={e.nombre}>
+                  {e.nombre}
+                </option>
               ))}
-            </datalist>
+              {jefeRecibe && <option value={nombreJefe}>{nombreJefe} (jefe)</option>}
+            </select>
           </Campo>
           <Campo etiqueta="Efectivo que contaste ($)">
             <input id="contado-relevo" type="number" min={0} inputMode="numeric" value={contado} onChange={(e) => setContado(e.target.value)} className={`${claseInput} numeros`} required />

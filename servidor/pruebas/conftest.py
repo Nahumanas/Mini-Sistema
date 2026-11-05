@@ -88,6 +88,13 @@ def crear_usuario(email: str, invitado: bool = True, cifrado: bool = True) -> di
     return encabezados
 
 
+def cargar_empleado(cliente, jefe: dict, comercio_id: int, nombre: str = "Martina") -> int:
+    """El jefe (con su llave) anota un empleado en el comercio, como en Mis comercios. Devuelve su id."""
+    r = cliente.post(f"/comercios/{comercio_id}/empleados", json={"nombre": nombre}, headers=jefe)
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
 def activar_cifrado(encabezados: dict, pin: str = PIN_DE_PRUEBA) -> str:
     """Elige el PIN, activa el cifrado con una frase nueva y devuelve la llave de jefe."""
     from fastapi.testclient import TestClient

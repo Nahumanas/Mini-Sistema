@@ -9,7 +9,7 @@ import pytest
 
 from app import config, telegram
 
-from .conftest import crear_usuario
+from .conftest import cargar_empleado, crear_usuario
 from .test_api import _kiosco
 from .test_parte_2 import _venta
 from .test_parte_3 import _sql
@@ -141,6 +141,7 @@ def test_avisos_de_caja_y_stock_bajo(cliente, tg):
     chicle = cliente.post(f"/comercios/{cid}/productos", json={"nombre": "Chicle <menta>", "precioVenta": 200, "stock": 1},
                           headers=ana).json()
 
+    cargar_empleado(cliente, ana, cid, "Ana")  # Martina le entrega la caja a Ana en el relevo
     cliente.post(f"/comercios/{cid}/caja/abrir", json={"responsable": "Martina", "montoInicial": 5000}, headers=ana)
     assert "Se abrió la caja" in tg.para(222)[-1] and "Martina" in tg.para(222)[-1] and "$ 5.000" in tg.para(222)[-1]
 

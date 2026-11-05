@@ -11,7 +11,15 @@ from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import llave_requerida
 from ..sobres import Cofre
-from .comun import LEER_CLAVES, LEER_COMERCIO, existe, insertar_ajuste
+from .comun import (
+    LEER_CLAVES,
+    LEER_COMERCIO,
+    LEER_EMPLEADOS,
+    LEER_QUIENES_ATIENDEN,
+    de_la_lista,
+    existe,
+    insertar_ajuste,
+)
 from .ventas import con_items
 
 router = APIRouter(tags=["Caja"])
@@ -50,17 +58,23 @@ def caja_abierta(comercio_id: int, usuario: Usuario = Depends(usuario_actual), l
 @router.post("/comercios/{comercio_id}/caja/abrir", status_code=201)
 def abrir(comercio_id: int, datos: AbrirCaja, tareas: BackgroundTasks, usuario: Usuario = Depends(usuario_actual),
           llave: Llave = Depends(llave_requerida)):
-    """En dos viajes a la base: leer (comercio, claves y la ficha para el aviso) y guardar."""
+    """En dos viajes a la base: leer (comercio, claves, empleados y la ficha para el aviso) y guardar.
+    Un empleado abre la caja a SU nombre, que tiene que estar en la lista que cargó el jefe (el jefe, a cualquiera)."""
     try:
         with en_viajes(usuario) as viaje:
-            comercios, claves, fichas = viaje((LEER_COMERCIO, (comercio_id,)), (LEER_CLAVES, None), (avisos.FICHA, None))
+            comercios, claves, fichas, empleados = viaje((LEER_COMERCIO, (comercio_id,)), (LEER_CLAVES, None),
+                                                         (avisos.FICHA, None), (LEER_EMPLEADOS, (comercio_id,)))
             comercio = existe(comercios)
             cofre = Cofre(viaje.con, llave, claves)
             cofre.comercio_ya_leido(comercio_id)
+            if llave.rol == "jefe":
+                responsable = datos.responsable.strip()
+            else:
+                responsable = de_la_lista(datos.responsable, [e["nombre"] for e in empleados])
             sobre = cofre.cerrar("cajas", comercio_id, {"monto_inicial": datos.montoInicial, "efectivo_esperado": None,
                                                         "efectivo_contado": None, "nota": ""})
             (filas,) = viaje(("insert into public.cajas (comercio_id, responsable, sobre) values (%s, %s, %s) returning *",
-                              (comercio_id, datos.responsable.strip(), sobre)), terminar=True)
+                              (comercio_id, responsable, sobre)), terminar=True)
     except errors.UniqueViolation as error:
         # Otra compu del mismo local ya la abrió (la base solo deja UNA caja abierta por comercio)
         raise HTTPException(409, "La caja ya está abierta (quizás desde otra compu). Actualizá la pantalla.") from error
@@ -114,7 +128,7 @@ def relevo(comercio_id: int, datos: Relevo, tareas: BackgroundTasks, usuario: Us
            llave: Llave = Depends(llave_requerida)):
     """Relevo de turno (como registrarRelevo de la página): el que se va cuenta el efectivo y se compara
     con lo de SU turno (con lo que arrancó + lo cobrado en efectivo desde el último relevo).
-    La caja sigue abierta y queda a nombre del que entra."""
+    La caja sigue abierta y queda a nombre del que entra: un empleado de la lista que cargó el jefe, o el jefe."""
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
         comercio = cofre.comercio(comercio_id, bloquear=True)  # que no se cuele una venta en el medio
@@ -123,9 +137,10 @@ def relevo(comercio_id: int, datos: Relevo, tareas: BackgroundTasks, usuario: Us
         ).fetchone())
         if caja is None:
             raise HTTPException(409, "La caja ya está cerrada. Abrí una nueva para seguir cobrando.")
-        quien = datos.entra.strip()
-        if not quien:
-            raise HTTPException(422, "Escribí quién recibe la caja.")
+        if not datos.entra.strip():
+            raise HTTPException(422, "Elegí quién recibe la caja.")
+        atienden = con.execute(LEER_QUIENES_ATIENDEN, (comercio_id,)).fetchone()
+        quien = de_la_lista(datos.entra, [*atienden["empleados"], atienden["jefe"]])
         if quien.lower() == caja["responsable"].lower():
             raise HTTPException(422, f"{caja['responsable']} ya está atendiendo: el relevo es para cuando entra otra persona.")
 

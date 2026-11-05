@@ -62,9 +62,10 @@ function nubeDeMentira() {
     const ruta = `${pedido.method()} ${url.pathname}`;
     if (ruta === "GET /salud") return json(200, { ok: true });
     if (ruta === "POST /comercios/50/llave-empleado") {
-      const { codigo } = pedido.postDataJSON() as { codigo: string };
+      const { codigo, empleadoId } = pedido.postDataJSON() as { codigo: string; empleadoId?: number };
       if (codigo !== "482913") return json(200, { ok: false });
-      return json(200, { ok: true, llave: "llave-nueva", vence: new Date(Date.now() + 12 * 3600_000).toISOString() });
+      if (empleadoId !== 3) return json(403, { detail: "Tu nombre no está en la lista de empleados de este comercio." });
+      return json(200, { ok: true, empleado: { id: 3, nombre: "Laura" }, llave: "llave-nueva", vence: new Date(Date.now() + 12 * 3600_000).toISOString() });
     }
     if (ruta === "GET /inicio") {
       return json(200, {
@@ -230,7 +231,7 @@ test("si venció la llave mientras no había internet, al volver pide el código
   expect(nube.ventas).toHaveLength(0);
   await page.getByRole("button", { name: "Poner código" }).click();
   await expect(page).toHaveURL(/ingresar/);
-  await page.locator("#nombre").fill("Laura");
+  await page.locator("#nombre").selectOption({ label: "Laura" });
   await page.locator("#codigo").fill("482913");
   await page.getByRole("button", { name: "Entrar" }).click();
 

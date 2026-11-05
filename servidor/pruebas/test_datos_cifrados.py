@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from app import gimnasio as g
 
-from .conftest import PIN_DE_PRUEBA, crear_usuario
+from .conftest import PIN_DE_PRUEBA, cargar_empleado, crear_usuario
 from .test_parte_3 import _sql
 
 
@@ -77,7 +77,7 @@ def test_lo_que_trae_inicio_depende_de_la_llave(cliente):
     cliente.post(f"/comercios/{kiosco}/productos", json={"nombre": "Chicle", "precioVenta": 300}, headers=ana)
     cliente.post(f"/comercios/{gym}/productos", json={"nombre": "Agua", "precioVenta": 900}, headers=ana)
     cliente.post(f"/comercios/{gym}/socios", json={"nombre": "Lucía", "dni": "30000001"}, headers=ana)
-    cliente.post(f"/comercios/{kiosco}/empleados", json={"nombre": "Martina"}, headers=ana)
+    martina = cargar_empleado(cliente, ana, kiosco, "Martina")
 
     # Sin llave (la pantalla de ingreso): solo lo que no está cifrado
     sin_llave = cliente.get("/inicio", headers=_con(ana, None)).json()
@@ -91,7 +91,7 @@ def test_lo_que_trae_inicio_depende_de_la_llave(cliente):
 
     # El empleado del kiosco: solo el kiosco
     cliente.put(f"/comercios/{kiosco}/codigo-empleados", json={"pin": PIN_DE_PRUEBA, "codigo": "739152"}, headers=ana)
-    llave = cliente.post(f"/comercios/{kiosco}/llave-empleado", json={"codigo": "739152"}, headers=_con(ana, None)).json()["llave"]
+    llave = cliente.post(f"/comercios/{kiosco}/llave-empleado", json={"codigo": "739152", "empleadoId": martina}, headers=_con(ana, None)).json()["llave"]
     empleado = _con(ana, llave)
     suyo = cliente.get("/inicio", headers=empleado).json()
     assert [p["nombre"] for p in suyo["productos"]] == ["Chicle"] and suyo["socios"] == []
@@ -100,7 +100,10 @@ def test_lo_que_trae_inicio_depende_de_la_llave(cliente):
     # Y con su llave no puede tocar el gimnasio
     assert cliente.get(f"/comercios/{gym}/productos", headers=empleado).status_code == 403
     assert cliente.post(f"/comercios/{gym}/caja/abrir", json={"responsable": "Martina"}, headers=empleado).status_code == 403
-    assert cliente.post(f"/comercios/{kiosco}/caja/abrir", json={"responsable": "Martina"}, headers=empleado).status_code == 201
+    # El empleado abre la caja a un nombre de la lista (no a uno inventado)
+    assert cliente.post(f"/comercios/{kiosco}/caja/abrir", json={"responsable": "Colado"}, headers=empleado).status_code == 422
+    abierta = cliente.post(f"/comercios/{kiosco}/caja/abrir", json={"responsable": "martina"}, headers=empleado)
+    assert abierta.status_code == 201 and abierta.json()["responsable"] == "Martina"
 
 
 def test_sin_llave_no_se_toca_nada(cliente):
