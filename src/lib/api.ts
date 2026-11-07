@@ -194,7 +194,8 @@ type Entraron = { socio: string; telefono: string }[];
 export type LlaveNueva = { llave: string; vence: string };
 
 /** El plan del dueño y si está suspendido (solo lectura). admin: es Nahuel (ve la pantalla de administrador). */
-export type EstadoDeCuenta = { admin: boolean; suspendido: boolean; plan: PlanCliente | null; vence: string | null };
+/** permisosPorEmpleado: la personalización "Qué ve cada empleado" (la prende Nahuel desde /admin para el que la pide). */
+export type EstadoDeCuenta = { admin: boolean; suspendido: boolean; plan: PlanCliente | null; vence: string | null; permisosPorEmpleado: boolean };
 
 /** Pantalla de administrador (solo Nahuel): los planes que se cobran y cada cliente. */
 export type PlanCliente = "prueba" | "mensual" | "trimestral" | "semestral";
@@ -212,6 +213,7 @@ export type ClienteAdmin = {
   ingreso: string | null;
   creado: string;
   esAdmin: boolean;
+  permisosPorEmpleado: boolean;
 };
 export type DatosCliente = { email: string; nombre: string; plan: PlanCliente; vence: string | null };
 
@@ -344,6 +346,9 @@ export const apiAdmin = {
   suspender: (duenoId: number, suspendido: boolean) =>
     pedir<{ ok: true; suspendido: boolean }>(`/admin/clientes/${duenoId}/suspension`, "PUT", { suspendido }),
   resetearPin: (duenoId: number) => pedir<{ ok: true }>(`/admin/clientes/${duenoId}/resetear-pin`, "POST"),
+  // La personalización "Qué ve cada empleado" (se cobra aparte): prendida, el jefe elige en Mis comercios qué ve cada uno
+  permisosPorEmpleado: (duenoId: number, activa: boolean) =>
+    pedir<{ ok: true; activa: boolean }>(`/admin/clientes/${duenoId}/permisos-por-empleado`, "PUT", { activa }),
   // Una invitación que nunca se usó (por ejemplo, un mail mal escrito) se borra directo. Un cliente que ya trabajó,
   // solo si está suspendido y con su mail escrito para confirmar: se borran TODOS sus datos (la base lo revisa).
   borrarCliente: (duenoId: number, confirmarEmail = "") =>

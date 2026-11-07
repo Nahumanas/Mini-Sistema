@@ -10,7 +10,7 @@ from ..base import como_usuario
 from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import VOLVER_A_PONER, crear_clave_comercio, llave_opcional, llave_requerida
-from ..permisos import Permiso, solo_jefe
+from ..permisos import SIN_PERSONALIZACION, TENGO_PERSONALIZACION, Permiso, solo_jefe
 from ..sobres import Cofre
 from .comun import comercio_mio
 
@@ -182,6 +182,8 @@ def cambiar_permisos(empleado_id: int, datos: PermisosEmpleado, usuario: Usuario
     solo_jefe(llave)
     permisos = None if datos.permisos is None else sorted(set(datos.permisos))
     with como_usuario(usuario) as con:
+        if not con.execute(TENGO_PERSONALIZACION).fetchone()["activa"]:
+            raise HTTPException(403, SIN_PERSONALIZACION)
         empleado = con.execute("select comercio_id from public.empleados where id = %s and activo", (empleado_id,)).fetchone()
         if empleado is None:
             raise HTTPException(404, "No existe ese empleado (o ya lo diste de baja).")

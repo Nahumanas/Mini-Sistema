@@ -73,18 +73,18 @@ def inicio(usuario: Usuario = Depends(usuario_actual), llave: Llave | None = Dep
         claves = _crear_claves_que_faltan(usuario, llave, [c["id"] for c in comercios])
     abiertos = _abrir(Cofre(None, llave, claves), leidas)
     if llave.dueno is None:
-        _recortar_para_el_empleado(abiertos, llave, comercios, empleados)
+        _recortar_para_el_empleado(abiertos, llave, comercios, empleados, dueno["permisos_por_empleado"])
     return {**resultado, **abiertos}
 
 
-def _recortar_para_el_empleado(datos: dict, llave: Llave, comercios: list[dict], empleados: list[dict]) -> None:
+def _recortar_para_el_empleado(datos: dict, llave: Llave, comercios: list[dict], empleados: list[dict], por_empleado: bool) -> None:
     """Lo que el empleado no tiene permiso de ver no sale de la API (no alcanza con esconderlo en el menú).
     Solo se sacan los datos que usa ÚNICAMENTE esa sección: los productos (la Caja los necesita para vender),
     los socios, cuotas y clases (los usa el Ingreso por DNI) quedan siempre."""
     for comercio in comercios:
         if comercio["id"] not in llave.comercios:
             continue
-        tiene = permisos_de(llave, comercio, empleados) or set()
+        tiene = permisos_de(llave, comercio, empleados, por_empleado) or set()
         if "compras" not in tiene:
             datos["compras"], datos["proveedores"] = [], []
         if "gastos" not in tiene:

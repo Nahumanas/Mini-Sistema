@@ -8,7 +8,7 @@ import { HORARIO_SUGERIDO } from "@/lib/horarios";
 import { permisosDe } from "@/lib/navegacion";
 import type { Comercio, Empleado, Permiso, Rubro, Turno } from "@/lib/tipos";
 import { elegirCodigo } from "@/store/cifrado";
-import { useComercioActivo, useSesion } from "@/store/comercio";
+import { useComercioActivo, usePermisosPorEmpleado, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { Dialogo } from "../admin/Dialogo";
@@ -39,6 +39,8 @@ export function MisComercios() {
   const [nombreEmpleado, setNombreEmpleado] = useState("");
   const [errorEmpleado, setErrorEmpleado] = useState("");
   const [eligiendoA, setEligiendoA] = useState<Empleado | null>(null); // la ventana de "Qué ve Martina"
+  // Elegir qué ve cada empleado es una personalización (se cobra aparte): sin ella, todos ven lo del comercio
+  const porEmpleado = usePermisosPorEmpleado();
 
   const comercio = comercios.find((c) => c.id === editandoId) ?? activo;
   const suyos = empleados.filter((e) => e.comercioId === comercio.id);
@@ -167,11 +169,13 @@ export function MisComercios() {
                 return (
                   <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 text-[15px]">
                     <span className="min-w-0 flex-1 truncate font-medium">{e.nombre}</span>
-                    <Chip tono={propios ? "verde" : "gris"}>{propios ? `Propio · ${cuantos} ${cuantos === 1 ? "sección" : "secciones"}` : "Igual que todos"}</Chip>
+                    {porEmpleado && <Chip tono={propios ? "verde" : "gris"}>{propios ? `Propio · ${cuantos} ${cuantos === 1 ? "sección" : "secciones"}` : "Igual que todos"}</Chip>}
                     <span className="flex items-center gap-1">
-                      <Boton variante="fantasma" icono={SlidersHorizontal} onClick={() => setEligiendoA(e)} className="px-2.5 py-1.5 text-sm" aria-label={`Elegir qué ve ${e.nombre}`}>
-                        Qué ve
-                      </Boton>
+                      {porEmpleado && (
+                        <Boton variante="fantasma" icono={SlidersHorizontal} onClick={() => setEligiendoA(e)} className="px-2.5 py-1.5 text-sm" aria-label={`Elegir qué ve ${e.nombre}`}>
+                          Qué ve
+                        </Boton>
+                      )}
                       <button onClick={() => void intentar(quitarEmpleado(e.id))} className="rounded-md p-1.5 text-texto-suave hover:bg-superficie-suave hover:text-peligro" aria-label={`Quitar a ${e.nombre}`}>
                         <X className="size-4" />
                       </button>
@@ -211,7 +215,11 @@ export function MisComercios() {
             <hr className="border-borde" />
             <fieldset className="flex flex-col gap-2.5">
               <legend className="mb-1 text-sm font-medium">Qué ven todos los empleados (además de la Caja)</legend>
-              <p className="mb-1 text-sm text-texto-suave">Vale para los que dicen «Igual que todos». Para elegir distinto a alguien, tocá «Qué ve» al lado de su nombre.</p>
+              <p className="mb-1 text-sm text-texto-suave">
+                {porEmpleado
+                  ? "Vale para los que dicen «Igual que todos». Para elegir distinto a alguien, tocá «Qué ve» al lado de su nombre."
+                  : "¿Querés que cada empleado vea algo distinto? Es una personalización: pedila a Mantenete y se activa en tu cuenta."}
+              </p>
               {PERMISOS.filter((p) => !p.soloGimnasio || comercio.rubro === "gimnasio").map((p) => (
                 <label key={p.clave} className="flex items-center gap-2.5 text-[15px]">
                   <input type="checkbox" checked={comercio.permisosEmpleado.includes(p.clave)} onChange={() => cambiarPermiso(p.clave)} className="size-4 accent-[var(--primary-color)]" />
@@ -224,7 +232,7 @@ export function MisComercios() {
       </div>
 
       {/* key: al abrir la ventana de otro empleado, los interruptores arrancan con lo suyo */}
-      {eligiendoA && <QueVeElEmpleado key={eligiendoA.id} empleado={eligiendoA} comercio={comercio} alCerrar={() => setEligiendoA(null)} />}
+      {porEmpleado && eligiendoA && <QueVeElEmpleado key={eligiendoA.id} empleado={eligiendoA} comercio={comercio} alCerrar={() => setEligiendoA(null)} />}
 
       {/* Con el cifrado (en la nube), los empleados entran con el código de su comercio */}
       {cifrado && <CodigoEmpleados key={`codigo-${comercio.id}`} comercio={comercio} />}

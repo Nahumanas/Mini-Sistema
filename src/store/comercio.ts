@@ -4,6 +4,7 @@ import { alPerderLaLlave, borrarLlave } from "@/lib/llave";
 import { buscarEmpleado } from "@/lib/navegacion";
 import type { Sesion } from "@/lib/tipos";
 import { useDatos } from "./datos";
+import { useSuscripcion } from "./suscripcion";
 
 // Quién entró (jefe o empleado) y en qué comercio (sucursal) se está trabajando.
 // El jefe cambia de sucursal con el selector de la barra de arriba; el empleado queda en la suya.
@@ -59,11 +60,21 @@ export function useComercioActivo() {
   return comercios.find((c) => c.id === id) ?? comercios[0];
 }
 
-/** El empleado que está atendiendo (undefined si entró el jefe): para saber qué secciones le dio el jefe. */
+/** ¿La cuenta tiene la personalización "Qué ve cada empleado"? En la nube la prende Nahuel desde /admin
+ * (se cobra aparte); en la demo está prendida, para mostrarla. Apagada, todos los empleados ven lo del comercio. */
+export function usePermisosPorEmpleado() {
+  const demo = useDatos((s) => s.modo !== "nube");
+  const activa = useSuscripcion((s) => s.permisosPorEmpleado);
+  return demo || activa;
+}
+
+/** El empleado que está atendiendo (undefined si entró el jefe): para saber qué secciones le dio el jefe.
+ * Sin la personalización también da undefined: así vale lo del comercio, igual que en la API. */
 export function useEmpleadoActual() {
   const sesion = useSesion((s) => s.sesion);
   const empleados = useDatos((s) => s.empleados);
-  if (!sesion || sesion.rol === "jefe") return undefined;
+  const porEmpleado = usePermisosPorEmpleado();
+  if (!sesion || sesion.rol === "jefe" || !porEmpleado) return undefined;
   return buscarEmpleado(empleados, sesion.comercioId, sesion.nombre);
 }
 

@@ -1,14 +1,29 @@
 """Qué secciones ve cada empleado: el jefe las elige empleado por empleado y la API las hace cumplir
 (no alcanza con esconderlas del menú: alguien podría llamar a la API a mano)."""
 
+import uuid
+
 from .conftest import cargar_empleado, crear_usuario
+from .test_admin import _admin, _cliente_de
 
 CODIGO = "739152"
 
 
-def _preparar(cliente, email: str):
-    """Un kiosco con código de empleados, un producto, dos empleados (Martina y Lucas) y la llave de cada uno."""
+def _personalizacion(cliente, email: str, activa: bool) -> None:
+    """Nahuel (administrador) prende o apaga "Qué ve cada empleado" para ese cliente, desde /admin."""
+    admin = _admin(f"admin.{uuid.uuid4().hex[:8]}.{email}")
+    dueno = _cliente_de(cliente, admin, email)["duenoId"]
+    r = cliente.put(f"/admin/clientes/{dueno}/permisos-por-empleado", json={"activa": activa}, headers=admin)
+    assert r.status_code == 200, r.text
+    assert _cliente_de(cliente, admin, email)["permisosPorEmpleado"] is activa
+
+
+def _preparar(cliente, email: str, personalizacion: bool = True):
+    """Un kiosco con código de empleados, un producto y dos empleados (Martina y Lucas).
+    Con la personalización prendida (salvo que se pida lo contrario)."""
     jefe = crear_usuario(email)
+    if personalizacion:
+        _personalizacion(cliente, email, True)
     kiosco = cliente.post("/comercios", json={"nombre": "Kiosco", "rubro": "kiosco"}, headers=jefe).json()["id"]
     r = cliente.put(f"/comercios/{kiosco}/codigo-empleados", json={"pin": "4826", "codigo": CODIGO}, headers=jefe)
     assert r.status_code == 200, r.text
@@ -85,6 +100,37 @@ def test_cada_empleado_ve_lo_suyo(cliente):
     assert cliente.put(f"/empleados/{martina}/permisos", json={"permisos": ["stock"]}, headers=jefe).status_code == 404
 
 
+def test_sin_la_personalizacion_todos_ven_lo_del_comercio(cliente):
+    email = "ana.sinpersonalizar@gmail.com"
+    jefe, kiosco, _, martina, _ = _preparar(cliente, email, personalizacion=False)
+    assert cliente.get("/inicio", headers=jefe).json()["dueno"]["permisosPorEmpleado"] is False
+    # Apagada (lo normal): el jefe no puede elegir por empleado
+    r = cliente.put(f"/empleados/{martina}/permisos", json={"permisos": ["gastos"]}, headers=jefe)
+    assert r.status_code == 403 and "personalización" in r.json()["detail"]
+    # Nahuel la prende: ahora sí
+    _personalizacion(cliente, email, True)
+    assert cliente.get("/inicio", headers=jefe).json()["dueno"]["permisosPorEmpleado"] is True
+    assert cliente.put(f"/empleados/{martina}/permisos", json={"permisos": ["gastos"]}, headers=jefe).status_code == 200
+    ella = _entrar(cliente, jefe, kiosco, "Martina")
+    gasto = {"fecha": "2026-11-07", "categoria": "Limpieza", "monto": 500}
+    assert cliente.post(f"/comercios/{kiosco}/gastos", json=gasto, headers=ella).status_code == 201
+    assert cliente.post(f"/comercios/{kiosco}/proveedores", json={"nombre": "Arcor"}, headers=ella).status_code == 403
+    # Si la apaga (dejó de pagarla), vuelve a lo del comercio: lo elegido queda guardado pero no se usa
+    _personalizacion(cliente, email, False)
+    assert cliente.post(f"/comercios/{kiosco}/gastos", json=gasto, headers=ella).status_code == 403
+    assert cliente.post(f"/comercios/{kiosco}/proveedores", json={"nombre": "Arcor"}, headers=ella).status_code == 201
+    assert cliente.get("/inicio", headers=ella).json()["gastos"] == []
+    assert _sql_permisos(martina) == "{gastos}"
+    # Un dueño (que no es administrador) no se la puede prender solo
+    assert cliente.put("/admin/clientes/1/permisos-por-empleado", json={"activa": True}, headers=jefe).status_code == 404
+
+
+def _sql_permisos(empleado_id: int) -> str:
+    from .test_parte_3 import _sql
+
+    return _sql(f"select permisos from public.empleados where id = {empleado_id}")
+
+
 def test_el_empleado_no_se_da_permisos_a_si_mismo(cliente):
     jefe, kiosco, _, martina, lucas = _preparar(cliente, "ana.sinpermisos@gmail.com")
     ella = _entrar(cliente, jefe, kiosco, "Martina")
@@ -96,6 +142,7 @@ def test_el_empleado_no_se_da_permisos_a_si_mismo(cliente):
     assert cliente.delete(f"/empleados/{lucas}", headers=ella).status_code == 403
     # Otro dueño no toca los empleados de Ana
     beto = crear_usuario("beto.permisos@gmail.com")
+    _personalizacion(cliente, "beto.permisos@gmail.com", True)  # aunque él la tenga prendida
     assert cliente.put(f"/empleados/{martina}/permisos", json={"permisos": ["gastos"]}, headers=beto).status_code == 404
     # Sin la llave (antes de poner el PIN) tampoco
     sin_llave = {k: v for k, v in jefe.items() if k != "X-Llave"}
