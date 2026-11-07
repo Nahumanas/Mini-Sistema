@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from psycopg import Connection
 
 RUBROS = ("kiosco", "ferreteria", "ropa", "almacen", "panaderia", "gimnasio", "otro")
-MEDIOS_DE_PAGO = ("efectivo", "debito", "credito", "transferencia")
+MEDIOS_DE_PAGO = ("efectivo", "debito", "credito", "transferencia", "mercadopago")
 HOY_ARGENTINA = "(now() at time zone 'America/Argentina/Buenos_Aires')::date"
 
 
