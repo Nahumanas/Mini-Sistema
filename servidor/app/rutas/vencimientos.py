@@ -9,6 +9,7 @@ from ..base import como_usuario
 from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import llave_requerida
+from ..permisos import exigir
 from ..sobres import Cofre
 from .comun import HOY_ARGENTINA
 
@@ -51,6 +52,7 @@ def agregar_tanda(comercio_id: int, tanda: NuevaTanda, usuario: Usuario = Depend
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id)
+        exigir(con, llave, comercio_id, "vencimientos")
         producto = con.execute(
             "select id, dias_duracion from public.productos where comercio_id = %s and id = %s for update",
             (comercio_id, tanda.productoId),
@@ -74,6 +76,7 @@ def retirar_vencidos(comercio_id: int, usuario: Usuario = Depends(usuario_actual
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id, bloquear=True)
+        exigir(con, llave, comercio_id, "vencimientos")
         vencidos = con.execute(
             f"""delete from public.lotes
                 where comercio_id = %s and vence < {HOY_ARGENTINA} and cantidad > 0
@@ -104,6 +107,7 @@ def sacar_de_tanda(lote_id: int, datos: SacarDeTanda, usuario: Usuario = Depends
         if lote is None:
             raise HTTPException(404, "No existe esa tanda.")
         cofre.comercio(lote["comercio_id"])  # la llave tiene que abrir ese comercio
+        exigir(con, llave, lote["comercio_id"], "vencimientos")
         sale = min(lote["cantidad"], Decimal(str(datos.cantidad)))
         queda = con.execute(
             "update public.lotes set cantidad = cantidad - %s where id = %s returning *", (sale, lote_id)

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { alPerderLaLlave, borrarLlave } from "@/lib/llave";
+import { buscarEmpleado } from "@/lib/navegacion";
 import type { Sesion } from "@/lib/tipos";
 import { useDatos } from "./datos";
 
@@ -56,6 +57,14 @@ export function useComercioActivo() {
   const id = useSesion((s) => s.comercioId);
   const comercios = useDatos((s) => s.comercios);
   return comercios.find((c) => c.id === id) ?? comercios[0];
+}
+
+/** El empleado que está atendiendo (undefined si entró el jefe): para saber qué secciones le dio el jefe. */
+export function useEmpleadoActual() {
+  const sesion = useSesion((s) => s.sesion);
+  const empleados = useDatos((s) => s.empleados);
+  if (!sesion || sesion.rol === "jefe") return undefined;
+  return buscarEmpleado(empleados, sesion.comercioId, sesion.nombre);
 }
 
 /** ¿Pasó demasiado tiempo sin uso con la sesión del jefe abierta? */

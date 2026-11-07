@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, KeyRound, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
+import { Clock, KeyRound, Plus, Save, SlidersHorizontal, Trash2, UserPlus, X } from "lucide-react";
 import { mensajeNombreRepetido, nombreRepetido } from "@/lib/empleados";
 import { ddmm, hora } from "@/lib/fechas";
 import { HORARIO_SUGERIDO } from "@/lib/horarios";
-import type { Comercio, Permiso, Rubro, Turno } from "@/lib/tipos";
+import { permisosDe } from "@/lib/navegacion";
+import type { Comercio, Empleado, Permiso, Rubro, Turno } from "@/lib/tipos";
 import { elegirCodigo } from "@/store/cifrado";
 import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
+import { Dialogo } from "../admin/Dialogo";
 import { RUBROS } from "../layout/Topbar";
 import { Boton, Campo, Chip, claseInput, Encabezado, Segmentado, Tarjeta } from "../ui/base";
 
@@ -36,6 +38,7 @@ export function MisComercios() {
   const [nuevo, setNuevo] = useState({ nombre: "", rubro: "kiosco" as Rubro, direccion: "", usaTicket: true });
   const [nombreEmpleado, setNombreEmpleado] = useState("");
   const [errorEmpleado, setErrorEmpleado] = useState("");
+  const [eligiendoA, setEligiendoA] = useState<Empleado | null>(null); // la ventana de "Qué ve Martina"
 
   const comercio = comercios.find((c) => c.id === editandoId) ?? activo;
   const suyos = empleados.filter((e) => e.comercioId === comercio.id);
@@ -157,16 +160,26 @@ export function MisComercios() {
 
         <Tarjeta titulo="Empleados">
           <div className="flex flex-col gap-5">
-            <ul className="flex flex-wrap gap-2">
-              {suyos.map((e) => (
-                <li key={e.id} className="inline-flex items-center gap-1 rounded-full border border-borde bg-superficie-suave py-1 pl-3 pr-1 text-[15px]">
-                  {e.nombre}
-                  <button onClick={() => void intentar(quitarEmpleado(e.id))} className="rounded-full p-1 text-texto-suave hover:text-peligro" aria-label={`Quitar a ${e.nombre}`}>
-                    <X className="size-3.5" />
-                  </button>
-                </li>
-              ))}
-              {!suyos.length && <li className="text-texto-suave">Todavía no hay empleados.</li>}
+            <ul className="flex flex-col divide-y divide-borde rounded-md border border-borde">
+              {suyos.map((e) => {
+                const propios = e.permisos != null;
+                const cuantos = visiblesEn(comercio, permisosDe(comercio, e)).length;
+                return (
+                  <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 text-[15px]">
+                    <span className="min-w-0 flex-1 truncate font-medium">{e.nombre}</span>
+                    <Chip tono={propios ? "verde" : "gris"}>{propios ? `Propio · ${cuantos} ${cuantos === 1 ? "sección" : "secciones"}` : "Igual que todos"}</Chip>
+                    <span className="flex items-center gap-1">
+                      <Boton variante="fantasma" icono={SlidersHorizontal} onClick={() => setEligiendoA(e)} className="px-2.5 py-1.5 text-sm" aria-label={`Elegir qué ve ${e.nombre}`}>
+                        Qué ve
+                      </Boton>
+                      <button onClick={() => void intentar(quitarEmpleado(e.id))} className="rounded-md p-1.5 text-texto-suave hover:bg-superficie-suave hover:text-peligro" aria-label={`Quitar a ${e.nombre}`}>
+                        <X className="size-4" />
+                      </button>
+                    </span>
+                  </li>
+                );
+              })}
+              {!suyos.length && <li className="px-3 py-2 text-texto-suave">Todavía no hay empleados.</li>}
             </ul>
             <form
               onSubmit={async (e) => {
@@ -197,7 +210,8 @@ export function MisComercios() {
 
             <hr className="border-borde" />
             <fieldset className="flex flex-col gap-2.5">
-              <legend className="mb-2 text-sm font-medium">Qué pueden ver los empleados (además de la Caja)</legend>
+              <legend className="mb-1 text-sm font-medium">Qué ven todos los empleados (además de la Caja)</legend>
+              <p className="mb-1 text-sm text-texto-suave">Vale para los que dicen «Igual que todos». Para elegir distinto a alguien, tocá «Qué ve» al lado de su nombre.</p>
               {PERMISOS.filter((p) => !p.soloGimnasio || comercio.rubro === "gimnasio").map((p) => (
                 <label key={p.clave} className="flex items-center gap-2.5 text-[15px]">
                   <input type="checkbox" checked={comercio.permisosEmpleado.includes(p.clave)} onChange={() => cambiarPermiso(p.clave)} className="size-4 accent-[var(--primary-color)]" />
@@ -209,12 +223,109 @@ export function MisComercios() {
         </Tarjeta>
       </div>
 
+      {/* key: al abrir la ventana de otro empleado, los interruptores arrancan con lo suyo */}
+      {eligiendoA && <QueVeElEmpleado key={eligiendoA.id} empleado={eligiendoA} comercio={comercio} alCerrar={() => setEligiendoA(null)} />}
+
       {/* Con el cifrado (en la nube), los empleados entran con el código de su comercio */}
       {cifrado && <CodigoEmpleados key={`codigo-${comercio.id}`} comercio={comercio} />}
 
       {/* key: al cambiar de comercio, el formulario arranca con los horarios del otro */}
       <HorariosYTurnos key={comercio.id} comercio={comercio} />
     </div>
+  );
+}
+
+/** Las secciones de la lista que existen en ese comercio (Socios, Cuotas y Clases, solo en los gimnasios). */
+function visiblesEn(comercio: Comercio, permisos: Permiso[]) {
+  return PERMISOS.filter((p) => (!p.soloGimnasio || comercio.rubro === "gimnasio") && permisos.includes(p.clave));
+}
+
+/**
+ * La ventana donde el jefe elige qué secciones ve UN empleado (además de la Caja), con un interruptor por sección.
+ * Arranca con lo que ve hoy. «Igual que todos» le borra la elección propia y vuelve a lo del comercio.
+ * La API lo vuelve a controlar en cada pedido del empleado (servidor/app/permisos.py).
+ */
+function QueVeElEmpleado({ empleado, comercio, alCerrar }: { empleado: Empleado; comercio: Comercio; alCerrar: () => void }) {
+  const cambiarPermisosEmpleado = useDatos((s) => s.cambiarPermisosEmpleado);
+  const avisar = useInterfaz((s) => s.avisar);
+  const [elegidos, setElegidos] = useState<Permiso[]>(permisosDe(comercio, empleado));
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+  const propios = empleado.permisos != null;
+  const opciones = PERMISOS.filter((p) => !p.soloGimnasio || comercio.rubro === "gimnasio");
+
+  async function guardar(permisos: Permiso[] | null, aviso: string) {
+    setError("");
+    setGuardando(true);
+    try {
+      await cambiarPermisosEmpleado(empleado.id, permisos);
+      avisar(aviso);
+      alCerrar();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <Dialogo
+      titulo={`Qué ve ${empleado.nombre}`}
+      descripcion={<>Además de la Caja{comercio.rubro === "gimnasio" ? " y el Ingreso por DNI" : ""}. Lo que apagues no le aparece en el menú y el sistema tampoco le deja usarlo.</>}
+      alCerrar={alCerrar}
+      pie={
+        <>
+          {propios && (
+            <Boton variante="fantasma" disabled={guardando} onClick={() => void guardar(null, `${empleado.nombre} ahora ve lo mismo que todos.`)} className="mr-auto">
+              Igual que todos
+            </Boton>
+          )}
+          <Boton onClick={alCerrar} disabled={guardando}>Cancelar</Boton>
+          <Boton variante="primario" icono={Save} disabled={guardando} data-principal onClick={() => void guardar(elegidos, `Listo: guardaste lo que ve ${empleado.nombre}.`)}>
+            {guardando ? "Guardando…" : "Guardar"}
+          </Boton>
+        </>
+      }
+    >
+      <ul className="flex flex-col divide-y divide-borde">
+        {opciones.map((p) => {
+          const prendido = elegidos.includes(p.clave);
+          return (
+            <li key={p.clave}>
+              <Interruptor
+                id={`permiso-${p.clave}`}
+                texto={p.texto}
+                prendido={prendido}
+                alCambiar={() => setElegidos(prendido ? elegidos.filter((x) => x !== p.clave) : [...elegidos, p.clave])}
+              />
+            </li>
+          );
+        })}
+      </ul>
+      {!propios && <p className="mt-3 text-sm text-texto-suave">Hoy ve lo mismo que todos. Si guardás, queda con su propia elección (y los cambios de «Qué ven todos» ya no le cambian a él/ella).</p>}
+      {error && <p role="alert" className="mt-3 text-sm text-peligro">{error}</p>}
+    </Dialogo>
+  );
+}
+
+/** Un interruptor (prendido/apagado) con los colores del tema: verde prendido, gris apagado, igual en claro y oscuro. */
+function Interruptor({ id, texto, prendido, alCambiar }: { id: string; texto: string; prendido: boolean; alCambiar: () => void }) {
+  return (
+    <label htmlFor={id} className="flex cursor-pointer items-center justify-between gap-4 py-2.5 text-[15px]">
+      <span>{texto}</span>
+      <button
+        id={id}
+        type="button"
+        role="switch"
+        aria-checked={prendido}
+        onClick={alCambiar}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+          prendido ? "border-primary bg-primary" : "border-borde-fuerte bg-borde-fuerte"
+        }`}
+      >
+        <span className={`inline-block size-4 rounded-full bg-white shadow transition-transform ${prendido ? "translate-x-6" : "translate-x-1"}`} />
+      </button>
+    </label>
   );
 }
 

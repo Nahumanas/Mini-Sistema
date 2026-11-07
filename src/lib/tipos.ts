@@ -157,7 +157,9 @@ export type Promo = {
   activa: boolean;
 };
 
-export type Empleado = { id: number; comercioId: number; nombre: string; activo: boolean };
+/** permisos: las secciones que el jefe le eligió A ESTE empleado (además de la Caja).
+ * null o sin cargar = "igual que todos": las del comercio (Comercio.permisosEmpleado). */
+export type Empleado = { id: number; comercioId: number; nombre: string; activo: boolean; permisos?: Permiso[] | null };
 
 // ---------------------------------------------------------------------------
 // Gimnasio (las mismas tablas que operaciones_gimnasio.py de Streamlit)

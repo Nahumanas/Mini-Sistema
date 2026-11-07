@@ -2,7 +2,7 @@ import type { MedioDePago } from "./formato";
 import { alPerderLaLlave, borrarLlave, llaveGuardada } from "./llave";
 import { red } from "./red";
 import { hayNube, supabase } from "./supabase";
-import type { AjusteCaja, Asistencia, Caja, Clase, Comercio, Compra, Cuota as CuotaGimnasio, Disciplina, Empleado, Gasto, Lote, Plan, Producto, Promo, Proveedor, ReglasGimnasio, Relevo, Reserva, Retiro, Socio, Venta } from "./tipos";
+import type { AjusteCaja, Asistencia, Caja, Clase, Comercio, Compra, Cuota as CuotaGimnasio, Disciplina, Empleado, Gasto, Lote, Permiso, Plan, Producto, Promo, Proveedor, ReglasGimnasio, Relevo, Reserva, Retiro, Socio, Venta } from "./tipos";
 
 // La conexión con la API de Mantenete (FastAPI, en Render), que guarda todo en Supabase.
 //
@@ -258,6 +258,7 @@ export const api = {
   actualizarComercio: (id: number, cambios: Partial<Comercio>) => pedir<Comercio>(`/comercios/${id}`, "PATCH", cambios),
   agregarEmpleado: (comercioId: number, nombre: string) => pedir<Empleado>(`/comercios/${comercioId}/empleados`, "POST", { nombre }),
   quitarEmpleado: (id: number) => pedir<Empleado>(`/empleados/${id}`, "DELETE"),
+  cambiarPermisosEmpleado: (id: number, permisos: Permiso[] | null) => pedir<Empleado>(`/empleados/${id}/permisos`, "PUT", { permisos }),
 
   crearProducto: (comercioId: number, producto: NuevoProducto) => pedir<Producto>(`/comercios/${comercioId}/productos`, "POST", producto),
   actualizarProducto: (id: number, cambios: CambiosProducto) => pedir<Producto>(`/productos/${id}`, "PATCH", cambios),

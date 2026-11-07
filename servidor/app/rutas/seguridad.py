@@ -271,6 +271,7 @@ def llave_de_empleado(comercio_id: int, datos: Codigo, usuario: Usuario = Depend
     if not empleado:
         raise HTTPException(403, f"No hay ningún empleado llamado {nombre or 'así'} en este comercio (o el jefe lo dio de baja). "
                                  "Revisá cómo lo escribiste o pedile al jefe que te agregue en Mis comercios.")
-    llave = cifrado.nueva_llave(usuario.id, "empleado", comercios={comercio_id: clave})
+    # La llave dice QUÉ empleado es: con eso la API sabe qué secciones le dio el jefe (permisos.py)
+    llave = cifrado.nueva_llave(usuario.id, "empleado", comercios={comercio_id: clave}, empleado=empleado[0]["id"])
     # Devuelve el nombre como lo cargó el jefe ("juan perez" → "Juan Pérez"): así queda en la caja y las ventas
     return {"ok": True, "empleado": a_camel(empleado[0]), **respuesta(llave)}

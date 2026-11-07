@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { CloudOff, Lock, RefreshCw } from "lucide-react";
 import { buscarSeccion, esDelRubro, estaEnLaNube, puedeVer } from "@/lib/navegacion";
-import { MINUTOS_SIN_USO_JEFE, sesionVencida, useComercioActivo, useSesion } from "@/store/comercio";
+import { MINUTOS_SIN_USO_JEFE, sesionVencida, useComercioActivo, useEmpleadoActual, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { useConexion, useNube } from "@/store/nube";
@@ -94,6 +94,7 @@ function ConPermiso({ children }: { children: ReactNode }) {
   const ruta = usePathname();
   const sesion = useSesion((s) => s.sesion);
   const comercio = useComercioActivo();
+  const empleado = useEmpleadoActual();
   const enNube = useDatos((s) => s.modo === "nube");
   const sinConexion = useNube((s) => s.estado === "sin_conexion");
   const seccion = buscarSeccion(ruta);
@@ -114,14 +115,16 @@ function ConPermiso({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (!seccion || puedeVer(seccion, sesion?.rol === "jefe", comercio)) return <>{children}</>;
+  if (!seccion || puedeVer(seccion, sesion?.rol === "jefe", comercio, empleado)) return <>{children}</>;
   return (
     <div className="mx-auto mt-10 flex max-w-md flex-col items-center gap-3 text-center text-texto-suave">
       <Lock className="size-6" strokeWidth={1.5} />
       {!esDelRubro(seccion, comercio) ? (
         <p>{comercio.nombre} no usa esta pantalla. Si es de otro comercio, elegilo en el selector de arriba.</p>
+      ) : seccion.permiso && !seccion.soloJefe ? (
+        <p>El jefe no te habilitó {seccion.titulo}. Si la necesitás, pedile que te la active en Mis comercios.</p>
       ) : (
-        <p>Esta pantalla es para el jefe. Si la necesitás, pedile que te dé permiso en Mis comercios.</p>
+        <p>Esta pantalla es para el jefe.</p>
       )}
     </div>
   );

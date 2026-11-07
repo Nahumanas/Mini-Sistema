@@ -19,12 +19,13 @@ import {
   Tags,
   Wallet,
 } from "lucide-react";
-import type { Comercio, Permiso, Rubro } from "./tipos";
+import { nombreComparable } from "./empleados";
+import type { Comercio, Empleado, Permiso, Rubro } from "./tipos";
 
 // El menú de la izquierda, igual que en Streamlit: Inicio, Día a día, Control y Administración.
 // Para agregar una pantalla al menú alcanza con sumarla acá.
 // - soloJefe: el empleado nunca la ve.
-// - permiso: el empleado la ve solo si el jefe se lo dio en Mis comercios.
+// - permiso: el empleado la ve solo si el jefe se lo dio en Mis comercios (a todos o a él solo).
 // - rubro: aparece solo en los comercios de ese rubro (por ejemplo Socios, solo en gimnasios).
 // - noEn: no aparece en esos rubros (por ejemplo Vencimientos, que un gimnasio no usa).
 // Así cada rubro tiene su propio menú, como en la versión de Streamlit.
@@ -108,12 +109,26 @@ export function buscarSeccion(ruta: string) {
 }
 
 /** ¿Puede entrar a esta pantalla? El jefe a todas; el empleado a la Caja y a las que tenga permiso.
- * Las de un rubro (Socios) solo existen en los comercios de ese rubro. */
-export function puedeVer(seccion: Seccion, esJefe: boolean, comercio: Comercio) {
+ * Las de un rubro (Socios) solo existen en los comercios de ese rubro.
+ * empleado: el que entró (si el jefe le eligió sus propias secciones, valen esas). */
+export function puedeVer(seccion: Seccion, esJefe: boolean, comercio: Comercio, empleado?: Empleado) {
   if (!esDelRubro(seccion, comercio)) return false;
   if (esJefe) return true;
   if (seccion.soloJefe) return false;
-  return !seccion.permiso || comercio.permisosEmpleado.includes(seccion.permiso);
+  return !seccion.permiso || permisosDe(comercio, empleado).includes(seccion.permiso);
+}
+
+/** Lo que ve un empleado además de la Caja: lo que el jefe le eligió a él o, si no le eligió nada,
+ * lo del comercio para todos. Igual que permisos_de en servidor/app/permisos.py. */
+export function permisosDe(comercio: Comercio, empleado?: Empleado): Permiso[] {
+  return empleado?.permisos ?? comercio.permisosEmpleado;
+}
+
+/** El empleado que entró, buscado por su nombre en ese comercio (los nombres no se repiten en un comercio). */
+export function buscarEmpleado(empleados: Empleado[], comercioId: number, nombre: string | undefined) {
+  if (!nombre) return undefined;
+  const buscado = nombreComparable(nombre);
+  return empleados.find((e) => e.comercioId === comercioId && e.activo !== false && nombreComparable(e.nombre) === buscado);
 }
 
 /** ¿Esta pantalla existe en este tipo de comercio? (Socios solo en gimnasios, Vencimientos no en gimnasios) */

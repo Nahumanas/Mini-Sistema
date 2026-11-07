@@ -5,6 +5,7 @@ from ..base import como_usuario, en_viajes
 from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import CUENTA, SIN_CUENTA, crear_clave_comercio, llave_opcional
+from ..permisos import permisos_de
 from ..sobres import Cofre, por_nombre
 from .compras import armar_items as compras_armar_items
 from .ventas import _DETALLE, armar_items
@@ -70,7 +71,31 @@ def inicio(usuario: Usuario = Depends(usuario_actual), llave: Llave | None = Dep
     if llave.dueno is not None and {c["id"] for c in comercios} - {f["comercio_id"] for f in claves}:
         # Un comercio sin clave (no debería pasar: se crea con el comercio o al activar el cifrado): se le crea ahora
         claves = _crear_claves_que_faltan(usuario, llave, [c["id"] for c in comercios])
-    return {**resultado, **_abrir(Cofre(None, llave, claves), leidas)}
+    abiertos = _abrir(Cofre(None, llave, claves), leidas)
+    if llave.dueno is None:
+        _recortar_para_el_empleado(abiertos, llave, comercios, empleados)
+    return {**resultado, **abiertos}
+
+
+def _recortar_para_el_empleado(datos: dict, llave: Llave, comercios: list[dict], empleados: list[dict]) -> None:
+    """Lo que el empleado no tiene permiso de ver no sale de la API (no alcanza con esconderlo en el menú).
+    Solo se sacan los datos que usa ÚNICAMENTE esa sección: los productos (la Caja los necesita para vender),
+    los socios, cuotas y clases (los usa el Ingreso por DNI) quedan siempre."""
+    for comercio in comercios:
+        if comercio["id"] not in llave.comercios:
+            continue
+        tiene = permisos_de(llave, comercio, empleados) or set()
+        if "compras" not in tiene:
+            datos["compras"], datos["proveedores"] = [], []
+        if "gastos" not in tiene:
+            datos["gastos"] = []
+        if "vencimientos" not in tiene:
+            datos["lotes"] = []
+        if "panel_del_dia" not in tiene:
+            # Sin el Panel del día, solo las ventas de la caja que está abierta (las que la Caja muestra y suma
+            # para el arqueo); no el historial de los últimos dos meses
+            abiertas = {c["id"] for c in datos["cajas"] if c["cerrada"] is None}
+            datos["ventas"] = [v for v in datos["ventas"] if v["cajaId"] in abiertas]
 
 
 def _crear_claves_que_faltan(usuario: Usuario, llave: Llave, ids: list[int]) -> list[dict]:
