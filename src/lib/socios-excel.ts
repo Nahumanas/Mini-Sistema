@@ -1,4 +1,5 @@
 import { normalizar } from "./formato";
+import { adivinar, type Celda, type Planilla } from "./planilla";
 import type { Plan } from "./tipos";
 
 // Leer la lista de socios que el gimnasio ya tiene en Excel (.xlsx o .csv).
@@ -17,82 +18,20 @@ export const CAMPOS: { clave: Campo; texto: string; obligatorio?: boolean; ayuda
   { clave: "vence", texto: "Vence la cuota", parecidos: ["vence", "vencimiento", "vto", "fecha de vencimiento", "vence cuota", "pago hasta", "hasta", "valido hasta"] },
 ];
 
+// Leer el archivo (xlsx o csv) es igual para socios y productos: está en planilla.ts
+export { leerPlanilla, type Celda, type Planilla } from "./planilla";
+
 export const COLUMNAS_MODELO = ["nombre", "dni", "telefono", "email", "plan", "vence"];
 
-export type Celda = string | number | boolean | Date | null;
-/** renglones: en qué renglón del Excel está cada fila (para decirle al jefe dónde corregir). */
-export type Planilla = { encabezado: string[]; filas: Celda[][]; renglones: number[] };
-/** Qué columna del archivo es cada dato (-1 = el archivo no la tiene). */
 export type Mapa = Record<Campo, number>;
 
 /** Un renglón del Excel ya leído. plan: lo que dice el Excel; planId: el plan del gimnasio con ese nombre.
  * error: no se importa. aviso: se importa, pero con algo para revisar. */
 export type FilaSocio = { renglon: number; nombre: string; dni: string; telefono: string; email: string; plan: string; planId: number | null; vence: string | null; error?: string; aviso?: string };
 
-/** Lee el archivo que subió el jefe y separa los títulos de las columnas de los renglones de socios. */
-export async function leerPlanilla(archivo: File): Promise<Planilla> {
-  let filas: Celda[][];
-  if (archivo.name.toLowerCase().endsWith(".csv")) {
-    filas = leerCsv(await archivo.text());
-  } else {
-    // La librería de Excel se carga recién acá, así no hace más lenta la primera carga de la página
-    const { readSheet } = await import("read-excel-file/browser");
-    filas = (await readSheet(archivo)) as Celda[][];
-  }
-  const llenas = (f: Celda[]) => f.filter((c) => c !== null && String(c).trim() !== "").length;
-  const vacia = (f: Celda[]) => llenas(f) === 0;
-  // Muchos Excel arrancan con un título ("Socios 2026") arriba de la tabla: los títulos de las
-  // columnas son la primera fila que tiene al menos dos celdas escritas
-  let desde = filas.findIndex((f) => llenas(f) >= 2);
-  if (desde < 0) desde = filas.findIndex((f) => !vacia(f));
-  if (desde < 0) return { encabezado: [], filas: [], renglones: [] };
-  const conDatos = filas.map((f, i) => ({ f, renglon: i + 1 })).slice(desde + 1).filter(({ f }) => !vacia(f));
-  return {
-    encabezado: filas[desde].map((c) => (c === null ? "" : String(c).trim())),
-    filas: conDatos.map((x) => x.f),
-    renglones: conDatos.map((x) => x.renglon),
-  };
-}
-
-/** Un .csv de Excel en español usa ";"; otros programas usan ",". Respeta las comillas. */
-function leerCsv(texto: string): Celda[][] {
-  const lineas = texto.replace(/^﻿/, "").split(/\r?\n/);
-  const separador = (lineas[0] ?? "").includes(";") ? ";" : ",";
-  return lineas.map((linea) => {
-    const celdas: string[] = [];
-    let actual = "";
-    let entreComillas = false;
-    for (let i = 0; i < linea.length; i++) {
-      const c = linea[i];
-      if (c === '"' && entreComillas && linea[i + 1] === '"') {
-        actual += '"';
-        i++;
-      } else if (c === '"') entreComillas = !entreComillas;
-      else if (c === separador && !entreComillas) {
-        celdas.push(actual);
-        actual = "";
-      } else actual += c;
-    }
-    celdas.push(actual);
-    return celdas.map((x) => x.trim());
-  });
-}
-
 /** Adivina qué columna es cada dato mirando los títulos ("Documento" → DNI, "Celular" → Teléfono). */
 export function adivinarColumnas(encabezado: string[]): Mapa {
-  const titulos = encabezado.map((t) => normalizar(t).replace(/[°º.:_#]/g, " ").replace(/\s+/g, " ").trim());
-  const usadas = new Set<number>();
-  const mapa = {} as Mapa;
-  // Primero los títulos idénticos, después los que lo contienen ("DNI del socio")
-  for (const exacto of [true, false]) {
-    for (const campo of CAMPOS) {
-      if (mapa[campo.clave] >= 0) continue;
-      const i = titulos.findIndex((t, i) => !usadas.has(i) && campo.parecidos.some((p) => (exacto ? t === p : t.split(" ").includes(p))));
-      mapa[campo.clave] = i;
-      if (i >= 0) usadas.add(i);
-    }
-  }
-  return mapa;
+  return adivinar(encabezado, CAMPOS);
 }
 
 /** Arma los socios con lo que eligió el jefe y marca los renglones con problemas.

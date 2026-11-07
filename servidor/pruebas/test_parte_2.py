@@ -173,6 +173,28 @@ def test_importar_productos_del_excel(cliente):
     assert len(cliente.get(f"/comercios/{cid}/productos", headers=ana).json()) == 2
 
 
+def test_importar_productos_sin_codigo(cliente):
+    """Muchos kioscos tienen la lista solo con nombres: sin código se busca el producto por el nombre."""
+    ana = crear_usuario("ana.sincodigo@gmail.com")
+    comercio, alfajor = _kiosco(cliente, ana)
+    cid = comercio["id"]
+    filas = [
+        {"nombre": "  " + alfajor["nombre"].upper() + " ", "precioVenta": 999, "costo": 500, "stock": 7},  # ya existe
+        {"nombre": "Coca 500", "precioVenta": 2000, "costo": 1200, "stock": 18},  # nueva, sin código
+        {"nombre": "Turrón", "precioVenta": 500},
+    ]
+    r = cliente.post(f"/comercios/{cid}/productos/importar", json={"filas": filas}, headers=ana).json()
+    assert r["nuevos"] == 2 and r["actualizados"] == 1
+    actualizado = next(p for p in r["productos"] if p["id"] == alfajor["id"])
+    assert actualizado["codigo"] == alfajor["codigo"] and actualizado["precioVenta"] == 999 and actualizado["stock"] == 7
+
+    # Subir la misma lista otra vez actualiza (no repite), y "turron" sin tilde es el mismo producto
+    filas[2]["nombre"] = "turron"
+    r = cliente.post(f"/comercios/{cid}/productos/importar", json={"filas": filas}, headers=ana).json()
+    assert r["nuevos"] == 0 and r["actualizados"] == 3
+    assert len(cliente.get(f"/comercios/{cid}/productos", headers=ana).json()) == 3
+
+
 def test_no_deja_dos_empleados_con_el_mismo_nombre_en_un_comercio(cliente):
     """Con dos "Juan" en la lista, en el ingreso no se sabe cuál es cuál (ni en las ventas ni en el relevo)."""
     ana = crear_usuario("ana.nombres@gmail.com")

@@ -10,7 +10,7 @@ import { ejemploGimnasio } from "@/lib/demo-gimnasio";
 import { turnoEnCurso } from "@/lib/caja";
 import { validarHorarios } from "@/lib/horarios";
 import { huellaDelPin, validarPinNuevo } from "@/lib/pin";
-import { limpiarNombre, mensajeNombreRepetido, nombreRepetido } from "@/lib/empleados";
+import { limpiarNombre, mensajeNombreRepetido, nombreComparable, nombreRepetido } from "@/lib/empleados";
 import type { Comercio, Compra, Gasto, ItemVenta, Producto, Promo, Relevo, Retiro, Socio, Turno, Venta } from "@/lib/tipos";
 import { type AccionesGimnasio, accionesGimnasio } from "./acciones-gimnasio";
 import { accionesNube } from "./acciones-nube";
@@ -343,9 +343,13 @@ export const useDatos = create<EstadoDatos>()(
           let nuevos = 0;
           let actualizados = 0;
           for (const fila of filas) {
-            const existe = get().productos.find((p) => p.comercioId === comercioId && p.codigo === fila.codigo);
+            // Igual que la API: por el código y, si la fila no tiene, por el nombre (sin mayúsculas ni tildes)
+            const suyos = get().productos.filter((p) => p.comercioId === comercioId);
+            const existe = fila.codigo
+              ? suyos.find((p) => p.codigo === fila.codigo)
+              : suyos.find((p) => nombreComparable(p.nombre) === nombreComparable(fila.nombre));
             if (existe) {
-              cambiarProducto(existe.id, fila);
+              cambiarProducto(existe.id, { ...fila, codigo: fila.codigo || existe.codigo });
               actualizados++;
             } else {
               nuevoProducto({ ...fila, comercioId, diasDuracion: null });

@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ClipboardList, Pencil, Plus, ScanBarcode, Search, X } from "lucide-react";
+import { Check, ClipboardList, Pencil, Plus, ScanBarcode, Search, Upload, X } from "lucide-react";
 import { normalizar, pesos } from "@/lib/formato";
 import type { Producto } from "@/lib/tipos";
 import { useComercioActivo, useEsJefe } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
+import { ImportarProductos } from "../productos/ImportarProductos";
 import { Boton, Campo, Chip, claseInput, Encabezado, Segmentado, Tabla, Tarjeta, Vacio } from "../ui/base";
 
 type Filtro = "todos" | "bajo" | "inactivos";
@@ -24,6 +25,7 @@ export function Stock() {
   const [editando, setEditando] = useState<{ id: number; codigo: string; precioVenta: string; stock: string; stockAntes: number; stockMinimo: string } | null>(null);
   const [nuevo, setNuevo] = useState<typeof VACIO | null>(null);
   const [cargandoCodigos, setCargandoCodigos] = useState(false);
+  const [importando, setImportando] = useState(false);
 
   const productos = useMemo(() => todos.filter((p) => p.comercioId === comercio.id), [todos, comercio.id]);
   const bajos = productos.filter((p) => p.activo && p.stock <= p.stockMinimo).length;
@@ -85,12 +87,15 @@ export function Stock() {
         acciones={
           esJefe && (
             <div className="flex flex-wrap gap-2">
+              {!importando && <Boton icono={Upload} onClick={() => setImportando(true)}>Importar</Boton>}
               {!cargandoCodigos && <Boton icono={ScanBarcode} onClick={() => setCargandoCodigos(true)}>Códigos con el lector</Boton>}
               {!nuevo && <Boton variante="primario" icono={Plus} onClick={() => setNuevo({ ...VACIO })}>Nuevo producto</Boton>}
             </div>
           )
         }
       />
+
+      {importando && <ImportarProductos alTerminar={() => setImportando(false)} alCerrar={() => setImportando(false)} />}
 
       {cargandoCodigos && <CodigosConLector productos={productos.filter((p) => p.activo)} alCerrar={() => setCargandoCodigos(false)} />}
 
