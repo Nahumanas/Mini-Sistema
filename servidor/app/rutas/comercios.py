@@ -10,13 +10,13 @@ from ..base import como_usuario
 from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import VOLVER_A_PONER, crear_clave_comercio, llave_opcional, llave_requerida
+from ..permisos import SIN_PERSONALIZACION, TENGO_PERSONALIZACION, Permiso, solo_jefe
 from ..sobres import Cofre
 from .comun import comercio_mio
 
 router = APIRouter(tags=["Comercios"])
 
 Rubro = Literal["kiosco", "ferreteria", "ropa", "almacen", "panaderia", "gimnasio", "otro"]
-Permiso = Literal["panel_del_dia", "stock", "compras", "gastos", "vencimientos", "socios", "cuotas", "clases"]
 Hora = str  # "08:00"
 HORA = r"^([01]\d|2[0-3]):[0-5]\d$"
 
@@ -90,6 +90,8 @@ def crear(datos: NuevoComercio, usuario: Usuario = Depends(usuario_actual), llav
 @router.patch("/comercios/{comercio_id}")
 def actualizar(comercio_id: int, cambios: CambiosComercio, usuario: Usuario = Depends(usuario_actual),
                llave: Llave = Depends(llave_requerida)):
+    # Solo el jefe: si no, un empleado se podría dar permisos a sí mismo (o cambiarle el nombre al comercio)
+    solo_jefe(llave)
     valores = cambios.model_dump(exclude_none=True)
     if "turnos" in valores:
         valores["turnos"] = Jsonb(valores["turnos"])
@@ -115,6 +117,7 @@ class NuevoEmpleado(BaseModel):
 @router.post("/comercios/{comercio_id}/empleados", status_code=201, tags=["Empleados"])
 def agregar_empleado(comercio_id: int, datos: NuevoEmpleado, usuario: Usuario = Depends(usuario_actual),
                      llave: Llave = Depends(llave_requerida)):
+    solo_jefe(llave)
     if not datos.nombre.strip():
         raise HTTPException(422, "Escribí el nombre del empleado.")
     nombre = " ".join(datos.nombre.split())  # sin espacios de más: "  Juan   Pérez " → "Juan Pérez"
@@ -152,6 +155,7 @@ def mismo_nombre(a: str, b: str) -> bool:
 @router.delete("/empleados/{empleado_id}", tags=["Empleados"])
 def quitar_empleado(empleado_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
     """No se borra: queda inactivo (su nombre sigue en las ventas y cajas que hizo)."""
+    solo_jefe(llave)
     with como_usuario(usuario) as con:
         empleado = con.execute("select comercio_id from public.empleados where id = %s", (empleado_id,)).fetchone()
         if empleado is None:
@@ -162,4 +166,29 @@ def quitar_empleado(empleado_id: int, usuario: Usuario = Depends(usuario_actual)
         ).fetchone()
     if fila is None:
         raise HTTPException(404, "No existe ese empleado.")
+    return a_camel(fila)
+
+
+class PermisosEmpleado(BaseModel):
+    # null = "igual que todos": vuelve a usar lo que dice el comercio (Qué ven los empleados)
+    permisos: list[Permiso] | None = Field(default=None, max_length=10)
+
+
+@router.put("/empleados/{empleado_id}/permisos", tags=["Empleados"])
+def cambiar_permisos(empleado_id: int, datos: PermisosEmpleado, usuario: Usuario = Depends(usuario_actual),
+                     llave: Llave = Depends(llave_requerida)):
+    """El jefe elige qué secciones ve ESTE empleado (además de la Caja). Solo el jefe: si no, un empleado
+    se podría habilitar a sí mismo lo que el jefe le sacó."""
+    solo_jefe(llave)
+    permisos = None if datos.permisos is None else sorted(set(datos.permisos))
+    with como_usuario(usuario) as con:
+        if not con.execute(TENGO_PERSONALIZACION).fetchone()["activa"]:
+            raise HTTPException(403, SIN_PERSONALIZACION)
+        empleado = con.execute("select comercio_id from public.empleados where id = %s and activo", (empleado_id,)).fetchone()
+        if empleado is None:
+            raise HTTPException(404, "No existe ese empleado (o ya lo diste de baja).")
+        Cofre(con, llave).comercio(empleado["comercio_id"])  # la llave tiene que abrir ese comercio
+        fila = con.execute(
+            "update public.empleados set permisos = %s where id = %s returning *", (permisos, empleado_id)
+        ).fetchone()
     return a_camel(fila)

@@ -2,7 +2,7 @@ import type { MedioDePago } from "./formato";
 import { alPerderLaLlave, borrarLlave, llaveGuardada } from "./llave";
 import { red } from "./red";
 import { hayNube, supabase } from "./supabase";
-import type { AjusteCaja, Asistencia, Caja, Clase, Comercio, Compra, Cuota as CuotaGimnasio, Disciplina, Empleado, Gasto, Lote, Plan, Producto, Promo, Proveedor, ReglasGimnasio, Relevo, Reserva, Retiro, Socio, Venta } from "./tipos";
+import type { AjusteCaja, Asistencia, Caja, Clase, Comercio, Compra, Cuota as CuotaGimnasio, Disciplina, Empleado, Gasto, Lote, Permiso, Plan, Producto, Promo, Proveedor, ReglasGimnasio, Relevo, Reserva, Retiro, Socio, Venta } from "./tipos";
 
 // La conexión con la API de Mantenete (FastAPI, en Render), que guarda todo en Supabase.
 //
@@ -194,7 +194,8 @@ type Entraron = { socio: string; telefono: string }[];
 export type LlaveNueva = { llave: string; vence: string };
 
 /** El plan del dueño y si está suspendido (solo lectura). admin: es Nahuel (ve la pantalla de administrador). */
-export type EstadoDeCuenta = { admin: boolean; suspendido: boolean; plan: PlanCliente | null; vence: string | null };
+/** permisosPorEmpleado: la personalización "Qué ve cada empleado" (la prende Nahuel desde /admin para el que la pide). */
+export type EstadoDeCuenta = { admin: boolean; suspendido: boolean; plan: PlanCliente | null; vence: string | null; permisosPorEmpleado: boolean };
 
 /** Pantalla de administrador (solo Nahuel): los planes que se cobran y cada cliente. */
 export type PlanCliente = "prueba" | "mensual" | "trimestral" | "semestral";
@@ -212,6 +213,7 @@ export type ClienteAdmin = {
   ingreso: string | null;
   creado: string;
   esAdmin: boolean;
+  permisosPorEmpleado: boolean;
 };
 export type DatosCliente = { email: string; nombre: string; plan: PlanCliente; vence: string | null };
 
@@ -258,6 +260,7 @@ export const api = {
   actualizarComercio: (id: number, cambios: Partial<Comercio>) => pedir<Comercio>(`/comercios/${id}`, "PATCH", cambios),
   agregarEmpleado: (comercioId: number, nombre: string) => pedir<Empleado>(`/comercios/${comercioId}/empleados`, "POST", { nombre }),
   quitarEmpleado: (id: number) => pedir<Empleado>(`/empleados/${id}`, "DELETE"),
+  cambiarPermisosEmpleado: (id: number, permisos: Permiso[] | null) => pedir<Empleado>(`/empleados/${id}/permisos`, "PUT", { permisos }),
 
   crearProducto: (comercioId: number, producto: NuevoProducto) => pedir<Producto>(`/comercios/${comercioId}/productos`, "POST", producto),
   actualizarProducto: (id: number, cambios: CambiosProducto) => pedir<Producto>(`/productos/${id}`, "PATCH", cambios),
@@ -343,6 +346,9 @@ export const apiAdmin = {
   suspender: (duenoId: number, suspendido: boolean) =>
     pedir<{ ok: true; suspendido: boolean }>(`/admin/clientes/${duenoId}/suspension`, "PUT", { suspendido }),
   resetearPin: (duenoId: number) => pedir<{ ok: true }>(`/admin/clientes/${duenoId}/resetear-pin`, "POST"),
+  // La personalización "Qué ve cada empleado" (se cobra aparte): prendida, el jefe elige en Mis comercios qué ve cada uno
+  permisosPorEmpleado: (duenoId: number, activa: boolean) =>
+    pedir<{ ok: true; activa: boolean }>(`/admin/clientes/${duenoId}/permisos-por-empleado`, "PUT", { activa }),
   // Una invitación que nunca se usó (por ejemplo, un mail mal escrito) se borra directo. Un cliente que ya trabajó,
   // solo si está suspendido y con su mail escrito para confirmar: se borran TODOS sus datos (la base lo revisa).
   borrarCliente: (duenoId: number, confirmarEmail = "") =>

@@ -215,6 +215,9 @@ class Llave:
     dueno: bytes | None = None  # solo el jefe
     comercios: dict[int, bytes] = field(default_factory=dict)
     vence: int = 0  # segundos desde 1970
+    # Qué empleado es (su id en public.empleados), para saber qué secciones le dio el jefe (permisos.py).
+    # None en la del jefe y en las llaves de empleado de antes de este cambio.
+    empleado: int | None = None
 
     def __repr__(self) -> str:  # para que un print() o un error nunca muestre las claves
         return f"Llave(rol={self.rol}, comercios={sorted(self.comercios)}, claves=***)"
@@ -223,8 +226,9 @@ class Llave:
 _AAD_LLAVE = b"mantenete/llave/v1"
 
 
-def nueva_llave(usuario: str, rol: str, dueno: bytes | None = None, comercios: dict[int, bytes] | None = None) -> Llave:
-    return Llave(usuario, rol, dueno, dict(comercios or {}), int(time.time()) + DURACION_LLAVE)
+def nueva_llave(usuario: str, rol: str, dueno: bytes | None = None, comercios: dict[int, bytes] | None = None,
+                empleado: int | None = None) -> Llave:
+    return Llave(usuario, rol, dueno, dict(comercios or {}), int(time.time()) + DURACION_LLAVE, empleado)
 
 
 def cerrar_llave(llave: Llave) -> str:
@@ -234,6 +238,7 @@ def cerrar_llave(llave: Llave) -> str:
         "d": b64(llave.dueno) if llave.dueno else None,
         "c": {str(k): b64(v) for k, v in llave.comercios.items()},
         "e": llave.vence,
+        "p": llave.empleado,
     }
     nonce = secrets.token_bytes(LARGO_NONCE)
     texto = json.dumps(datos, separators=(",", ":")).encode()
@@ -253,6 +258,7 @@ def abrir_llave(texto: str, usuario: str) -> Llave:
             dueno=de_b64(datos["d"]) if datos["d"] else None,
             comercios={int(k): de_b64(v) for k, v in datos["c"].items()},
             vence=int(datos["e"]),
+            empleado=int(datos["p"]) if datos.get("p") is not None else None,  # las llaves viejas no lo traen
         )
     except (InvalidTag, ValueError, KeyError, TypeError) as error:
         raise ClaveIncorrecta("La llave no es válida.") from error

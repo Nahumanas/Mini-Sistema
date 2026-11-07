@@ -38,8 +38,8 @@ async function traerInicio() {
     else if (err.estado !== 423) throw err;
     datos = await api.inicio();
   }
-  const { admin = false, suspendido = false, plan = null, vence = null } = datos.dueno;
-  useSuscripcion.setState({ admin, suspendido, plan, vence });
+  const { admin = false, suspendido = false, plan = null, vence = null, permisosPorEmpleado = false } = datos.dueno;
+  useSuscripcion.setState({ admin, suspendido, plan, vence, permisosPorEmpleado });
   return datos;
 }
 

@@ -11,7 +11,7 @@ import { turnoEnCurso } from "@/lib/caja";
 import { validarHorarios } from "@/lib/horarios";
 import { huellaDelPin, validarPinNuevo } from "@/lib/pin";
 import { limpiarNombre, mensajeNombreRepetido, nombreComparable, nombreRepetido } from "@/lib/empleados";
-import type { Comercio, Compra, Gasto, ItemVenta, Producto, Promo, Relevo, Retiro, Socio, Turno, Venta } from "@/lib/tipos";
+import type { Comercio, Compra, Gasto, ItemVenta, Permiso, Producto, Promo, Relevo, Retiro, Socio, Turno, Venta } from "@/lib/tipos";
 import { type AccionesGimnasio, accionesGimnasio } from "./acciones-gimnasio";
 import { accionesNube } from "./acciones-nube";
 
@@ -53,6 +53,8 @@ export type Acciones = {
   borrarPromo: (id: number) => Promise<void>;
   agregarEmpleado: (comercioId: number, nombre: string) => Promise<void>;
   quitarEmpleado: (id: number) => Promise<void>;
+  /** Qué secciones ve ESE empleado (null = igual que todos: las del comercio). Solo el jefe. */
+  cambiarPermisosEmpleado: (id: number, permisos: Permiso[] | null) => Promise<void>;
   reiniciar: () => void;
 };
 
@@ -423,6 +425,10 @@ export const useDatos = create<EstadoDatos>()(
 
         quitarEmpleado: async (id) => {
           set((s) => ({ empleados: s.empleados.filter((e) => e.id !== id) }));
+        },
+
+        cambiarPermisosEmpleado: async (id, permisos) => {
+          set((s) => ({ empleados: s.empleados.map((e) => (e.id === id ? { ...e, permisos: permisos && [...new Set(permisos)] } : e)) }));
         },
 
         // Socios, cuotas, planes, clases y reservas del gimnasio (ver acciones-gimnasio.ts)

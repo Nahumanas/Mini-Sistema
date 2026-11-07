@@ -46,6 +46,7 @@ export const ACCIONES_EN_LA_NUBE = [
   "guardarHorarios",
   "agregarEmpleado",
   "quitarEmpleado",
+  "cambiarPermisosEmpleado",
   "pinCorrecto",
   "cambiarPin",
   "crearSocio",
@@ -331,6 +332,11 @@ export function accionesNube(set: Set, get: Get): AccionesNube {
     quitarEmpleado: async (id) => {
       await api.quitarEmpleado(id);
       set((s) => ({ empleados: s.empleados.filter((e) => e.id !== id) }));
+    },
+
+    cambiarPermisosEmpleado: async (id, permisos) => {
+      const empleado: Empleado = await api.cambiarPermisosEmpleado(id, permisos);
+      set((s) => ({ empleados: s.empleados.map((e) => (e.id === id ? empleado : e)) }));
     },
 
     // En la nube el PIN lo comprueba la API: la huella nunca llega al navegador.

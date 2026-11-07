@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { LogOut, Moon, Sun, X } from "lucide-react";
 import { SelectorSucursal } from "./Topbar";
 import { CONFIGURACION, estaEnLaNube, MENU, pantallaDeEntrada, puedeVer, type Seccion } from "@/lib/navegacion";
-import { useComercioActivo, useSesion } from "@/store/comercio";
+import { useComercioActivo, useEmpleadoActual, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 
@@ -23,6 +23,7 @@ export function Sidebar() {
   const { sesion, salir } = useSesion();
   const comercio = useComercioActivo();
   const esJefe = sesion?.rol === "jefe";
+  const empleado = useEmpleadoActual();
   const enNube = useDatos((s) => s.modo === "nube");
 
   useEffect(leerTema, [leerTema]);
@@ -71,7 +72,7 @@ export function Sidebar() {
 
         <nav className={`min-h-0 flex-1 overflow-y-auto px-3 py-4 ${menuAchicado ? "lg:px-2" : ""}`} aria-label="Menú principal">
           {MENU.map((grupo) => {
-            const visibles = grupo.secciones.filter((s) => puedeVer(s, esJefe, comercio) && (!enNube || estaEnLaNube(s)));
+            const visibles = grupo.secciones.filter((s) => puedeVer(s, esJefe, comercio, empleado) && (!enNube || estaEnLaNube(s)));
             if (!visibles.length) return null;
             return (
               <div key={grupo.titulo ?? "inicio"} className="mb-5 last:mb-0">
