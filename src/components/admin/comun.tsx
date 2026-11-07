@@ -8,7 +8,7 @@ import { ddmm, diasEntre, hoy } from "@/lib/fechas";
 import { pesos } from "@/lib/formato";
 import { useAdmin } from "@/store/admin";
 import { Boton, Campo, Chip, claseInput } from "../ui/base";
-import { Dialogo } from "./Dialogo";
+import { Dialogo } from "../ui/Dialogo";
 
 // Piezas del panel de administrador que usan Clientes y Facturación: la etiqueta de estado, la ventana para
 // invitar / editar el plan / registrar un pago, y la de confirmar suspender, reactivar o resetear el PIN.
