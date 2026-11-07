@@ -10,6 +10,7 @@ from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import llave_requerida
 from ..sobres import Cofre, por_nombre
+from .comercios import nombre_comparable
 from .comun import LEER_CLAVES, LEER_COMERCIO, existe
 
 router = APIRouter(tags=["Productos"])
@@ -47,7 +48,8 @@ _EN_EL_SOBRE = {"codigo": "codigo", "nombre": "nombre", "categoria": "categoria"
 
 
 class FilaExcel(BaseModel):
-    codigo: str = Field(min_length=1, max_length=50)
+    # Sin código (listas de kiosco con solo nombres) el producto se busca por el nombre
+    codigo: str = Field(default="", max_length=50)
     nombre: str = Field(min_length=1, max_length=120)
     categoria: str = Field(default="", max_length=60)
     precioVenta: float = Field(gt=0)
@@ -157,22 +159,35 @@ def actualizar(producto_id: int, cambios: CambiosProducto, usuario: Usuario = De
 @router.post("/comercios/{comercio_id}/productos/importar")
 def importar(comercio_id: int, datos: Importacion, usuario: Usuario = Depends(usuario_actual),
              llave: Llave = Depends(llave_requerida)):
-    """La lista de productos del Excel: si el código ya existe se actualiza, si no se crea. Todo o nada."""
+    """La lista de productos del Excel: si el producto ya existe se actualiza, si no se crea. Todo o nada.
+    Se busca por el código; si la fila no tiene código, por el nombre (sin mayúsculas ni tildes)."""
     nuevos = actualizados = 0
     productos = []
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id, bloquear=True)  # que otra compu no cargue el mismo código en el medio
+        # Los productos del comercio por nombre: el nombre está cifrado en el sobre, así que no se puede
+        # buscar con un "where"; se abren todos una sola vez y solo si alguna fila viene sin código.
+        por_nombre_ya: dict[str, dict] | None = None
         for f in datos.filas:
-            codigo = f.codigo.strip()
-            if not codigo:
-                raise HTTPException(422, "Hay una fila del Excel sin código.")
-            valores = {"codigo": codigo, "nombre": _limpio(f.nombre), "categoria": f.categoria.strip(),
+            codigo, nombre = f.codigo.strip(), _limpio(f.nombre)
+            if codigo:
+                existe = con.execute(
+                    "select id from public.productos where comercio_id = %s and huella_codigo = %s for update",
+                    (comercio_id, huella_codigo(cofre, comercio_id, codigo)),
+                ).fetchone()
+            else:
+                if por_nombre_ya is None:
+                    todas = con.execute(
+                        "select * from public.productos where comercio_id = %s order by activo desc, id for update", (comercio_id,)
+                    ).fetchall()
+                    por_nombre_ya = {}
+                    for p in cofre.abrir_todas("productos", todas):  # si hay dos iguales, gana el activo
+                        por_nombre_ya.setdefault(nombre_comparable(p["nombre"]), p)
+                existe = por_nombre_ya.get(nombre_comparable(nombre))
+                codigo = existe["codigo"] if existe else ""  # se queda con el código que ya tenía
+            valores = {"codigo": codigo, "nombre": nombre, "categoria": f.categoria.strip(),
                        "precio_venta": f.precioVenta, "costo": f.costo}
-            huella = huella_codigo(cofre, comercio_id, codigo)
-            existe = con.execute(
-                "select id from public.productos where comercio_id = %s and huella_codigo = %s for update", (comercio_id, huella)
-            ).fetchone()
             sobre = cofre.cerrar("productos", comercio_id, valores)
             if existe:
                 fila = con.execute(
@@ -184,8 +199,11 @@ def importar(comercio_id: int, datos: Importacion, usuario: Usuario = Depends(us
                 fila = con.execute(
                     """insert into public.productos (comercio_id, huella_codigo, stock, stock_minimo, sobre)
                        values (%s, %s, %s, %s, %s) returning *""",
-                    (comercio_id, huella, f.stock, f.stockMinimo, sobre),
+                    (comercio_id, huella_codigo(cofre, comercio_id, codigo), f.stock, f.stockMinimo, sobre),
                 ).fetchone()
                 nuevos += 1
-            productos.append(a_camel(cofre.abrir("productos", fila)))
+            producto = cofre.abrir("productos", fila)
+            if por_nombre_ya is not None:  # dos renglones con el mismo nombre no crean dos productos
+                por_nombre_ya[nombre_comparable(producto["nombre"])] = producto
+            productos.append(a_camel(producto))
     return {"nuevos": nuevos, "actualizados": actualizados, "productos": productos}
