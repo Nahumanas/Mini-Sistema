@@ -78,16 +78,18 @@ def test_lo_que_trae_inicio_depende_de_la_llave(cliente):
     cliente.post(f"/comercios/{gym}/productos", json={"nombre": "Agua", "precioVenta": 900}, headers=ana)
     cliente.post(f"/comercios/{gym}/socios", json={"nombre": "Lucía", "dni": "30000001"}, headers=ana)
     martina = cargar_empleado(cliente, ana, kiosco, "Martina")
+    cargar_empleado(cliente, ana, gym, "Diego")
 
     # Sin llave (la pantalla de ingreso): solo lo que no está cifrado
     sin_llave = cliente.get("/inicio", headers=_con(ana, None)).json()
     assert [c["id"] for c in sin_llave["comercios"]] == [kiosco, gym]
-    assert [e["nombre"] for e in sin_llave["empleados"]] == ["Martina"]
+    assert sin_llave["empleados"] == []  # los nombres tampoco: en el ingreso cada empleado escribe el suyo
     assert sin_llave["productos"] == [] and sin_llave["socios"] == [] and sin_llave["ventas"] == []
 
     # El jefe: todo
     jefe = cliente.get("/inicio", headers=ana).json()
     assert [p["nombre"] for p in jefe["productos"]] == ["Agua", "Chicle"] and len(jefe["socios"]) == 1
+    assert sorted(e["nombre"] for e in jefe["empleados"]) == ["Diego", "Martina"]
 
     # El empleado del kiosco: solo el kiosco
     cliente.put(f"/comercios/{kiosco}/codigo-empleados", json={"pin": PIN_DE_PRUEBA, "codigo": "739152"}, headers=ana)
@@ -96,6 +98,7 @@ def test_lo_que_trae_inicio_depende_de_la_llave(cliente):
     suyo = cliente.get("/inicio", headers=empleado).json()
     assert [p["nombre"] for p in suyo["productos"]] == ["Chicle"] and suyo["socios"] == []
     assert len(suyo["comercios"]) == 2  # los ve en la lista de ingreso, pero no sus datos
+    assert [e["nombre"] for e in suyo["empleados"]] == ["Martina"]  # sus compañeros (para el relevo), no los del gimnasio
 
     # Y con su llave no puede tocar el gimnasio
     assert cliente.get(f"/comercios/{gym}/productos", headers=empleado).status_code == 403

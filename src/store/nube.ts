@@ -22,8 +22,8 @@ import { SIN_PLAN, useSuscripcion } from "./suscripcion";
 
 /**
  * Lo que trae /inicio. Los datos del negocio vienen cifrados en la base: la API los abre solo si la página
- * manda la llave (la que da el PIN de jefe o el código de empleados). Sin llave vienen solo los comercios y
- * los empleados (lo que hace falta para la pantalla de ingreso). Si la llave guardada ya no sirve (423),
+ * manda la llave (la que da el PIN de jefe o el código de empleados). Sin llave vienen solo los comercios
+ * (lo que hace falta para la pantalla de ingreso; los nombres de los empleados no, cada uno escribe el suyo). Si la llave guardada ya no sirve (423),
  * pedir() la borra sola y se pide de nuevo sin ella.
  */
 async function traerInicio() {

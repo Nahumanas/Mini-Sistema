@@ -8,6 +8,7 @@ import { DUENO } from "@/lib/datos-demo";
 import { pantallaDeEntrada } from "@/lib/navegacion";
 import { hayNube } from "@/lib/supabase";
 import type { Rubro } from "@/lib/tipos";
+import { limpiarNombre, nombreRepetido } from "@/lib/empleados";
 import { entrarConCodigo, recuperarPin } from "@/store/cifrado";
 import { useCuenta } from "@/store/cuenta";
 import { useConexionRed } from "@/store/conexion";
@@ -27,8 +28,9 @@ const ESPERA_SEGUNDOS = 30; // ...y hay que esperar 30 segundos para probar de n
 // 1. Con la nube (Supabase): el dueño abre su cuenta con Gmail UNA vez en la compu del local.
 //    Sin las variables de Supabase (o con "Probar la demo") se saltea y quedan los datos de prueba.
 //    Con la API configurada, desde ahí se trabaja con los datos de la nube (si no, con la demo).
-// 2. Cada turno: elegir el comercio y entrar como empleado (eligiendo su nombre de la lista que cargó el jefe
-//    en ESE comercio: no se puede escribir un nombre inventado) o como jefe (con PIN).
+// 2. Cada turno: elegir el comercio y entrar como empleado (escribiendo su nombre, que tiene que ser uno que cargó
+//    el jefe en ESE comercio: no vale uno inventado ni uno dado de baja) o como jefe (con PIN). La lista de
+//    nombres no se muestra, así quien se sienta en la compu no ve quiénes trabajan.
 //    En la nube, la primera vez el dueño crea su primer comercio y elige su PIN de jefe.
 //    El jefe también puede crear otro comercio desde acá ("+ Crear un comercio nuevo"), con su PIN.
 // 3. Cifrado (en la nube): la primera vez que el jefe entra, activa el cifrado anotando su código de recuperación.
@@ -54,7 +56,7 @@ export function Ingreso() {
   const [creando, setCreando] = useState(false); // eligió "+ Crear un comercio nuevo" (solo el jefe, con PIN)
   const [nuevo, setNuevo] = useState<ComercioNuevo>(COMERCIO_VACIO);
   const [quien, setQuien] = useState<"empleado" | "jefe">("empleado");
-  const [empleadoId, setEmpleadoId] = useState<number | null>(null); // el empleado elige su nombre de la lista
+  const [nombreEscrito, setNombreEscrito] = useState(""); // el empleado escribe su nombre (sin lista)
   const [pin, setPin] = useState("");
   const [pinRepetido, setPinRepetido] = useState(""); // en la nube, la primera vez se elige el PIN
   const [enviando, setEnviando] = useState(false);
@@ -182,10 +184,6 @@ export function Ingreso() {
 
   const elegido = comercioId ?? (comercios.some((c) => c.id === ultimoComercio) ? ultimoComercio : comercios[0]?.id);
   const bloqueado = restante > 0;
-  const deEste = empleados.filter((e) => e.comercioId === elegido && e.activo);
-  // Si cambia de comercio, el nombre elegido antes ya no está en la lista de este: hay que volver a elegir
-  const empleado = deEste.find((e) => e.id === empleadoId);
-  const sinEmpleados = quien === "empleado" && !deEste.length;
   // La misma regla que useNombreJefe (store/jefe.ts) y la API: sin nombre en la cuenta, entra como "Jefe"
   const nombreJefe = enNube ? cuenta?.nombre?.trim() || "Jefe" : DUENO.nombre;
   // Con el cifrado, si Nahuel borró el PIN desde Supabase, el PIN nuevo se elige con el código de recuperación
@@ -223,17 +221,21 @@ export function Ingreso() {
     e.preventDefault();
     setError("");
     if (quien === "empleado") {
-      if (sinEmpleados) return setError(SIN_EMPLEADOS);
-      if (!empleado) return setError("Elegí tu nombre de la lista: queda anotado en la caja que abras.");
+      if (!nombreEscrito.trim()) return setError("Escribí tu nombre: queda anotado en la caja que abras.");
       if (sinCodigo) return setError(porQueNoEntra);
-      let nombre = empleado.nombre;
-      if (enNube) {
+      let nombre = limpiarNombre(nombreEscrito);
+      if (!enNube) {
+        // En la demo se compara acá, con la misma regla que la API (sin mayúsculas, tildes ni espacios de más)
+        const cargado = nombreRepetido(empleados, elegido, nombreEscrito);
+        if (!cargado) return setError(noEstaElNombre(nombre));
+        nombre = cargado.nombre;
+      } else {
         if (bloqueado || enviando) return;
         setEnviando(true);
         try {
-          const confirmado = await entrarConCodigo(elegido, codigo, empleado.id);
+          const confirmado = await entrarConCodigo(elegido, codigo, nombre);
           if (confirmado === null) return fallo("código");
-          nombre = confirmado || nombre;
+          nombre = confirmado || nombre; // como lo cargó el jefe ("juan" → "Juan")
           await traerDatosConLlave(); // con la llave del empleado, la API abre los datos de SU comercio
         } catch (err) {
           setCodigo("");
@@ -325,7 +327,7 @@ export function Ingreso() {
               <Info className="mt-0.5 size-4 shrink-0 text-texto-suave" />
               <span>
                 Demo con datos de prueba. Entrá como jefe con el PIN{" "}
-                {pinCambiado ? "que elegiste en Configuración" : <b>{DUENO.pinDemo}</b>}, o como empleado eligiendo tu nombre de la lista.
+                {pinCambiado ? "que elegiste en Configuración" : <b>{DUENO.pinDemo}</b>}, o como empleado escribiendo tu nombre (por ejemplo, Laura en la ferretería).
               </span>
             </p>
           )}
@@ -392,34 +394,20 @@ export function Ingreso() {
 
           {quien === "empleado" ? (
             <>
-              {sinEmpleados ? (
-                <p className="flex gap-2.5 rounded-md border border-borde bg-superficie-suave p-3 text-sm">
-                  <Info className="mt-0.5 size-4 shrink-0 text-texto-suave" />
-                  <span>{SIN_EMPLEADOS}</span>
-                </p>
-              ) : (
-                <Campo etiqueta="Tu nombre" ayuda="Si no estás en la lista, pedile al jefe que te agregue en Mis comercios.">
-                  <select
-                    id="nombre"
-                    value={empleado?.id ?? ""}
-                    onChange={(e) => {
-                      setEmpleadoId(e.target.value ? Number(e.target.value) : null);
-                      setError("");
-                    }}
-                    className={claseInput}
-                  >
-                    <option value="" disabled>
-                      Elegí tu nombre
-                    </option>
-                    {deEste.map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </Campo>
-              )}
-              {sinEmpleados ? null : sinCodigo ? (
+              <Campo etiqueta="Tu nombre" ayuda="Como te cargó el jefe en Mis comercios (no importan las mayúsculas ni las tildes).">
+                <input
+                  id="nombre"
+                  value={nombreEscrito}
+                  onChange={(e) => {
+                    setNombreEscrito(e.target.value);
+                    setError("");
+                  }}
+                  autoComplete="off"
+                  maxLength={100}
+                  className={claseInput}
+                />
+              </Campo>
+              {sinCodigo ? (
                 <p className="flex gap-2.5 rounded-md border border-borde bg-superficie-suave p-3 text-sm">
                   <Info className="mt-0.5 size-4 shrink-0 text-texto-suave" />
                   <span>{porQueNoEntra}</span>
@@ -545,7 +533,7 @@ export function Ingreso() {
           )}
 
           {!recuperando && (
-            <Boton type="submit" variante="primario" icono={quien === "jefe" ? KeyRound : User} disabled={sinCodigo || sinEmpleados || ((quien === "jefe" || enNube) && (bloqueado || enviando))} className="h-11">
+            <Boton type="submit" variante="primario" icono={quien === "jefe" ? KeyRound : User} disabled={sinCodigo || ((quien === "jefe" || enNube) && (bloqueado || enviando))} className="h-11">
               {enviando ? "Comprobando…" : creando ? "Crear comercio y entrar" : eligePin && quien === "jefe" ? "Guardar PIN y entrar" : "Entrar"}
             </Boton>
           )}
@@ -555,7 +543,9 @@ export function Ingreso() {
   );
 }
 
-const SIN_EMPLEADOS = "El jefe todavía no cargó empleados en este comercio. Pedile que te agregue en Mis comercios (entrando como jefe).";
+// El mismo aviso que la API cuando el nombre no está (o el jefe lo dio de baja)
+const noEstaElNombre = (nombre: string) =>
+  `No hay ningún empleado llamado ${nombre} en este comercio (o el jefe lo dio de baja). Revisá cómo lo escribiste o pedile al jefe que te agregue en Mis comercios.`;
 
 type ComercioNuevo = { nombre: string; rubro: Rubro; direccion: string; usaTicket: boolean };
 const COMERCIO_VACIO: ComercioNuevo = { nombre: "", rubro: "kiosco", direccion: "", usaTicket: true };

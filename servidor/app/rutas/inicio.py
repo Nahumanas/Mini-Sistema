@@ -29,7 +29,7 @@ def inicio(usuario: Usuario = Depends(usuario_actual), llave: Llave | None = Dep
     El RLS hace que cada dueño reciba solo lo suyo.
 
     Sin llave (la pantalla de ingreso, antes de poner el PIN o el código) va solo lo que no está cifrado:
-    el dueño, sus comercios, los empleados y qué comercios tienen código. Con la llave del jefe van los datos
+    el dueño, sus comercios y qué comercios tienen código (los nombres de los empleados no: cada uno escribe el suyo). Con la llave del jefe van los datos
     de todos sus comercios; con la de un empleado, solo los de su comercio."""
     basicas = [
         (f"""select nombre, email, pin_huella is not null as pin_configurado,
@@ -48,6 +48,14 @@ def inicio(usuario: Usuario = Depends(usuario_actual), llave: Llave | None = Dep
     if not dueno_filas:
         raise HTTPException(403, SIN_CUENTA)
     dueno = dueno_filas[0]
+    # Los nombres de los empleados no se mandan a la pantalla de ingreso: el empleado escribe el suyo (así quien
+    # se siente en la compu no ve la lista). Con la llave del jefe van todos; con la de un empleado, los de su
+    # comercio (para el relevo). Sin cifrado los empleados no pueden entrar, así que no hay pantalla que esconder.
+    if dueno["cifrado_activo"]:
+        if llave is None:
+            empleados = []
+        elif llave.dueno is None:
+            empleados = [e for e in empleados if e["comercio_id"] in llave.comercios]
     resultado = {
         "dueno": a_camel(dueno),
         "codigos": [a_camel(f) for f in codigos],
