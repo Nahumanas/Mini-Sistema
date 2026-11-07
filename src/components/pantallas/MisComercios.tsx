@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Clock, KeyRound, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
+import { mensajeNombreRepetido, nombreRepetido } from "@/lib/empleados";
 import { ddmm, hora } from "@/lib/fechas";
 import { HORARIO_SUGERIDO } from "@/lib/horarios";
 import type { Comercio, Permiso, Rubro, Turno } from "@/lib/tipos";
@@ -34,11 +35,13 @@ export function MisComercios() {
   const [creando, setCreando] = useState(false);
   const [nuevo, setNuevo] = useState({ nombre: "", rubro: "kiosco" as Rubro, direccion: "", usaTicket: true });
   const [nombreEmpleado, setNombreEmpleado] = useState("");
+  const [errorEmpleado, setErrorEmpleado] = useState("");
 
   const comercio = comercios.find((c) => c.id === editandoId) ?? activo;
   const suyos = empleados.filter((e) => e.comercioId === comercio.id);
   const [datos, setDatos] = useState({ id: comercio.id, nombre: comercio.nombre, direccion: comercio.direccion, rubro: comercio.rubro, usaTicket: comercio.usaTicket });
   // Al cambiar de pestaña, el formulario toma los datos del otro comercio
+  if (datos.id !== comercio.id) setErrorEmpleado("");
   if (datos.id !== comercio.id) setDatos({ id: comercio.id, nombre: comercio.nombre, direccion: comercio.direccion, rubro: comercio.rubro, usaTicket: comercio.usaTicket });
 
   /** Hace el cambio y avisa si no se pudo (en la nube, si no hay conexión o la API dice que no). */
@@ -169,12 +172,27 @@ export function MisComercios() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 if (!nombreEmpleado.trim()) return;
-                if (await intentar(agregarEmpleado(comercio.id, nombreEmpleado.trim()))) setNombreEmpleado("");
+                // Aviso al toque si ya está en la lista (igual la API lo vuelve a controlar)
+                if (nombreRepetido(suyos, comercio.id, nombreEmpleado)) return setErrorEmpleado(mensajeNombreRepetido(nombreEmpleado));
+                try {
+                  await agregarEmpleado(comercio.id, nombreEmpleado.trim());
+                  setNombreEmpleado("");
+                  setErrorEmpleado("");
+                } catch (err) {
+                  setErrorEmpleado((err as Error).message); // queda abajo del campo, no solo en el cartelito
+                }
               }}
-              className="flex gap-2"
+              className="flex flex-col gap-1.5"
             >
-              <input id="nombre-empleado" value={nombreEmpleado} onChange={(e) => setNombreEmpleado(e.target.value)} placeholder="Nombre del empleado" className={claseInput} aria-label="Nombre del empleado" />
-              <Boton type="submit" icono={UserPlus}>Agregar</Boton>
+              <div className="flex gap-2">
+                <input
+                  id="nombre-empleado" value={nombreEmpleado} placeholder="Nombre del empleado" className={claseInput} aria-label="Nombre del empleado"
+                  onChange={(e) => { setNombreEmpleado(e.target.value); setErrorEmpleado(""); }}
+                  aria-invalid={errorEmpleado ? true : undefined} aria-describedby={errorEmpleado ? "error-nombre-empleado" : undefined}
+                />
+                <Boton type="submit" icono={UserPlus}>Agregar</Boton>
+              </div>
+              {errorEmpleado && <p id="error-nombre-empleado" role="alert" className="text-sm text-peligro">{errorEmpleado}</p>}
             </form>
 
             <hr className="border-borde" />

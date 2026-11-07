@@ -10,6 +10,7 @@ import { ejemploGimnasio } from "@/lib/demo-gimnasio";
 import { turnoEnCurso } from "@/lib/caja";
 import { validarHorarios } from "@/lib/horarios";
 import { huellaDelPin, validarPinNuevo } from "@/lib/pin";
+import { limpiarNombre, mensajeNombreRepetido, nombreRepetido } from "@/lib/empleados";
 import type { Comercio, Compra, Gasto, ItemVenta, Producto, Promo, Relevo, Retiro, Socio, Turno, Venta } from "@/lib/tipos";
 import { type AccionesGimnasio, accionesGimnasio } from "./acciones-gimnasio";
 import { accionesNube } from "./acciones-nube";
@@ -410,8 +411,10 @@ export const useDatos = create<EstadoDatos>()(
         },
 
         agregarEmpleado: async (comercioId, nombre) => {
+          // Igual que la API: no dos empleados con el mismo nombre en un comercio
+          if (nombreRepetido(get().empleados, comercioId, nombre)) throw new Error(mensajeNombreRepetido(nombre));
           const id = nuevoId();
-          set((s) => ({ empleados: [...s.empleados, { id, comercioId, nombre, activo: true }] }));
+          set((s) => ({ empleados: [...s.empleados, { id, comercioId, nombre: limpiarNombre(nombre), activo: true }] }));
         },
 
         quitarEmpleado: async (id) => {

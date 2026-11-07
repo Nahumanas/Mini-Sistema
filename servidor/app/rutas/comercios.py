@@ -1,3 +1,4 @@
+import unicodedata
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,7 @@ from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import VOLVER_A_PONER, crear_clave_comercio, llave_opcional, llave_requerida
 from ..sobres import Cofre
+from .comun import comercio_mio
 
 router = APIRouter(tags=["Comercios"])
 
@@ -115,13 +117,36 @@ def agregar_empleado(comercio_id: int, datos: NuevoEmpleado, usuario: Usuario = 
                      llave: Llave = Depends(llave_requerida)):
     if not datos.nombre.strip():
         raise HTTPException(422, "Escribí el nombre del empleado.")
+    nombre = " ".join(datos.nombre.split())  # sin espacios de más: "  Juan   Pérez " → "Juan Pérez"
     with como_usuario(usuario) as con:
         Cofre(con, llave).comercio(comercio_id)
+        # Traba el comercio hasta el final: si dos compus agregan "Juan" justo a la vez, la segunda espera
+        # a la primera y ya lo ve (sin la traba, las dos miran, no lo encuentran y lo anotan dos veces).
+        comercio_mio(con, comercio_id, bloquear=True)
+        activos = con.execute(
+            "select nombre from public.empleados where comercio_id = %s and activo", (comercio_id,)
+        ).fetchall()
+        if any(mismo_nombre(nombre, fila["nombre"]) for fila in activos):
+            raise HTTPException(409, f"El nombre {nombre} ya está registrado en este comercio. "
+                                     "Por favor agregá un apellido o inicial para diferenciarlo.")
         fila = con.execute(
             "insert into public.empleados (comercio_id, nombre) values (%s, %s) returning *",
-            (comercio_id, datos.nombre.strip()),
+            (comercio_id, nombre),
         ).fetchone()
     return a_camel(fila)
+
+
+def nombre_comparable(nombre: str) -> str:
+    """El nombre como se compara: sin mayúsculas, sin tildes y sin espacios de más ("  JOSÉ " = "jose").
+    Igual que nombreComparable de src/lib/empleados.ts."""
+    # Se separa cada letra de su tilde y se tira la tilde, menos la de la ñ (Peña y Pena son personas distintas)
+    letras = unicodedata.normalize("NFD", nombre.casefold())
+    sin_tildes = "".join(c for c in letras if unicodedata.category(c) != "Mn" or c == "\u0303")
+    return " ".join(unicodedata.normalize("NFC", sin_tildes).split())
+
+
+def mismo_nombre(a: str, b: str) -> bool:
+    return nombre_comparable(a) == nombre_comparable(b)
 
 
 @router.delete("/empleados/{empleado_id}", tags=["Empleados"])
