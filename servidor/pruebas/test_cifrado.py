@@ -166,14 +166,22 @@ def test_activar_entrar_codigo_cambiar_y_recuperar(cliente):
     assert cliente.delete(f"/empleados/{dado_de_baja}", headers=jefe).status_code == 200
     entrar = f"/comercios/{kiosco}/llave-empleado"
     assert cliente.post(entrar, json={"codigo": "739153", "empleadoId": martina}, headers=ana).json() == {"ok": False}
-    # Sin elegir el nombre (una página vieja) no entra: pide actualizar
-    sin_nombre = cliente.post(entrar, json={"codigo": "739152"}, headers=ana)
-    assert sin_nombre.status_code == 409 and "lista" in sin_nombre.json()["detail"]
-    # Con el código bien pero alguien que no está en la lista del kiosco: no entra
+    # Sin escribir el nombre no entra
+    sin_nombre = cliente.post(entrar, json={"codigo": "739152", "nombre": "  "}, headers=ana)
+    assert sin_nombre.status_code == 422 and "nombre" in sin_nombre.json()["detail"]
+    # Con el código bien pero un nombre que no está en el kiosco (del gimnasio, dado de baja o inventado): no entra
+    for colado in ("Diego", "Pepe", "Cualquiera"):
+        r = cliente.post(entrar, json={"codigo": "739152", "nombre": colado}, headers=ana)
+        assert r.status_code == 403 and "llave" not in r.json() and colado in r.json()["detail"], colado
+    # Con el código mal no dice si el nombre existe (primero se revisa el código)
+    assert cliente.post(entrar, json={"codigo": "739153", "nombre": "Cualquiera"}, headers=ana).json() == {"ok": False}
+    # Una página sin actualizar (que todavía manda el id elegido de la lista) sigue andando
     for colado in (del_gym, dado_de_baja, 999999):
         r = cliente.post(entrar, json={"codigo": "739152", "empleadoId": colado}, headers=ana)
         assert r.status_code == 403 and "llave" not in r.json(), colado
-    r = cliente.post(entrar, json={"codigo": "739152", "empleadoId": martina}, headers=ana).json()
+    assert cliente.post(entrar, json={"codigo": "739152", "empleadoId": martina}, headers=ana).json()["ok"] is True
+    # Escrito sin mayúsculas ni con espacios de más, entra y vuelve el nombre como lo cargó el jefe
+    r = cliente.post(entrar, json={"codigo": "739152", "nombre": "  MARTINA "}, headers=ana).json()
     assert r["ok"] is True and r["empleado"] == {"id": martina, "nombre": "Martina"}
     llave_empleado = r["llave"]
     mia = cliente.get("/yo/llave", headers=_con(ana, llave_empleado)).json()

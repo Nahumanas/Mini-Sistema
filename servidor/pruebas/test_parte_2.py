@@ -171,3 +171,32 @@ def test_importar_productos_del_excel(cliente):
     malas = [{"codigo": "779003", "nombre": "Bueno", "precioVenta": 10}, {"codigo": "779004", "nombre": "Malo", "precioVenta": 0}]
     assert cliente.post(f"/comercios/{cid}/productos/importar", json={"filas": malas}, headers=ana).status_code == 422
     assert len(cliente.get(f"/comercios/{cid}/productos", headers=ana).json()) == 2
+
+
+def test_no_deja_dos_empleados_con_el_mismo_nombre_en_un_comercio(cliente):
+    """Con dos "Juan" en la lista, en el ingreso no se sabe cuál es cuál (ni en las ventas ni en el relevo)."""
+    ana = crear_usuario("ana.nombres@gmail.com")
+    cid = _kiosco(cliente, ana)[0]["id"]
+    juan = cargar_empleado(cliente, ana, cid, "José Pérez")
+
+    for repetido in ("josé pérez", "  JOSE   PEREZ ", "Jose Perez"):  # sin importar mayúsculas, tildes ni espacios
+        r = cliente.post(f"/comercios/{cid}/empleados", json={"nombre": repetido}, headers=ana)
+        assert r.status_code == 409, r.text
+    assert r.json()["detail"] == ("El nombre Jose Perez ya está registrado en este comercio. "
+                                  "Por favor agregá un apellido o inicial para diferenciarlo.")
+
+    # Con un apellido o una inicial distinta sí; y la ñ cuenta (Peña no es Pena)
+    cargar_empleado(cliente, ana, cid, "José P.")
+    cargar_empleado(cliente, ana, cid, "Peña")
+    cargar_empleado(cliente, ana, cid, "Pena")
+    # Los espacios de más se limpian al guardar
+    assert cliente.post(f"/comercios/{cid}/empleados", json={"nombre": "  Lu   Gómez "}, headers=ana).json()["nombre"] == "Lu Gómez"
+
+    # En OTRO comercio del mismo dueño el nombre se puede repetir
+    otro = cliente.post("/comercios", json={"nombre": "Kiosco 2", "rubro": "kiosco"}, headers=ana)
+    assert otro.status_code == 201, otro.text
+    cargar_empleado(cliente, ana, otro.json()["id"], "José Pérez")
+
+    # Si el jefe da de baja a José, puede volver a cargar a otro con ese nombre
+    assert cliente.delete(f"/empleados/{juan}", headers=ana).status_code == 200
+    cargar_empleado(cliente, ana, cid, "José Pérez")
