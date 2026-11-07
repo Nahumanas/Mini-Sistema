@@ -161,7 +161,8 @@ def registrar(comercio_id: int, venta: NuevaVenta, tareas: BackgroundTasks, resp
 
     Los precios y costos salen de la base, no de la página. El comercio se "traba" mientras se cobra,
     así dos compus del mismo local nunca sacan el mismo número de venta.
-    Si algún producto quedó en su mínimo, al jefe le llega un aviso (uno solo hasta que se reponga).
+    Si algún producto quedó en su mínimo, al jefe le llega un aviso por Telegram y/o por mail,
+    según lo que haya prendido (uno solo por producto hasta que se reponga).
 
     Va en DOS viajes a la base (leer todo y guardar todo), porque la base está lejos del servidor.
     Si trae idCliente y esa venta ya estaba guardada, la devuelve (con 200 en vez de 201) sin guardarla de nuevo.
@@ -200,12 +201,14 @@ def registrar(comercio_id: int, venta: NuevaVenta, tareas: BackgroundTasks, resp
             renglones.append({"producto_id": p["id"], "cantidad": str(item.cantidad), "sobre": cofre.cerrar(
                 "ventas_detalle", comercio_id, {"nombre": p["nombre"], "categoria": p["categoria"],
                                                 "precio_unitario": p["precio_venta"], "costo_unitario": p["costo"]})})
-        chat = avisos.chat_de(fichas[0] if fichas else None, "stock_bajo")
+        ficha = fichas[0] if fichas else None
+        chat = avisos.chat_de(ficha, "stock_bajo")
+        mail = avisos.mail_de(ficha, "stock_bajo", usuario.email)
         (guardado,) = viaje((_GUARDAR, {
             "comercio": comercio_id, "caja": cajas[0]["id"], "medio": venta.medioPago, "por": venta.vendidoPor.strip(),
             "sobre": cofre.cerrar("ventas", comercio_id, {"subtotal": subtotal, "descuento": descuento,
                                                           "total": subtotal - descuento, "promos": promos, "diferencias": []}),
-            "detalle": json.dumps(renglones), "avisar": chat is not None, **_EN_LINEA, "id_cliente": venta.idCliente,
+            "detalle": json.dumps(renglones), "avisar": chat is not None or mail is not None, **_EN_LINEA, "id_cliente": venta.idCliente,
         }), terminar=True)
 
     fila = next(_de_json(g["fila"]) for g in guardado if g["que"] == "venta")
@@ -213,7 +216,7 @@ def registrar(comercio_id: int, venta: NuevaVenta, tareas: BackgroundTasks, resp
     # Los que se acaban de marcar como avisados (antes no lo estaban): el aviso sale después de contestar
     recien = [_de_json(g["fila"]) for g in guardado
               if g["que"] == "producto" and g["fila"]["avisado_stock_bajo"] and not productos[g["fila"]["id"]]["avisado_stock_bajo"]]
-    avisos.mandar_despues(tareas, chat, lambda: avisos.mensaje_stock_bajo(cofre, comercio, recien), "stock_bajo")
+    avisos.stock_bajo_despues(tareas, cofre, comercio, recien, chat, mail)
 
     items = []
     for item, r in zip(venta.items, renglones, strict=True):

@@ -156,6 +156,10 @@ Con la API corriendo, la lista completa está en `/docs`.
 | `SECRETO_SESION` | Botón **Generate** de Render. Si se cambia no se pierde nada: todos vuelven a poner su PIN o código | **Sí** |
 | `TELEGRAM_BOT_TOKEN` | La clave del bot de Telegram (la da @BotFather). Sin ella no se mandan avisos | **Sí** |
 | `SUPABASE_SECRET_KEY` | Supabase → Project Settings → **API Keys** → *Secret keys* (`sb_secret_...`). Solo para "Invitar cliente" desde la pantalla de administrador. Saltea todas las reglas RLS: **nunca** en Vercel ni en GitHub | **Sí** |
+| `BREVO_API_KEY` | Avisos por mail (opción 1, **anda en Render gratis**): Brevo → SMTP & API → *API Keys*. Sin esta ni SMTP, no se mandan mails | **Sí** |
+| `CORREO_REMITENTE` | El mail que figura como remitente. Con Brevo tiene que estar verificado en *Senders* | No |
+| `CORREO_NOMBRE` | El nombre del remitente (por defecto `Mantenete`) | No |
+| `SMTP_HOST`, `SMTP_PUERTO`, `SMTP_USUARIO`, `SMTP_CLAVE` | Avisos por mail (opción 2): SMTP común, por ejemplo `smtp.gmail.com`, `587`, tu Gmail y una *contraseña de aplicación*. **No anda en Render gratis** (bloquea los puertos de mail). `SMTP_CLAVE` es secreta | `SMTP_CLAVE` sí |
 | `URL_SISTEMA` | Opcional: a dónde lleva el mail de invitación (por defecto `https://mantenete-app.vercel.app`) | No |
 
 Y en **Vercel**, para que la página use la API: `NEXT_PUBLIC_API_URL` = la dirección de la API (no es secreta).
