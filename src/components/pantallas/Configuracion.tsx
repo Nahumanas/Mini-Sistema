@@ -7,6 +7,7 @@ import { useCarrito } from "@/store/carrito";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { Boton, Campo, claseInput, Encabezado, Tarjeta } from "../ui/base";
+import { AvisosMail } from "./AvisosMail";
 import { AvisosTelegram } from "./AvisosTelegram";
 import { ProbarAparatos } from "./ProbarAparatos";
 
@@ -40,6 +41,8 @@ export function Configuracion() {
       <CambiarPin />
 
       <AvisosTelegram />
+
+      <AvisosMail />
 
       {/* En la nube no hay datos de prueba para reiniciar: son los datos de verdad */}
       {!enNube && (

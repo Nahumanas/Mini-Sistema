@@ -93,7 +93,7 @@ def _efectivo(cofre: Cofre, ventas: list[dict]) -> Decimal:
 def cerrar(comercio_id: int, datos: CerrarCaja, tareas: BackgroundTasks, usuario: Usuario = Depends(usuario_actual),
            llave: Llave = Depends(llave_requerida)):
     """Cierra con arqueo: esperado = con lo que abrió + lo cobrado en efectivo (sin las ventas anuladas).
-    Si el jefe tiene los avisos prendidos, le llega el arqueo con el resumen del día."""
+    Si el jefe tiene los avisos prendidos, le llega el arqueo con el resumen del día (por Telegram y/o por mail)."""
     with en_viajes(usuario) as viaje:
         # Primer viaje: todo lo que hace falta leer (el comercio trabado: que no se cuele una venta mientras se cuenta)
         comercios, claves, cajas, ventas, fichas = viaje(
@@ -113,13 +113,15 @@ def cerrar(comercio_id: int, datos: CerrarCaja, tareas: BackgroundTasks, usuario
         efectivo = _efectivo(cofre, ventas)
         sobre = cofre.actualizar("cajas", caja, efectivo_esperado=caja["monto_inicial"] + efectivo,
                                  efectivo_contado=datos.efectivoContado, nota=datos.nota.strip())
-        chat = avisos.chat_de(fichas[0] if fichas else None, "cierre")
+        ficha = fichas[0] if fichas else None
+        chat = avisos.chat_de(ficha, "cierre")
+        mail = avisos.mail_de(ficha, "cierre", usuario.email)
         # Segundo viaje: guardar (y cerrar la transacción, salvo que haya que armar el aviso con más datos)
         (filas,) = viaje(("update public.cajas set cerrada = now(), sobre = %s where id = %s returning *", (sobre, caja["id"])),
-                         terminar=chat is None)
+                         terminar=chat is None and mail is None)
         cerrada = cofre.abrir("cajas", filas[0])
-        if chat is not None:
-            avisos.avisar(viaje.con, tareas, "cierre", lambda: avisos.cierre(viaje.con, cofre, comercio, cerrada))
+        avisos.avisar_a(viaje.con, tareas, "cierre", chat, mail, lambda: avisos.cierre(viaje.con, cofre, comercio, cerrada),
+                        asunto=f"Cierre de caja en {comercio['nombre']}", boton=("Ver el Panel del día", "/panel-del-dia"))
         return a_camel(cerrada)
 
 

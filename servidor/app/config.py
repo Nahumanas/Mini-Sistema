@@ -44,3 +44,16 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 SUPABASE_SECRET_KEY = os.environ.get("SUPABASE_SECRET_KEY", "").strip()
 # A dónde lleva el link del mail de invitación.
 URL_SISTEMA = os.environ.get("URL_SISTEMA", "https://mantenete-app.vercel.app").rstrip("/")
+
+# Avisos por mail (stock bajo y cierre de caja). Ver correo.py.
+# Opción 1 (anda en Render gratis): la clave de la API de Brevo (SECRETA) y el mail que figura como remitente
+# (tiene que estar verificado en Brevo → Senders).
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "").strip()
+# Opción 2 (Render pago o en tu compu): SMTP, por ejemplo Gmail con contraseña de aplicación (SMTP_CLAVE es SECRETA).
+SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
+SMTP_PUERTO = int(os.environ.get("SMTP_PUERTO", "587"))
+SMTP_USUARIO = os.environ.get("SMTP_USUARIO", "").strip()
+SMTP_CLAVE = os.environ.get("SMTP_CLAVE", "").strip()
+# Quién figura como remitente (no son secretos)
+CORREO_REMITENTE = os.environ.get("CORREO_REMITENTE", "").strip()
+CORREO_NOMBRE = os.environ.get("CORREO_NOMBRE", "Mantenete").strip()
