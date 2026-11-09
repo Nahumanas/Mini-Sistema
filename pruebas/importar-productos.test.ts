@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { leerCsv, separarEncabezado } from "@/lib/planilla";
-import { adivinarColumnasProductos, armarProductos, faltaElegir, leerNumero } from "@/lib/productos-excel";
+import { adivinarColumnasProductos, armarProductos, esFilaDeTotales, faltaElegir, leerCantidad, leerNumero } from "@/lib/productos-excel";
 import type { Producto } from "@/lib/tipos";
 
 const planillaDe = (csv: string) => separarEncabezado(leerCsv(csv));
@@ -79,4 +79,40 @@ describe("importar productos", () => {
     const p = planillaDe('codigo;nombre;precio\n7,79E+12;Coca;100\n');
     expect(armarProductos(p, adivinarColumnasProductos(p.encabezado), [])[0].error).toContain("Excel achicó el código");
   });
+
+  it("ve repetida la misma fila con código y sin código", () => {
+    const p = planillaDe("codigo,nombre,precio\n7790895000997,Coca Cola 500ml,1500\n,COCA COLA 500ML,1500\n,Agua 1L,900\n111,agua 1l,900\n");
+    const filas = armarProductos(p, adivinarColumnasProductos(p.encabezado), []);
+    expect(filas[0].error).toBeUndefined();
+    expect(filas[1].error).toBe("Nombre repetido (también en el renglón 2)");
+    expect(filas[2].error).toBeUndefined();
+    expect(filas[3].error).toBe("Nombre repetido (también en el renglón 4)");
+  });
+
+  it("mismo nombre con dos códigos distintos: se importa pero avisa", () => {
+    const p = planillaDe("codigo,nombre,precio\n1,Coca 500,1500\n2,coca 500,1500\n3,Coca 500,1500\n1,Otra,10\n");
+    const filas = armarProductos(p, adivinarColumnasProductos(p.encabezado), [coca]);
+    expect(filas[0]).toMatchObject({ existe: false, aviso: "Ya tenés «Coca 500» con otro código: quedarían dos" });
+    expect(filas[1].aviso).toBe("Mismo nombre que el renglón 2, con otro código");
+    expect(filas[2].error).toBeUndefined();
+    expect(filas[3].error).toBe("Código repetido (también en el renglón 2)");
+  });
+
+  it("las filas de totales se muestran pero no se importan", () => {
+    expect(["TOTAL", "Subtotal:", "  suma ", "Total general", "CANTIDAD"].every(esFilaDeTotales)).toBe(true);
+    expect(["Total limpiador", "Suma 500 ml", "Coca"].some(esFilaDeTotales)).toBe(false);
+    const p = planillaDe("nombre,stock,precio\nCoca,2,1500\nTOTAL,2,1500\n");
+    const filas = armarProductos(p, adivinarColumnasProductos(p.encabezado), []);
+    expect(filas[1].error).toBe("Es una fila de totales, no un producto: no se importa");
+  });
+
+  it("lee cantidades con la unidad al lado, pero no packs ni kilos", () => {
+    expect(["12 u", "12u", "12un", "12 unidades", "12 Uds.", "12 unid"].map(leerCantidad)).toEqual([12, 12, 12, 12, 12, 12]);
+    expect(leerCantidad(12)).toBe(12);
+    expect(leerCantidad("1.500 u")).toBe(1500);
+    for (const malo of ["12 pack", "2 cajas", "1,5 kg", "2x6", "u12"]) expect(leerCantidad(malo)).toBeNaN();
+    // el precio no acepta unidades: "12 u" en el precio sigue siendo un error
+    expect(leerNumero("12 u")).toBeNaN();
+  });
 });
+
