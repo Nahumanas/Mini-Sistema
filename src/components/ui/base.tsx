@@ -70,8 +70,14 @@ const TONOS = {
   rojo: "border-red-400/50 bg-red-400/10 text-peligro",
 };
 
-export function Chip({ tono = "gris", children }: { tono?: keyof typeof TONOS; children: ReactNode }) {
-  return <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${TONOS[tono]}`}>{children}</span>;
+/** Una etiqueta chiquita. `punto`: le pone adelante un puntito del mismo color, para mostrar un estado («• Todos», «• Propio (2)»). */
+export function Chip({ tono = "gris", punto = false, title, children }: { tono?: keyof typeof TONOS; punto?: boolean; title?: string; children: ReactNode }) {
+  return (
+    <span title={title} className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${TONOS[tono]}`}>
+      {punto && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current" />}
+      {children}
+    </span>
+  );
 }
 
 /**

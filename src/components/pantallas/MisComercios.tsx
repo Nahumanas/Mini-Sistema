@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, KeyRound, Plus, Save, SlidersHorizontal, Trash2, UserPlus, X } from "lucide-react";
+import { Clock, KeyRound, Lock, Plus, RotateCcw, Save, SlidersHorizontal, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { mensajeNombreRepetido, nombreRepetido } from "@/lib/empleados";
 import { ddmm, hora } from "@/lib/fechas";
 import { HORARIO_SUGERIDO } from "@/lib/horarios";
-import { permisosDe } from "@/lib/navegacion";
+import { esDelRubro, MENU, permisosDe, type Seccion } from "@/lib/navegacion";
 import type { Comercio, Empleado, Permiso, Rubro, Turno } from "@/lib/tipos";
 import { elegirCodigo } from "@/store/cifrado";
 import { useComercioActivo, usePermisosPorEmpleado, useSesion } from "@/store/comercio";
@@ -15,16 +15,36 @@ import { Dialogo } from "../ui/Dialogo";
 import { RUBROS } from "../layout/Topbar";
 import { Boton, Campo, Chip, claseInput, Encabezado, Segmentado, Tarjeta } from "../ui/base";
 
-const PERMISOS: { clave: Permiso; texto: string; soloGimnasio?: boolean }[] = [
-  { clave: "panel_del_dia", texto: "Panel del día (lo cobrado hoy)" },
-  { clave: "stock", texto: "Stock (solo mirar)" },
-  { clave: "compras", texto: "Compras (cargar lo que llega)" },
-  { clave: "gastos", texto: "Gastos" },
-  { clave: "vencimientos", texto: "Vencimientos (cargar tandas y retirar lo vencido)" },
-  { clave: "socios", texto: "Socios (ver, dar de alta y cobrar desde la ficha)", soloGimnasio: true },
-  { clave: "cuotas", texto: "Cuotas y vencimientos (cobrar cuotas y avisar a los que deben)", soloGimnasio: true },
-  { clave: "clases", texto: "Clases (anotar socios, lista de espera y asistencia)", soloGimnasio: true },
-];
+// Qué hace el empleado en cada sección que el jefe le puede dar (el renglón chico abajo del nombre)
+const DETALLE: Record<Permiso, string> = {
+  compras: "Cargar lo que llega",
+  gastos: "Lo que se paga además de la mercadería",
+  vencimientos: "Cargar tandas y retirar lo vencido",
+  socios: "Ver, dar de alta y cobrar desde la ficha",
+  cuotas: "Cobrar cuotas y avisar a los que deben",
+  clases: "Anotar socios, lista de espera y asistencia",
+  panel_del_dia: "Lo cobrado hoy",
+  stock: "Solo mirar",
+};
+
+/**
+ * Las secciones que puede tener un empleado en ese comercio, agrupadas IGUAL que el menú (Día a día, Gimnasio, Control).
+ * Salen del mismo MENU: así la ventana y el menú del empleado nunca quedan distintos. Las que no tienen `permiso`
+ * (la Caja y, en los gimnasios, el Ingreso por DNI) las tiene siempre: sin ellas no puede trabajar.
+ */
+function seccionesParaEmpleados(comercio: Comercio) {
+  return MENU.flatMap((g) => {
+    const secciones = g.secciones.filter((s) => !s.soloJefe && esDelRubro(s, comercio));
+    return g.titulo && secciones.length ? [{ titulo: g.titulo, secciones }] : [];
+  });
+}
+
+/** Solo las que se pueden prender o apagar, en el orden del menú. */
+function permisosEn(comercio: Comercio): { seccion: Seccion; clave: Permiso }[] {
+  return seccionesParaEmpleados(comercio).flatMap((g) => g.secciones.flatMap((s) => (s.permiso ? [{ seccion: s, clave: s.permiso }] : [])));
+}
+
+const enMinuscula = (texto: string) => texto.charAt(0).toLowerCase() + texto.slice(1);
 
 // Los comercios del dueño: sus datos, sus empleados y qué puede ver cada empleado. Y crear uno nuevo.
 export function MisComercios() {
@@ -39,6 +59,7 @@ export function MisComercios() {
   const [nombreEmpleado, setNombreEmpleado] = useState("");
   const [errorEmpleado, setErrorEmpleado] = useState("");
   const [eligiendoA, setEligiendoA] = useState<Empleado | null>(null); // la ventana de "Qué ve Martina"
+  const [dandoDeBaja, setDandoDeBaja] = useState<Empleado | null>(null); // la ventana de "¿Dar de baja a Martina?"
   // Elegir qué ve cada empleado es una personalización (se cobra aparte): sin ella, todos ven lo del comercio
   const porEmpleado = usePermisosPorEmpleado();
 
@@ -165,21 +186,42 @@ export function MisComercios() {
             <ul className="flex flex-col divide-y divide-borde rounded-md border border-borde">
               {suyos.map((e) => {
                 const propios = e.permisos != null;
-                const cuantos = visiblesEn(comercio, permisosDe(comercio, e)).length;
+                const elegidos = permisosDe(comercio, e);
+                const cuantos = permisosEn(comercio).filter((p) => elegidos.includes(p.clave)).length;
                 return (
-                  <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 text-[15px]">
-                    <span className="min-w-0 flex-1 truncate font-medium">{e.nombre}</span>
-                    {porEmpleado && <Chip tono={propios ? "verde" : "gris"}>{propios ? `Propio · ${cuantos} ${cuantos === 1 ? "sección" : "secciones"}` : "Igual que todos"}</Chip>}
-                    <span className="flex items-center gap-1">
-                      {porEmpleado && (
+                  <li key={e.id} className="flex items-center gap-2 py-1.5 pl-3 pr-1.5 text-[15px]">
+                    {/* A la izquierda, quién es y cómo está; a la derecha, las acciones */}
+                    {/* En el celular la insignia baja abajo del nombre: el nombre no se corta */}
+                    <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                      <span className="max-w-full truncate font-medium">{e.nombre}</span>
+                      {porEmpleado &&
+                        (propios ? (
+                          <Chip tono="verde" punto title={`Tiene su propia elección: ${cuantos} ${cuantos === 1 ? "sección" : "secciones"} además de la Caja`}>
+                            Propio ({cuantos})
+                          </Chip>
+                        ) : (
+                          <Chip punto title="Ve lo mismo que todos los empleados (lo de «Qué ven todos», acá abajo)">
+                            Todos
+                          </Chip>
+                        ))}
+                    </span>
+                    {porEmpleado && (
+                      <>
                         <Boton variante="fantasma" icono={SlidersHorizontal} onClick={() => setEligiendoA(e)} className="px-2.5 py-1.5 text-sm" aria-label={`Elegir qué ve ${e.nombre}`}>
                           Qué ve
                         </Boton>
-                      )}
-                      <button onClick={() => void intentar(quitarEmpleado(e.id))} className="rounded-md p-1.5 text-texto-suave hover:bg-superficie-suave hover:text-peligro" aria-label={`Quitar a ${e.nombre}`}>
-                        <X className="size-4" />
-                      </button>
-                    </span>
+                        <span aria-hidden className="h-5 w-px shrink-0 bg-borde" />
+                      </>
+                    )}
+                    {/* Dar de baja: tenue y separada, se pone roja recién al pasar el mouse, y pide confirmar */}
+                    <button
+                      onClick={() => setDandoDeBaja(e)}
+                      title="Dar de baja"
+                      aria-label={`Dar de baja a ${e.nombre}`}
+                      className="shrink-0 rounded-md p-1.5 text-texto-suave/50 transition-colors hover:bg-peligro/10 hover:text-peligro focus-visible:text-peligro focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                    >
+                      <X className="size-4" />
+                    </button>
                   </li>
                 );
               })}
@@ -217,13 +259,15 @@ export function MisComercios() {
               <legend className="mb-1 text-sm font-medium">Qué ven todos los empleados (además de la Caja)</legend>
               <p className="mb-1 text-sm text-texto-suave">
                 {porEmpleado
-                  ? "Vale para los que dicen «Igual que todos». Para elegir distinto a alguien, tocá «Qué ve» al lado de su nombre."
+                  ? "Vale para los que dicen «Todos». Para elegir distinto a alguien, tocá «Qué ve» al lado de su nombre."
                   : "¿Querés que cada empleado vea algo distinto? Es una personalización: pedila a Mantenete y se activa en tu cuenta."}
               </p>
-              {PERMISOS.filter((p) => !p.soloGimnasio || comercio.rubro === "gimnasio").map((p) => (
-                <label key={p.clave} className="flex items-center gap-2.5 text-[15px]">
-                  <input type="checkbox" checked={comercio.permisosEmpleado.includes(p.clave)} onChange={() => cambiarPermiso(p.clave)} className="size-4 accent-[var(--primary-color)]" />
-                  {p.texto}
+              {permisosEn(comercio).map(({ seccion, clave }) => (
+                <label key={clave} className="flex items-center gap-2.5 text-[15px]">
+                  <input type="checkbox" checked={comercio.permisosEmpleado.includes(clave)} onChange={() => cambiarPermiso(clave)} className="size-4 accent-[var(--primary-color)]" />
+                  <span>
+                    {seccion.titulo} <span className="text-texto-suave">({enMinuscula(DETALLE[clave])})</span>
+                  </span>
                 </label>
               ))}
             </fieldset>
@@ -234,6 +278,30 @@ export function MisComercios() {
       {/* key: al abrir la ventana de otro empleado, los interruptores arrancan con lo suyo */}
       {porEmpleado && eligiendoA && <QueVeElEmpleado key={eligiendoA.id} empleado={eligiendoA} comercio={comercio} alCerrar={() => setEligiendoA(null)} />}
 
+      {/* En el celular no hay "pasar el mouse": lo que de verdad frena un toque sin querer es esta pregunta */}
+      {dandoDeBaja && (
+        <Dialogo
+          titulo={`¿Dar de baja a ${dandoDeBaja.nombre}?`}
+          descripcion="Ya no va a poder entrar con su nombre. Lo que hizo (ventas y cajas) queda guardado con su nombre. Si dejó de trabajar, cambiá también el código de empleados."
+          alCerrar={() => setDandoDeBaja(null)}
+          pie={
+            <>
+              {/* El foco arranca en Cancelar: un Enter sin querer no da de baja a nadie */}
+              <Boton onClick={() => setDandoDeBaja(null)} data-principal>Cancelar</Boton>
+              <Boton
+                variante="peligro"
+                icono={UserMinus}
+                onClick={async () => {
+                  if (await intentar(quitarEmpleado(dandoDeBaja.id), `Diste de baja a ${dandoDeBaja.nombre}.`)) setDandoDeBaja(null);
+                }}
+              >
+                Dar de baja
+              </Boton>
+            </>
+          }
+        />
+      )}
+
       {/* Con el cifrado (en la nube), los empleados entran con el código de su comercio */}
       {cifrado && <CodigoEmpleados key={`codigo-${comercio.id}`} comercio={comercio} />}
 
@@ -243,14 +311,10 @@ export function MisComercios() {
   );
 }
 
-/** Las secciones de la lista que existen en ese comercio (Socios, Cuotas y Clases, solo en los gimnasios). */
-function visiblesEn(comercio: Comercio, permisos: Permiso[]) {
-  return PERMISOS.filter((p) => (!p.soloGimnasio || comercio.rubro === "gimnasio") && permisos.includes(p.clave));
-}
-
 /**
- * La ventana donde el jefe elige qué secciones ve UN empleado (además de la Caja), con un interruptor por sección.
- * Arranca con lo que ve hoy. «Igual que todos» le borra la elección propia y vuelve a lo del comercio.
+ * La ventana donde el jefe elige qué secciones ve UN empleado, con un interruptor por sección, agrupados como el menú.
+ * Arriba de todo la Caja, prendida y con candado (no se puede apagar). Arranca con lo que ve hoy.
+ * «Volver a Todos» le borra la elección propia y vuelve a lo del comercio.
  * La API lo vuelve a controlar en cada pedido del empleado (servidor/app/permisos.py).
  */
 function QueVeElEmpleado({ empleado, comercio, alCerrar }: { empleado: Empleado; comercio: Comercio; alCerrar: () => void }) {
@@ -260,7 +324,7 @@ function QueVeElEmpleado({ empleado, comercio, alCerrar }: { empleado: Empleado;
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const propios = empleado.permisos != null;
-  const opciones = PERMISOS.filter((p) => !p.soloGimnasio || comercio.rubro === "gimnasio");
+  const grupos = seccionesParaEmpleados(comercio);
 
   async function guardar(permisos: Permiso[] | null, aviso: string) {
     setError("");
@@ -279,13 +343,14 @@ function QueVeElEmpleado({ empleado, comercio, alCerrar }: { empleado: Empleado;
   return (
     <Dialogo
       titulo={`Qué ve ${empleado.nombre}`}
-      descripcion={<>Además de la Caja{comercio.rubro === "gimnasio" ? " y el Ingreso por DNI" : ""}. Lo que apagues no le aparece en el menú y el sistema tampoco le deja usarlo.</>}
+      descripcion="Lo que apagues no le aparece en el menú y el sistema tampoco le deja usarlo."
       alCerrar={alCerrar}
       pie={
         <>
+          {/* Secundario y a la izquierda: deshace la elección propia, no guarda lo de los interruptores */}
           {propios && (
-            <Boton variante="fantasma" disabled={guardando} onClick={() => void guardar(null, `${empleado.nombre} ahora ve lo mismo que todos.`)} className="mr-auto">
-              Igual que todos
+            <Boton variante="fantasma" icono={RotateCcw} disabled={guardando} onClick={() => void guardar(null, `${empleado.nombre} volvió a «Todos»: ve lo mismo que el resto.`)} className="mr-auto max-sm:w-full max-sm:justify-start">
+              Volver a «Todos»
             </Boton>
           )}
           <Boton onClick={alCerrar} disabled={guardando}>Cancelar</Boton>
@@ -295,40 +360,77 @@ function QueVeElEmpleado({ empleado, comercio, alCerrar }: { empleado: Empleado;
         </>
       }
     >
-      <ul className="flex flex-col divide-y divide-borde">
-        {opciones.map((p) => {
-          const prendido = elegidos.includes(p.clave);
-          return (
-            <li key={p.clave}>
-              <Interruptor
-                id={`permiso-${p.clave}`}
-                texto={p.texto}
-                prendido={prendido}
-                alCambiar={() => setElegidos(prendido ? elegidos.filter((x) => x !== p.clave) : [...elegidos, p.clave])}
-              />
-            </li>
-          );
-        })}
-      </ul>
-      {!propios && <p className="mt-3 text-sm text-texto-suave">Hoy ve lo mismo que todos. Si guardás, queda con su propia elección (y los cambios de «Qué ven todos» ya no le cambian a él/ella).</p>}
+      <div className="flex flex-col gap-4">
+        {grupos.map((g) => (
+          <section key={g.titulo} aria-label={g.titulo}>
+            <h3 className="text-xs font-medium uppercase tracking-wider text-texto-suave">{g.titulo}</h3>
+            <ul className="flex flex-col divide-y divide-borde">
+              {g.secciones.map((s) => {
+                // La Caja (y el Ingreso por DNI): siempre prendidas, con candado
+                if (!s.permiso) return <li key={s.ruta}><Interruptor id={`fija-${s.ruta.slice(1)}`} texto={s.titulo} detalle="Obligatorio para operar" prendido bloqueado /></li>;
+                const clave = s.permiso;
+                const prendido = elegidos.includes(clave);
+                return (
+                  <li key={s.ruta}>
+                    <Interruptor
+                      id={`permiso-${clave}`}
+                      texto={s.titulo}
+                      detalle={DETALLE[clave]}
+                      prendido={prendido}
+                      alCambiar={() => setElegidos(prendido ? elegidos.filter((x) => x !== clave) : [...elegidos, clave])}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+      </div>
+      {!propios && <p className="mt-4 text-sm text-texto-suave">Hoy está en «Todos»: ve lo mismo que el resto. Si guardás, pasa a «Propio» y los cambios de «Qué ven todos» ya no lo afectan.</p>}
       {error && <p role="alert" className="mt-3 text-sm text-peligro">{error}</p>}
     </Dialogo>
   );
 }
 
-/** Un interruptor (prendido/apagado) con los colores del tema: verde prendido, gris apagado, igual en claro y oscuro. */
-function Interruptor({ id, texto, prendido, alCambiar }: { id: string; texto: string; prendido: boolean; alCambiar: () => void }) {
+/**
+ * Un interruptor (prendido/apagado) con los colores del tema: verde prendido, gris apagado, igual en claro y oscuro.
+ * `bloqueado`: queda prendido y no se puede tocar (el candado y el renglón chico dicen por qué).
+ */
+function Interruptor({ id, texto, detalle, prendido, alCambiar, bloqueado = false }: {
+  id: string;
+  texto: string;
+  detalle?: string;
+  prendido: boolean;
+  alCambiar?: () => void;
+  bloqueado?: boolean;
+}) {
+  const idDetalle = `${id}-detalle`;
   return (
-    <label htmlFor={id} className="flex cursor-pointer items-center justify-between gap-4 py-2.5 text-[15px]">
-      <span>{texto}</span>
+    <label
+      htmlFor={id}
+      title={bloqueado ? "Obligatorio para operar: no se puede apagar" : undefined}
+      className={`flex items-center justify-between gap-4 py-2.5 text-[15px] ${bloqueado ? "cursor-not-allowed" : "cursor-pointer"}`}
+    >
+      <span className="flex min-w-0 flex-col">
+        <span>{texto}</span>
+        {detalle && (
+          <span id={idDetalle} className="inline-flex items-center gap-1 text-[13px] text-texto-suave">
+            {bloqueado && <Lock className="size-3.5 shrink-0" aria-hidden />}
+            {detalle}
+          </span>
+        )}
+      </span>
       <button
         id={id}
         type="button"
         role="switch"
         aria-checked={prendido}
+        aria-describedby={detalle ? idDetalle : undefined}
+        disabled={bloqueado}
         onClick={alCambiar}
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-          prendido ? "border-primary bg-primary" : "border-borde-fuerte bg-borde-fuerte"
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed ${
+          // Bloqueado: verde más apagado, pero la bolita sigue blanca (con opacidad, en oscuro parecía apagado)
+          bloqueado ? "border-transparent bg-primary/50" : prendido ? "border-primary bg-primary" : "border-borde-fuerte bg-borde-fuerte"
         }`}
       >
         <span className={`inline-block size-4 rounded-full bg-white shadow transition-transform ${prendido ? "translate-x-6" : "translate-x-1"}`} />
