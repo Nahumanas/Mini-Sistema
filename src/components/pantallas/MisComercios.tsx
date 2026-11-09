@@ -11,7 +11,7 @@ import { elegirCodigo } from "@/store/cifrado";
 import { useComercioActivo, usePermisosPorEmpleado, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
-import { Dialogo } from "../admin/Dialogo";
+import { Dialogo } from "../ui/Dialogo";
 import { RUBROS } from "../layout/Topbar";
 import { Boton, Campo, Chip, claseInput, Encabezado, Segmentado, Tarjeta } from "../ui/base";
 
