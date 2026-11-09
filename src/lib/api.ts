@@ -218,6 +218,8 @@ export type DatosCliente = { email: string; nombre: string; plan: PlanCliente; v
 /** Los avisos al Telegram del jefe (etapa 6). */
 export type TipoAviso = "apertura" | "cierre" | "relevo" | "stock_bajo";
 export type EstadoTelegram = { listo: boolean; conectado: boolean; nombre: string; avisos: TipoAviso[] };
+/** Avisos por mail: stock = stock bajo, caja = resumen al cerrar. email null = el de la cuenta (emailCuenta). */
+export type EstadoAvisosMail = { listo: boolean; stock: boolean; caja: boolean; email: string | null; emailCuenta: string };
 
 /** Cada cosa que la página le puede pedir a la API (ver servidor/README.md). */
 export const api = {
@@ -247,6 +249,10 @@ export const api = {
   elegirAvisos: (avisos: TipoAviso[]) => pedir<EstadoTelegram>("/yo/telegram/avisos", "PUT", { avisos }),
   probarTelegram: () => pedir<{ ok: true }>("/yo/telegram/prueba", "POST"),
   desconectarTelegram: () => pedir<EstadoTelegram>("/yo/telegram", "DELETE"),
+  avisosMail: () => pedir<EstadoAvisosMail>("/yo/avisos-mail"),
+  elegirAvisosMail: (datos: { stock: boolean; caja: boolean; email: string | null }) =>
+    pedir<EstadoAvisosMail>("/yo/avisos-mail", "PUT", datos),
+  probarMail: () => pedir<{ ok: true; para: string }>("/yo/avisos-mail/prueba", "POST"),
 
   // Reservas desde el celular del socio (solo el jefe las prende, por gimnasio)
   reservasWeb: (comercioId: number) => pedir<EstadoReservasWeb>(`/comercios/${comercioId}/reservas-web`),
