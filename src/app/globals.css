@@ -116,9 +116,119 @@ input[type="number"] {
   animation: pulso-suave 3.5s ease-in-out infinite;
 }
 
+/* ---------- Caja animada de la portada (components/landing/CajaAnimada.tsx) ----------
+   Todo dura 2,5 s y corre una sola vez. Cada parte usa la misma duración, así los
+   porcentajes son el mismo "reloj": 16% = 0,4 s · 32% = 0,8 s · 40% = 1 s · 80% = 2 s.
+   Lo que se ve sin animación (el estado normal de cada clase) es el logo terminado. */
+
+.caja-salto,
+.caja-solapa,
+.caja-tapa,
+.caja-luz,
+.caja-plataforma,
+.caja-nombre {
+  animation-duration: 2.5s;
+  animation-fill-mode: backwards;
+}
+
+/* 1) Entra con dos saltos. Se estira en el aire y se aplasta al tocar el piso
+      ("squash and stretch"): eso es lo que le da peso y simpatía. */
+.caja-salto {
+  transform-origin: 50% 97%;
+  animation-name: caja-salto;
+}
+@keyframes caja-salto {
+  0%   { transform: translate(-150px, 0) scale(1.1, 0.85); opacity: 0; animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); }
+  5%   { opacity: 1; }
+  8%   { transform: translate(-112px, -46px) scale(0.92, 1.13); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.3); }
+  16%  { transform: translate(-75px, 0) scale(1.2, 0.72); animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); }
+  24%  { transform: translate(-37px, -30px) scale(0.94, 1.1); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.3); }
+  32%  { transform: translate(0, 0) scale(1.22, 0.7); animation-timing-function: ease-out; }
+  37%  { transform: translate(0, 0) scale(0.95, 1.07); }
+  41%  { transform: translate(0, -7px) scale(0.96, 1.06); }
+  47%  { transform: translate(0, 0) scale(1.05, 0.95); }
+  53%, 100% { transform: none; }
+}
+
+/* 2) Se abre: la tapa cerrada desaparece y las solapas saltan desde su bisagra. */
+.caja-tapa {
+  opacity: 0;
+  animation-name: caja-tapa;
+}
+@keyframes caja-tapa {
+  0%, 37.9% { opacity: 1; }
+  38%, 100% { opacity: 0; }
+}
+.caja-solapa {
+  animation-name: caja-solapa;
+}
+@keyframes caja-solapa {
+  0%, 38% { transform: scale(0); animation-timing-function: ease-out; }
+  46%     { transform: scale(1.14); }
+  51%     { transform: scale(0.96); }
+  56%, 100% { transform: none; }
+}
+
+/* 3) Sale la luz y suben las tres plataformas, una atrás de la otra. */
+.caja-luz {
+  opacity: 0.45;
+  animation-name: caja-luz;
+}
+@keyframes caja-luz {
+  0%, 40% { opacity: 0; transform: scale(0.3); }
+  62%     { opacity: 1; transform: scale(1.12); }
+  100%    { opacity: 0.45; transform: none; }
+}
+.caja-plataforma-1 { animation-name: caja-plataforma-1; }
+.caja-plataforma-2 { animation-name: caja-plataforma-2; }
+.caja-plataforma-3 { animation-name: caja-plataforma-3; }
+@keyframes caja-plataforma-1 {
+  0%, 52% { transform: translateY(290px) scale(0.3); opacity: 0; animation-timing-function: ease-out; }
+  55%     { opacity: 1; }
+  66%     { transform: translateY(-16px) scale(1.06); }
+  74%, 100% { transform: none; }
+}
+@keyframes caja-plataforma-2 {
+  0%, 56% { transform: translateY(215px) scale(0.3); opacity: 0; animation-timing-function: ease-out; }
+  59%     { opacity: 1; }
+  70%     { transform: translateY(-14px) scale(1.06); }
+  78%, 100% { transform: none; }
+}
+@keyframes caja-plataforma-3 {
+  0%, 60% { transform: translateY(140px) scale(0.3); opacity: 0; animation-timing-function: ease-out; }
+  63%     { opacity: 1; }
+  74%     { transform: translateY(-12px) scale(1.06); }
+  82%, 100% { transform: none; }
+}
+
+/* 4) Aparece el nombre y lo recorre un brillo celeste. El "color" del texto es un
+      degradé tres veces más ancho que el texto: al correrlo, pasa la franja celeste. */
+.caja-nombre {
+  color: transparent;
+  background-image: linear-gradient(100deg, #0f2340 0%, #0f2340 42%, #43dde3 50%, #0f2340 58%, #0f2340 100%);
+  background-size: 300% 100%;
+  background-position: 0% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation-name: caja-nombre;
+}
+@keyframes caja-nombre {
+  0%, 56% { opacity: 0; transform: translateX(-14px); background-position: 100% 0; animation-timing-function: ease-out; }
+  72%     { opacity: 1; transform: none; }
+  80%     { background-position: 100% 0; animation-timing-function: ease-in-out; }
+  98%, 100% { background-position: 0% 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .brillo-boton::after,
-  .pulso-suave {
+  .pulso-suave,
+  .caja-salto,
+  .caja-solapa,
+  .caja-tapa,
+  .caja-luz,
+  .caja-plataforma,
+  .caja-nombre {
     animation: none;
   }
 }
+

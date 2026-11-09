@@ -9,6 +9,7 @@ import { LINK_INGRESAR } from "@/lib/direcciones";
 import { MenuCelular } from "./MenuCelular";
 import { FormularioContacto } from "./FormularioContacto";
 import { MailProtegido } from "./MailProtegido";
+import { CajaAnimada } from "./CajaAnimada";
 import { Cascada, CascadaItem, ConfigAnimaciones, EntradaSuave, Presionable } from "./Animaciones";
 
 // Página de presentación de Mantenete (lo primero que ve alguien que entra a la dirección).
@@ -119,6 +120,7 @@ function Portada() {
       <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#1C7BD6] via-[#2A9FDA] to-[#43DDE3]" />
       <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 pt-14 pb-20 sm:px-6 lg:grid-cols-[1fr_1.1fr] lg:pt-20 lg:pb-28">
         <div className="text-center lg:text-left">
+          <CajaAnimada className="mb-6" />
           <EntradaSuave>
             <h1 className="text-[2.6rem] leading-[1.05] font-extrabold tracking-tight text-[#0F2340] sm:text-6xl">
               Que los números no sean un <span className="text-[#1C7BD6]">dolor de cabeza.</span>
