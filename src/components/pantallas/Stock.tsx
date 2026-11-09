@@ -1,17 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ClipboardList, Pencil, Plus, ScanBarcode, Search, Upload, X } from "lucide-react";
+import { ClipboardList, Pencil, Plus, ScanBarcode, Search, Upload, X } from "lucide-react";
+import { categoriaParaGuardar, categoriasDe } from "@/lib/categorias";
 import { normalizar, pesos } from "@/lib/formato";
 import type { Producto } from "@/lib/tipos";
 import { useComercioActivo, useEsJefe } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { ImportarProductos } from "../productos/ImportarProductos";
+import { SelectorCategoria } from "../productos/SelectorCategoria";
+import { Dialogo } from "../ui/Dialogo";
 import { Boton, Campo, Chip, claseInput, Encabezado, Segmentado, Tabla, Tarjeta, Vacio } from "../ui/base";
 
 type Filtro = "todos" | "bajo" | "inactivos";
 const VACIO = { codigo: "", nombre: "", categoria: "", precioVenta: "", costo: "", stock: "", stockMinimo: "", diasDuracion: "" };
+type Edicion = { id: number; nombre: string; categoria: string; codigo: string; precioVenta: string; stock: string; stockAntes: number; stockMinimo: string };
 
 // Los productos del comercio con su stock. El jefe edita precios, stock y crea productos;
 // el empleado solo mira (y avisa si algo no coincide).
@@ -22,12 +26,14 @@ export function Stock() {
   const avisar = useInterfaz((s) => s.avisar);
   const [buscar, setBuscar] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("todos");
-  const [editando, setEditando] = useState<{ id: number; codigo: string; precioVenta: string; stock: string; stockAntes: number; stockMinimo: string } | null>(null);
+  const [editando, setEditando] = useState<Edicion | null>(null);
   const [nuevo, setNuevo] = useState<typeof VACIO | null>(null);
   const [cargandoCodigos, setCargandoCodigos] = useState(false);
   const [importando, setImportando] = useState(false);
 
   const productos = useMemo(() => todos.filter((p) => p.comercioId === comercio.id), [todos, comercio.id]);
+  // Las categorías que ya usa este comercio (para el desplegable): salen de los productos, no hay tabla aparte
+  const categorias = useMemo(() => categoriasDe(todos, comercio.id), [todos, comercio.id]);
   const bajos = productos.filter((p) => p.activo && p.stock <= p.stockMinimo).length;
   const valorStock = productos.filter((p) => p.activo).reduce((s, p) => s + Math.max(0, p.stock) * p.costo, 0);
   const visibles = productos
@@ -35,14 +41,23 @@ export function Stock() {
     .filter((p) => filtro !== "bajo" || p.stock <= p.stockMinimo)
     .filter((p) => !buscar || normalizar(p.nombre).includes(normalizar(buscar)) || p.codigo.includes(buscar.trim()) || normalizar(p.categoria).includes(normalizar(buscar)));
 
-  async function guardarEdicion() {
+  async function guardarEdicion(e?: React.FormEvent) {
+    e?.preventDefault();
     if (!editando) return;
+    const nombre = editando.nombre.trim().replace(/\s+/g, " ");
+    if (!nombre) return avisar("El producto necesita un nombre.", "error");
     try {
       await asignarCodigo(editando.id, editando.codigo);
       // El stock va solo si el jefe lo cambió, junto con el que veía: así no pisa lo que vendió otra compu mientras tanto.
       const stock = Number(editando.stock);
       const cambioStock = stock !== editando.stockAntes ? { stock, stockAntes: editando.stockAntes } : {};
-      await actualizarProducto(editando.id, { precioVenta: Number(editando.precioVenta), stockMinimo: Number(editando.stockMinimo), ...cambioStock });
+      await actualizarProducto(editando.id, {
+        nombre,
+        categoria: categoriaParaGuardar(categorias, editando.categoria) || "Sin categoría",
+        precioVenta: Number(editando.precioVenta),
+        stockMinimo: Number(editando.stockMinimo),
+        ...cambioStock,
+      });
     } catch (err) {
       return avisar((err as Error).message, "error");
     }
@@ -59,7 +74,7 @@ export function Stock() {
         comercioId: comercio.id,
         codigo: nuevo.codigo.trim(),
         nombre: nuevo.nombre.trim(),
-        categoria: nuevo.categoria.trim() || "Sin categoría",
+        categoria: categoriaParaGuardar(categorias, nuevo.categoria) || "Sin categoría",
         precioVenta: Number(nuevo.precioVenta),
         costo: Number(nuevo.costo) || 0,
         stock: Number(nuevo.stock) || 0,
@@ -105,7 +120,7 @@ export function Stock() {
           <form onSubmit={crear} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLElement).id === "nuevo-codigo" && e.preventDefault()} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {campoNuevo("codigo", "Código de barras", "text", false, "Pasá el lector o dejalo vacío")}
             {campoNuevo("nombre", "Nombre", "text", true)}
-            {campoNuevo("categoria", "Categoría", "text", false, "Sirve para las promos (ej.: Bebidas)")}
+            <CampoCategoria id="nuevo-categoria" valor={nuevo.categoria} alCambiar={(categoria) => setNuevo({ ...nuevo, categoria })} categorias={categorias} />
             {campoNuevo("precioVenta", "Precio de venta ($)", "number", true)}
             {campoNuevo("costo", "Costo ($)", "number")}
             {campoNuevo("stock", "Stock inicial", "number")}
@@ -148,80 +163,90 @@ export function Stock() {
             ...(esJefe ? [{ texto: "" }] : []),
           ]}
         >
-          {visibles.map((p: Producto) => {
-            const enEdicion = editando?.id === p.id;
-            const editar = (clave: "precioVenta" | "stock" | "stockMinimo") => (
-              <input
-                type="number"
-                aria-label={clave}
-                value={editando?.[clave] ?? ""}
-                onChange={(e) => editando && setEditando({ ...editando, [clave]: e.target.value })}
-                onKeyDown={(e) => e.key === "Enter" && guardarEdicion()}
-                className="numeros h-8 w-24 rounded border border-borde-fuerte bg-superficie px-2 text-right outline-none focus:border-primary"
-              />
-            );
-            return (
-              <tr key={p.id} className={p.activo ? "" : "opacity-60"}>
-                <td className="hidden px-4 py-2.5 text-sm text-texto-suave sm:table-cell">
-                  {enEdicion ? (
-                    <input
-                      aria-label="Código de barras"
-                      value={editando?.codigo ?? ""}
-                      onChange={(e) => editando && setEditando({ ...editando, codigo: e.target.value })}
-                      placeholder="sin código"
-                      className="numeros h-8 w-36 rounded border border-borde-fuerte bg-superficie px-2 outline-none focus:border-primary"
-                    />
-                  ) : (
-                    p.codigo || <span className="italic">sin código</span>
-                  )}
+          {visibles.map((p: Producto) => (
+            <tr key={p.id} className={p.activo ? "" : "opacity-60"}>
+              <td className="hidden px-4 py-2.5 text-sm text-texto-suave sm:table-cell">{p.codigo || <span className="italic">sin código</span>}</td>
+              <td className="px-4 py-2.5">
+                {p.nombre}
+                <span className="block text-sm text-texto-suave">
+                  {p.categoria}
+                  {p.diasDuracion ? ` · dura ${p.diasDuracion} días` : ""}
+                </span>
+              </td>
+              <td className="px-4 py-2.5 text-right">{pesos(p.precioVenta)}</td>
+              {esJefe && <td className="hidden px-4 py-2.5 text-right text-texto-suave sm:table-cell">{pesos(p.costo)}</td>}
+              <td className="px-4 py-2.5 text-right">{p.activo && p.stock <= p.stockMinimo ? <Chip tono={p.stock <= 0 ? "rojo" : "amarillo"}>{p.stock}</Chip> : p.stock}</td>
+              <td className="hidden px-4 py-2.5 text-right text-texto-suave sm:table-cell">{p.stockMinimo}</td>
+              {esJefe && (
+                <td className="whitespace-nowrap px-2 py-2.5 text-right">
+                  <button
+                    onClick={() =>
+                      setEditando({ id: p.id, nombre: p.nombre, categoria: p.categoria, codigo: p.codigo, precioVenta: String(p.precioVenta), stock: String(p.stock), stockAntes: p.stock, stockMinimo: String(p.stockMinimo) })
+                    }
+                    className="rounded-md p-1.5 text-texto-suave hover:bg-superficie-suave hover:text-texto"
+                    aria-label={`Editar ${p.nombre}`}
+                    title="Editar nombre, categoría, precio y stock"
+                  >
+                    <Pencil className="size-4" />
+                  </button>
+                  <button onClick={() => actualizarProducto(p.id, { activo: !p.activo }).catch((err: Error) => avisar(err.message, "error"))} className="ml-1 rounded-md px-2 py-1 text-xs text-texto-suave hover:bg-superficie-suave hover:text-texto">
+                    {p.activo ? "Dar de baja" : "Reactivar"}
+                  </button>
                 </td>
-                <td className="px-4 py-2.5">
-                  {p.nombre}
-                  <span className="block text-sm text-texto-suave">
-                    {p.categoria}
-                    {p.diasDuracion ? ` · dura ${p.diasDuracion} días` : ""}
-                  </span>
-                </td>
-                <td className="px-4 py-2.5 text-right">{enEdicion ? editar("precioVenta") : pesos(p.precioVenta)}</td>
-                {esJefe && <td className="hidden px-4 py-2.5 text-right text-texto-suave sm:table-cell">{pesos(p.costo)}</td>}
-                <td className="px-4 py-2.5 text-right">
-                  {enEdicion ? editar("stock") : p.activo && p.stock <= p.stockMinimo ? <Chip tono={p.stock <= 0 ? "rojo" : "amarillo"}>{p.stock}</Chip> : p.stock}
-                </td>
-                <td className="hidden px-4 py-2.5 text-right text-texto-suave sm:table-cell">{enEdicion ? editar("stockMinimo") : p.stockMinimo}</td>
-                {esJefe && (
-                  <td className="whitespace-nowrap px-2 py-2.5 text-right">
-                    {enEdicion ? (
-                      <>
-                        <button onClick={guardarEdicion} className="rounded-md p-1.5 text-positivo hover:bg-superficie-suave" aria-label="Guardar">
-                          <Check className="size-4" />
-                        </button>
-                        <button onClick={() => setEditando(null)} className="rounded-md p-1.5 text-texto-suave hover:bg-superficie-suave" aria-label="Cancelar">
-                          <X className="size-4" />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => setEditando({ id: p.id, codigo: p.codigo, precioVenta: String(p.precioVenta), stock: String(p.stock), stockAntes: p.stock, stockMinimo: String(p.stockMinimo) })}
-                          className="rounded-md p-1.5 text-texto-suave hover:bg-superficie-suave hover:text-texto"
-                          aria-label={`Editar ${p.nombre}`}
-                        >
-                          <Pencil className="size-4" />
-                        </button>
-                        <button onClick={() => actualizarProducto(p.id, { activo: !p.activo }).catch((err: Error) => avisar(err.message, "error"))} className="ml-1 rounded-md px-2 py-1 text-xs text-texto-suave hover:bg-superficie-suave hover:text-texto">
-                          {p.activo ? "Dar de baja" : "Reactivar"}
-                        </button>
-                      </>
-                    )}
-                  </td>
-                )}
-              </tr>
-            );
-          })}
+              )}
+            </tr>
+          ))}
         </Tabla>
       ) : (
         <Vacio icono={ClipboardList}>{buscar ? `No hay productos con "${buscar}".` : "No hay productos en esta lista."}</Vacio>
       )}
+
+      {editando && (
+        <Dialogo
+          titulo="Editar producto"
+          descripcion="Los cambios se ven enseguida en la caja y en las promos."
+          alCerrar={() => setEditando(null)}
+          pie={
+            <>
+              <Boton variante="fantasma" onClick={() => setEditando(null)}>Cancelar</Boton>
+              <Boton type="submit" form="editar-producto" variante="primario">Guardar cambios</Boton>
+            </>
+          }
+        >
+          {/* El lector aprieta Enter al leer el código: en ese casillero no guarda */}
+          <form id="editar-producto" onSubmit={guardarEdicion} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLElement).id === "editar-codigo" && e.preventDefault()} className="grid gap-4 pb-1 sm:grid-cols-2">
+            <Campo etiqueta="Nombre" className="sm:col-span-2">
+              <input id="editar-nombre" value={editando.nombre} onChange={(e) => setEditando({ ...editando, nombre: e.target.value })} required maxLength={120} className={claseInput} />
+            </Campo>
+            <CampoCategoria id="editar-categoria" valor={editando.categoria} alCambiar={(categoria) => setEditando({ ...editando, categoria })} categorias={categorias} className="sm:col-span-2" />
+            <Campo etiqueta="Código de barras" ayuda="Pasá el lector o dejalo vacío">
+              <input id="editar-codigo" value={editando.codigo} onChange={(e) => setEditando({ ...editando, codigo: e.target.value })} placeholder="sin código" autoComplete="off" className={`${claseInput} numeros`} />
+            </Campo>
+            <Campo etiqueta="Precio de venta ($)">
+              <input id="editar-precio" type="number" min={0} value={editando.precioVenta} onChange={(e) => setEditando({ ...editando, precioVenta: e.target.value })} required className={`${claseInput} numeros`} />
+            </Campo>
+            <Campo etiqueta="Stock">
+              <input id="editar-stock" type="number" value={editando.stock} onChange={(e) => setEditando({ ...editando, stock: e.target.value })} className={`${claseInput} numeros`} />
+            </Campo>
+            <Campo etiqueta="Avisar con menos de">
+              <input id="editar-minimo" type="number" min={0} value={editando.stockMinimo} onChange={(e) => setEditando({ ...editando, stockMinimo: e.target.value })} className={`${claseInput} numeros`} />
+            </Campo>
+          </form>
+        </Dialogo>
+      )}
+    </div>
+  );
+}
+
+/** "Categoría" con su título y ayuda. No usa <Campo> (que es un <label>) porque adentro hay botones y otro casillero. */
+function CampoCategoria({ id, valor, alCambiar, categorias, className = "" }: { id: string; valor: string; alCambiar: (c: string) => void; categorias: string[]; className?: string }) {
+  return (
+    <div className={`flex min-w-0 flex-col gap-1.5 ${className}`}>
+      <label htmlFor={id} className="text-sm font-medium">
+        Categoría
+      </label>
+      <SelectorCategoria id={id} valor={valor} alCambiar={alCambiar} categorias={categorias} />
+      <span className="text-xs text-texto-suave">Sirve para las promos (ej.: Bebidas)</span>
     </div>
   );
 }
