@@ -17,6 +17,7 @@ from ..base import como_usuario
 from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import llave_requerida
+from ..permisos import exigir
 from ..sobres import Cofre
 
 router = APIRouter(tags=["Gimnasio: clases y reservas"])
@@ -336,7 +337,8 @@ def cancelar_reserva(reserva_id: int, datos: Cancelar, usuario: Usuario = Depend
 def marcar_asistencia(reserva_id: int, datos: Asistencia, usuario: Usuario = Depends(usuario_actual),
                       llave: Llave = Depends(llave_requerida)):
     with como_usuario(usuario) as con:
-        _reserva_trabada(con, Cofre(con, llave), reserva_id)
+        reserva = _reserva_trabada(con, Cofre(con, llave), reserva_id)
+        exigir(con, llave, reserva["comercio_id"], "clases")  # el presente/ausente se marca en Clases
         fila = con.execute(
             "update public.reservas set estado = %s where id = %s returning *", ("vino" if datos.vino else "falto", reserva_id)
         ).fetchone()

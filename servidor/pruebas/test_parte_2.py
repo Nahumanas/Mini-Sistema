@@ -24,7 +24,8 @@ def test_inicio_trae_todo_lo_del_dueno_y_nada_de_otro(cliente):
 
     datos = cliente.get("/inicio", headers=ana).json()
     assert datos["dueno"] == {"nombre": "", "email": "ana.inicio@gmail.com", "pinConfigurado": True, "cifradoActivo": True,
-                             "admin": False, "suspendido": False, "plan": None, "vence": None}
+                             "admin": False, "suspendido": False, "plan": None, "vence": None,
+                             "permisosPorEmpleado": False}
     assert [c["nombre"] for c in datos["comercios"]] == ["Kiosco de Ana"]
     assert [e["nombre"] for e in datos["empleados"]] == ["Martina"]
     assert datos["productos"][0]["stock"] == 8

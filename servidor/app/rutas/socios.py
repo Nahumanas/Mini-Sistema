@@ -14,6 +14,7 @@ from ..base import como_usuario
 from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import llave_requerida
+from ..permisos import exigir
 from ..sobres import Cofre
 from .clases import Cambios, DatosClase, cancelar_las_que_vienen, plan_de, reglas_de, revisar_disciplina
 from .ventas import con_items, insertar_detalle, insertar_venta
@@ -147,6 +148,7 @@ def actualizar_socio(socio_id: int, datos: DatosSocio, usuario: Usuario = Depend
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
         socio = _socio_trabado(con, cofre, socio_id)
+        exigir(con, llave, socio["comercio_id"], "socios")  # editar o dar de baja va en Socios (el alta también se hace en Ingreso por DNI)
         otro = _con_dni(con, cofre, socio["comercio_id"], d["dni"], socio_id)
         if otro:
             raise HTTPException(409, f"Ese DNI ya es de otro socio: {otro['nombre']}.")
@@ -162,7 +164,8 @@ def dar_de_baja(socio_id: int, datos: HechaPor, usuario: Usuario = Depends(usuar
     """No se borra nada: deja de figurar entre los activos y sus reservas que vienen se cancelan."""
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
-        _socio_trabado(con, cofre, socio_id)
+        socio = _socio_trabado(con, cofre, socio_id)
+        exigir(con, llave, socio["comercio_id"], "socios")
         cambios = Cambios()
         canceladas = cancelar_las_que_vienen(con, cofre, "socio_id", socio_id, datos.hechaPor, False, cambios)
         con.execute("update public.socios set activo = false where id = %s", (socio_id,))
@@ -174,7 +177,8 @@ def dar_de_baja(socio_id: int, datos: HechaPor, usuario: Usuario = Depends(usuar
 def reactivar_socio(socio_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
-        _socio_trabado(con, cofre, socio_id)
+        socio = _socio_trabado(con, cofre, socio_id)
+        exigir(con, llave, socio["comercio_id"], "socios")
         fila = con.execute("update public.socios set activo = true where id = %s returning *", (socio_id,)).fetchone()
         return a_camel(cofre.abrir("socios", fila))
 

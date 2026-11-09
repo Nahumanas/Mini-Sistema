@@ -10,6 +10,7 @@ from ..base import como_usuario
 from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import llave_requerida
+from ..permisos import exigir
 from ..sobres import Cofre, por_nombre
 from .comun import HOY_ARGENTINA
 
@@ -72,6 +73,7 @@ def agregar_proveedor(comercio_id: int, datos: NuevoProveedor, usuario: Usuario 
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id)
+        exigir(con, llave, comercio_id, "compras")
         sobre = cofre.cerrar("proveedores", comercio_id, {"nombre": nombre, "telefono": datos.telefono.strip()})
         fila = con.execute(
             "insert into public.proveedores (comercio_id, sobre) values (%s, %s) returning *", (comercio_id, sobre)
@@ -88,6 +90,7 @@ def registrar_compra(comercio_id: int, compra: NuevaCompra, usuario: Usuario = D
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id)
+        exigir(con, llave, comercio_id, "compras")
         if compra.proveedorId is not None and con.execute(
             "select 1 from public.proveedores where comercio_id = %s and id = %s", (comercio_id, compra.proveedorId)
         ).fetchone() is None:
@@ -147,6 +150,7 @@ def cargar_gasto(comercio_id: int, gasto: NuevoGasto, usuario: Usuario = Depends
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id)
+        exigir(con, llave, comercio_id, "gastos")
         sobre = cofre.cerrar("gastos", comercio_id, {"categoria": gasto.categoria.strip(),
                                                      "descripcion": gasto.descripcion.strip(), "monto": gasto.monto})
         fila = con.execute(
@@ -164,5 +168,6 @@ def borrar_gasto(gasto_id: int, usuario: Usuario = Depends(usuario_actual), llav
         if gasto is None:
             raise HTTPException(404, "No existe ese gasto.")
         cofre.comercio(gasto["comercio_id"])  # la llave tiene que abrir ese comercio
+        exigir(con, llave, gasto["comercio_id"], "gastos")
         con.execute("delete from public.gastos where id = %s", (gasto_id,))
     return {"ok": True}

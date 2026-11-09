@@ -124,6 +124,18 @@ def suspender(dueno_id: int, datos: Suspension, admin: Usuario = Depends(adminis
     return {"ok": True, "suspendido": datos.suspendido}
 
 
+class Personalizacion(BaseModel):
+    activa: bool
+
+
+@router.put("/clientes/{dueno_id}/permisos-por-empleado")
+def permisos_por_empleado(dueno_id: int, datos: Personalizacion, admin: Usuario = Depends(administrador)):
+    """La personalización "Qué ve cada empleado": prendida, el jefe de ese cliente elige en Mis comercios qué
+    secciones ve cada empleado. Apagada, todos ven lo del comercio (lo que eligió queda guardado para después)."""
+    _llamar(admin, "select privado.admin_permisos_por_empleado(%s, %s)", (dueno_id, datos.activa))
+    return {"ok": True, "activa": datos.activa}
+
+
 @router.post("/clientes/{dueno_id}/resetear-pin")
 def resetear_pin(dueno_id: int, admin: Usuario = Depends(administrador)):
     """Borra el PIN de jefe: la próxima vez que entre, elige uno nuevo."""

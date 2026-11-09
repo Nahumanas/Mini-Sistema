@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { KeyRound, Lock, LockOpen, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
+import { KeyRound, Lock, LockOpen, Pencil, Plus, Search, SlidersHorizontal, Trash2, Users } from "lucide-react";
 import { apiAdmin, type ClienteAdmin } from "@/lib/api";
 import { estadoDe, PLANES } from "@/lib/clientes";
 import { ddmm } from "@/lib/fechas";
 import { pesos } from "@/lib/formato";
 import { useAdmin } from "@/store/admin";
-import { Boton, claseInput, Encabezado, Kpi, Tabla, Vacio } from "../ui/base";
+import { Boton, Chip, claseInput, Encabezado, Kpi, Tabla, Vacio } from "../ui/base";
 import {
   type Confirmar, ConfirmarAccion, cuandoVence, EtiquetaEstado, type Formulario, FormularioCliente, formularioEditar, formularioNuevo,
   guardarFormulario, sePuedeBorrar,
@@ -118,6 +118,7 @@ function FilaCliente({ cliente: c, enviando, alEditar, alConfirmar }: {
       <td className="max-w-[13rem] px-4 py-3 sm:max-w-[18rem]">
         <p className="truncate font-medium">{c.nombre || c.nombreDueno || "Sin nombre"}</p>
         <p className="truncate text-sm text-texto-suave">{c.email}</p>
+        {c.permisosPorEmpleado && <span className="mt-1 inline-block"><Chip tono="verde">Personalización: qué ve cada empleado</Chip></span>}
         {/* En el celular, plan y vencimiento van acá abajo (las columnas se esconden) */}
         <p className="mt-0.5 text-xs text-texto-suave sm:hidden">
           {c.plan ? PLANES[c.plan].texto : "Sin plan"}{c.vence ? ` · vence ${ddmm(c.vence, true)}` : ""}
@@ -154,6 +155,8 @@ function AccionesCliente({ cliente: c, enviando, alEditar, alConfirmar, clase }:
 }) {
   // Con los datos cifrados el PIN abre sus datos: solo él lo cambia, con su código de recuperación
   const pinBloqueado = c.cifrado || !c.pinConfigurado;
+  const hacer = useAdmin((s) => s.hacer);
+  const nombre = c.nombre || c.email;
   const motivoPin = c.cifrado
     ? "Tiene los datos cifrados: el PIN lo cambia él con su código de recuperación (\"Me olvidé el PIN\")."
     : "Todavía no eligió PIN.";
@@ -177,6 +180,24 @@ function AccionesCliente({ cliente: c, enviando, alEditar, alConfirmar, clase }:
         aria-label={`Resetear PIN de ${c.email}`}
         onClick={() => alConfirmar("pin")}
         className="!px-2 !py-1.5"
+      />
+      {/* Personalización (se cobra aparte): prendida, el jefe elige en Mis comercios qué secciones ve cada empleado */}
+      <Boton
+        variante="fantasma"
+        icono={SlidersHorizontal}
+        disabled={enviando}
+        aria-pressed={c.permisosPorEmpleado}
+        title={c.permisosPorEmpleado ? "Apagar la personalización «Qué ve cada empleado» (vuelven a ver todos lo mismo)" : "Activar la personalización «Qué ve cada empleado»"}
+        aria-label={`${c.permisosPorEmpleado ? "Apagar" : "Activar"} «Qué ve cada empleado» para ${c.email}`}
+        onClick={() =>
+          void hacer(
+            () => apiAdmin.permisosPorEmpleado(c.duenoId, !c.permisosPorEmpleado),
+            c.permisosPorEmpleado
+              ? `Listo: ${nombre} ya no elige qué ve cada empleado (todos ven lo del comercio).`
+              : `Listo: ${nombre} ya puede elegir qué ve cada empleado en Mis comercios.`,
+          )
+        }
+        className={`!px-2 !py-1.5 ${c.permisosPorEmpleado ? "bg-primary/15 !text-positivo" : ""}`}
       />
       <Boton variante="fantasma" icono={Pencil} disabled={enviando} title="Editar plan y vencimiento" aria-label={`Editar plan de ${c.email}`}
         onClick={alEditar} className="!px-2 !py-1.5" />
