@@ -278,6 +278,7 @@ def stock_bajo_despues(tareas: BackgroundTasks, cofre: Cofre, comercio: dict, fi
 # - todo con TABLAS y estilos en línea (style="..."): muchos programas de mail ignoran <style> y las <div> con flex
 # - el logo en PNG desde la app (Gmail no muestra SVG ni imágenes pegadas adentro del mail)
 # - los espacios NO sirven para alinear (HTML junta varios espacios en uno): se usa padding
+# - márgenes chicos a los costados: con 320 px de pantalla (celulares chicos) no tiene que aparecer barra para correr de costado
 # - al final va la fecha y hora del aviso: así cada mail termina distinto y Gmail no esconde el botón con "•••"
 
 LEMA = "Mantenete: control total sin margen de error."
@@ -347,7 +348,7 @@ def _celda(contenido: str, derecha: bool = False, primera: bool = False, estilo:
     alinear = ' align="right"' if derecha else ""
     if derecha:  # los montos no se cortan en dos renglones en el celular ("$" arriba y "500" abajo)
         estilo = "white-space:nowrap;" + estilo
-    return (f'<td{alinear} style="padding:12px 16px;{borde}{_LETRA};font-size:15px;color:{_TEXTO};{estilo}">'
+    return (f'<td{alinear} style="padding:12px 12px;{borde}{_LETRA};font-size:15px;color:{_TEXTO};{estilo}">'
             f"{contenido}</td>")
 
 
@@ -355,7 +356,7 @@ def _tabla(encabezados: list[str] | None, filas: list[str]) -> str:
     """Una tabla con fondo gris claro y borde de 1px. `filas` ya vienen armadas con _celda (<tr>...</tr>)."""
     cabeza = ""
     if encabezados:
-        th = (f'padding:10px 16px;{_LETRA};font-size:12px;font-weight:600;text-transform:uppercase;'
+        th = (f'padding:10px 12px;{_LETRA};font-size:12px;font-weight:600;text-transform:uppercase;'
               f'letter-spacing:0.5px;color:{_TENUE}')
         derecha = ' align="right"'
         cabeza = "<tr>" + "".join(
@@ -378,20 +379,20 @@ def _pagina(cuerpo: str, boton: tuple[str, str], momento: datetime | None = None
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>Mantenete</title></head>
 <body style="margin:0;padding:0;background:#F1F5F9">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F1F5F9"><tr><td align="center" style="padding:32px 16px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F1F5F9"><tr><td align="center" style="padding:24px 8px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#FFFFFF;border:1px solid {_BORDE};border-radius:12px;border-collapse:separate">
-<tr><td style="background:{_OSCURO};padding:20px 28px;border-radius:12px 12px 0 0">
+<tr><td style="background:{_OSCURO};padding:20px 20px;border-radius:12px 12px 0 0">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
 <td style="vertical-align:middle"><img src="{logo}" width="36" height="36" alt="" style="display:block;border:0"></td>
 <td style="vertical-align:middle;padding-left:12px;{_LETRA};font-size:18px;font-weight:800;letter-spacing:0.5px;color:#FFFFFF">MANTENETE</td>
 </tr></table></td></tr>
-<tr><td style="padding:32px 28px 8px">{cuerpo}</td></tr>
-<tr><td align="center" style="padding:28px 28px 32px">
+<tr><td style="padding:28px 20px 8px">{cuerpo}</td></tr>
+<tr><td align="center" style="padding:28px 20px 32px">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="{_ACENTO}" style="border-radius:8px">
 <a href="{enlace}" style="display:inline-block;padding:14px 28px;{_LETRA};font-size:15px;font-weight:600;color:#FFFFFF;text-decoration:none;border-radius:8px">{_e(etiqueta)}</a>
 </td></tr></table></td></tr>
-<tr><td style="padding:0 28px"><div style="height:1px;line-height:1px;font-size:1px;background:{_BORDE}">&nbsp;</div></td></tr>
-<tr><td style="padding:20px 28px 28px">
+<tr><td style="padding:0 20px"><div style="height:1px;line-height:1px;font-size:1px;background:{_BORDE}">&nbsp;</div></td></tr>
+<tr><td style="padding:20px 20px 28px">
 <p style="margin:0 0 8px;{_LETRA};font-size:12px;line-height:1.6;color:{_TENUE}">Este es un aviso automático. {pie}Te llega porque lo prendiste en Mantenete → Configuración → Avisos por mail, y desde ahí lo podés apagar.</p>
 <p style="margin:0 0 8px;{_LETRA};font-size:12px;font-weight:600;color:{_TENUE}">{LEMA}</p>
 <p style="margin:0;{_LETRA};font-size:11px;color:#94A3B8">Aviso del {cuando(momento)}.</p>
@@ -468,7 +469,7 @@ def mail_cierre(d: dict) -> tuple[str, str, str]:
     n = d["ventas"]
     filas = ["<tr>" + _celda(f"<b>Vendido</b> <span style=\"color:{_TENUE}\">({n} venta{'s' if n != 1 else ''})</span>", primera=True)
              + _celda(f"<b>{plata(d['cobrado'])}</b>", True, True) + "</tr>"]
-    filas += ["<tr>" + _celda(MEDIOS.get(medio, medio), estilo=f"padding-left:32px;color:{_TENUE}")
+    filas += ["<tr>" + _celda(MEDIOS.get(medio, medio), estilo=f"padding-left:28px;color:{_TENUE}")
               + _celda(plata(t), True, estilo=f"color:{_TENUE}") + "</tr>" for medio, t in d["por_medio"]]
     if d["compras"] or d["gastos"]:
         filas += [
