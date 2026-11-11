@@ -69,10 +69,16 @@ def test_productos_quien_cambio_que_y_por_que(cliente):
     tanda = _historial("productos", pan["id"])[-1]
     assert (tanda["motivo"], float(tanda["datos_nuevos"]["stock"])) == ("tanda", 10)
 
-    # En el historial nunca aparece un dato a la vista
+    # En el historial nunca aparece un dato a la vista. Los números se buscan como valores y no como texto suelto:
+    # el sobre cifrado y las fechas son letras y números al azar, y a veces traen "900" o "1500" adentro.
     todo = _sql(f"select coalesce(string_agg(a::text, ' '), '') from public.auditoria_cambios a where comercio_id = {cid}")
-    for dato in ("Alfajor", "Historico", "1500", "1800", "900"):
-        assert dato not in todo, dato
+    for nombre in ("Alfajor", "Historico"):
+        assert nombre not in todo, nombre
+    for fila in _historial("productos", alfajor["id"]) + _historial("productos", pan["id"]):
+        for datos in (fila["datos_anteriores"], fila["datos_nuevos"]):
+            for campo, valor in (datos or {}).items():
+                if campo != "sobre" and valor is not None:
+                    assert str(valor) not in ("1500", "1800", "900", "1500.00", "1800.00", "900.00"), (campo, valor)
 
 
 def test_el_empleado_queda_anotado_con_su_id(cliente):
