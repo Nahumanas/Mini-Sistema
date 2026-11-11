@@ -49,7 +49,7 @@ def _retiro(con, cofre: Cofre, producto_id: int, cantidad: Decimal, motivo: str)
 def agregar_tanda(comercio_id: int, tanda: NuevaTanda, usuario: Usuario = Depends(usuario_actual),
                   llave: Llave = Depends(llave_requerida)):
     """Lo que se horneó o preparó hoy: entra como tanda nueva y suma al stock."""
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "tanda") as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id)
         exigir(con, llave, comercio_id, "vencimientos")
@@ -73,7 +73,7 @@ def agregar_tanda(comercio_id: int, tanda: NuevaTanda, usuario: Usuario = Depend
 @router.post("/comercios/{comercio_id}/lotes/retirar-vencidos")
 def retirar_vencidos(comercio_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
     """"Ya lo retiré": lo vencido sale del stock y queda anotado como pérdida (a costo)."""
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "retiro") as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id, bloquear=True)
         exigir(con, llave, comercio_id, "vencimientos")
@@ -101,7 +101,7 @@ def sacar_de_tanda(lote_id: int, datos: SacarDeTanda, usuario: Usuario = Depends
                    llave: Llave = Depends(llave_requerida)):
     """Corrige una tanda. "vendido": la venta ya bajó el stock, solo se corrige de qué tanda salió.
     "tirado" o "regalado": también baja el stock y cuenta como pérdida."""
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "retiro") as con:
         cofre = Cofre(con, llave)
         lote = con.execute("select * from public.lotes where id = %s for update", (lote_id,)).fetchone()
         if lote is None:

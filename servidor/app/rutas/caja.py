@@ -215,7 +215,7 @@ def anular_venta(caja_id: int, datos: AnularVenta, usuario: Usuario = Depends(us
     """La venta no se borra: queda marcada como anulada y la mercadería vuelve al stock.
     Si era la cuota de un socio, la cuota queda anulada y el socio vuelve a como estaba."""
     motivo = _motivo(datos.motivo)
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "anulacion") as con:
         cofre = Cofre(con, llave)
         caja = _caja_cerrada(con, cofre, caja_id)
         venta = con.execute(
