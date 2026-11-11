@@ -253,7 +253,7 @@ def revisar_cobro(usuario: Usuario, llave: Llave, comercio_id: int, cobro_id: in
 
     # Pagado: se guarda la venta. Se traba el comercio, el cobro y los productos (como una venta común).
     ids = sorted({int(r["producto_id"]) for r in cobro["detalle"]})
-    with en_viajes(usuario) as viaje:
+    with en_viajes(usuario, llave, "venta") as viaje:  # llave y motivo: para el historial de cambios (baja el stock)
         comercios, claves, cobros, cajas, filas, fichas = viaje(
             (_TRABAR_COMERCIO, (comercio_id,)), (LEER_CLAVES, None), (_LEER_COBRO + " for update", (comercio_id, cobro_id)),
             (_LEER_CAJA, (comercio_id,)), (_LEER_PRODUCTOS, (comercio_id, ids)), (avisos.FICHA, None),

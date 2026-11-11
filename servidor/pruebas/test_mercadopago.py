@@ -169,6 +169,9 @@ def test_cobrar_con_qr_y_al_pagar_se_guarda_la_venta_una_sola_vez(cliente, mp):
     assert venta["medioPago"] == "mercadopago" and float(venta["total"]) == 2700 and venta["numero"] == 1
     assert venta["items"][0]["nombre"] == "Alfajor" and float(venta["items"][0]["cantidad"]) == 2
     assert _sql(f"select stock from public.productos where id = {alfajor['id']}") == "8.000"
+    # Como en una venta común, el stock que bajó no se anota en el historial (ya está en ventas_detalle)
+    assert _sql(f"""select count(*) from public.auditoria_cambios
+                   where tabla_afectada = 'productos' and registro_id = {alfajor['id']} and accion = 'UPDATE'""") == "0"
 
     # Preguntar de nuevo no guarda otra venta
     otra = cliente.get(ruta, headers=ana).json()
