@@ -37,7 +37,7 @@ Además la copia trae los mails de los dueños y los usuarios. Por eso:
   es la única que abre, vive en tu compu y en papel. Aunque alguien baje el paquete de GitHub, no puede leerlo.
 - **`PIMIENTA_CIFRADO` no se carga nunca en GitHub.** Si estuviera ahí junto con la copia, quien entre a tu
   GitHub podría probar los códigos de empleado de a uno hasta abrir los comercios.
-- `RESPALDO_BASE_URL` sí va en GitHub (sin ella no hay copia), pero dentro del entorno **produccion**, que solo
+- `SUPABASE_DB_URL` sí va en GitHub (sin ella no hay copia), pero dentro del entorno **produccion**, que solo
   le pasa el secreto a la rama main. Así, un cambio en otra rama no puede leerlo.
 
 ## Lo que tenés que hacer UNA vez
@@ -58,7 +58,7 @@ guardala con la pimienta. Si la perdés, los respaldos que ya hiciste no se abre
 **2. Cargar el entorno en GitHub**: repositorio → **Settings → Environments → New environment** → nombre
 `produccion` → en *Deployment branches and tags* elegí **Selected branches** y agregá `main`. Después, en ese entorno:
 
-- **Add environment secret** → `RESPALDO_BASE_URL` = la conexión **Session pooler** de Supabase
+- **Add environment secret** → `SUPABASE_DB_URL` = la conexión **Session pooler** de Supabase
   (botón **Connect** arriba en Supabase → *Session pooler*, con tu contraseña de la base). Es la misma de
   `DATABASE_URL` en Render pero con el puerto **5432** en vez de 6543.
 - **Add environment variable** → `RESPALDO_LLAVE_PUBLICA` = la `age1...` del paso 1.

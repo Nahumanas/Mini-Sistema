@@ -10,7 +10,7 @@
 # Lo que se puede bajar está cerrado: sin tu llave PRIVADA (que nunca está en GitHub) no se abre.
 #
 # Lo que tenés que cargar una vez (ver servidor/respaldo/LEEME.md):
-#   - el entorno "produccion" (Settings → Environments), con el secreto RESPALDO_BASE_URL
+#   - el entorno "produccion" (Settings → Environments), con el secreto SUPABASE_DB_URL
 #     (la conexión "Session pooler" de Supabase, puerto 5432) y la variable RESPALDO_LLAVE_PUBLICA (age1...).
 name: Respaldo
 
@@ -38,21 +38,21 @@ jobs:
         options: >-
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      # El PostgreSQL de prueba (donde se restaura). La base real llega solo por RESPALDO_BASE_URL.
+      # El PostgreSQL de prueba (donde se restaura). La base real llega solo por SUPABASE_DB_URL.
       PGHOST: localhost
       PGUSER: postgres
       PGPASSWORD: postgres
     steps:
       - name: Controlar que esté todo cargado
         env:
-          BASE_URL: ${{ secrets.RESPALDO_BASE_URL }}
+          BASE_URL: ${{ secrets.SUPABASE_DB_URL }}
           LLAVE_PUBLICA: ${{ vars.RESPALDO_LLAVE_PUBLICA }}
         run: |
           if [ -z "$BASE_URL" ] || [ -z "$LLAVE_PUBLICA" ]; then
-            echo "::error::Falta cargar RESPALDO_BASE_URL (secreto) o RESPALDO_LLAVE_PUBLICA (variable) en el entorno produccion. Ver servidor/respaldo/LEEME.md"
+            echo "::error::Falta cargar SUPABASE_DB_URL (secreto) o RESPALDO_LLAVE_PUBLICA (variable) en el entorno produccion. Ver servidor/respaldo/LEEME.md"
             exit 1
           fi
-          case "$BASE_URL" in *:6543/*) echo "::error::RESPALDO_BASE_URL usa el puerto 6543 (Transaction pooler). Para pg_dump tiene que ser el Session pooler, puerto 5432."; exit 1;; esac
+          case "$BASE_URL" in *:6543/*) echo "::error::SUPABASE_DB_URL usa el puerto 6543 (Transaction pooler). Para pg_dump tiene que ser el Session pooler, puerto 5432."; exit 1;; esac
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
@@ -68,7 +68,7 @@ jobs:
           echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
       - name: 1. Copiar la base
         env:
-          BASE_URL: ${{ secrets.RESPALDO_BASE_URL }}
+          BASE_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: bash servidor/respaldo/hacer-respaldo.sh "$RUNNER_TEMP/respaldo"
       - name: 2. Prueba de restaurar
         run: bash servidor/respaldo/restaurar-y-controlar.sh "$RUNNER_TEMP/respaldo"
