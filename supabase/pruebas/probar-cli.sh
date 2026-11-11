@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Prueba el camino de la CLI de Supabase en dos bases de prueba (se crean y se borran solas). NUNCA contra Supabase.
 #   1. base nueva: "supabase db push" corre todas las migraciones y la prueba de RLS pasa.
-#   2. base "como la real" (migraciones pegadas a mano, sin historial): el freno no deja hacer push,
-#      marcar-ya-pegadas.sh anota las 11 sin correrlas y después no queda nada pendiente.
+#   2. base "como la real" (las 11 migraciones pegadas a mano, sin historial): el freno no deja hacer push,
+#      marcar-ya-pegadas.sh anota las 11 sin correrlas, el push corre SOLO las nuevas y después no queda nada pendiente.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 URL="postgresql://${PGUSER:-postgres}:${PGPASSWORD:-postgres}@${PGHOST:-localhost}:${PGPORT:-5432}"
@@ -15,12 +15,23 @@ psql -q -v ON_ERROR_STOP=1 -d cli_nueva -f pruebas/rls.sql
 
 psql -q -d postgres -c "drop database if exists cli_como_la_real" -c "create database cli_como_la_real"
 psql -q -v ON_ERROR_STOP=1 -d cli_como_la_real -f pruebas/simular-supabase.sql
-for m in migrations/*.sql; do psql -q -v ON_ERROR_STOP=1 -d cli_como_la_real -f "$m" > /dev/null; done
+# Se pegan a mano solo las que estaban pegadas antes de la CLI (hasta la última de marcar-ya-pegadas.sh), como en la real
+ULTIMA_PEGADA=20261109100000
+for m in migrations/*.sql; do
+  version=$(basename "$m" | cut -d_ -f1)
+  if [ "$version" -le "$ULTIMA_PEGADA" ]; then psql -q -v ON_ERROR_STOP=1 -d cli_como_la_real -f "$m" > /dev/null; fi
+done
 # La CLI exige TLS: en GitHub se le prende al PostgreSQL de prueba (ver pruebas.yml)
 export SUPABASE_DB_URL="$URL/cli_como_la_real"
 if bash cli/frenar-sin-historial.sh 2>/dev/null; then echo "ERROR: el freno dejó pasar una base sin historial"; exit 1; fi
 bash cli/marcar-ya-pegadas.sh
 bash cli/frenar-sin-historial.sh
+# Las migraciones posteriores a la CLI se aplican solas con el push (como hace el workflow Migraciones)
+nuevas=$(cd .. && supabase db push --db-url "$SUPABASE_DB_URL" --yes 2>&1)
+echo "$nuevas"
+if echo "$nuevas" | grep -E "Applying migration (202610|2026110)"; then
+  echo "ERROR: el push volvió a correr una migración que ya estaba pegada"; exit 1
+fi
 pendientes=$(cd .. && supabase db push --db-url "$SUPABASE_DB_URL" --dry-run 2>&1)
 echo "$pendientes"
 echo "$pendientes" | grep -q "Remote database is up to date" || { echo "ERROR: quedaron migraciones pendientes"; exit 1; }
