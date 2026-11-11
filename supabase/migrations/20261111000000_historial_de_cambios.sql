@@ -17,9 +17,10 @@
 -- Un cambio hecho desde el SQL Editor queda como "base:postgres".
 --
 -- PARA QUE NO SE LLENE LA BASE (plan gratis = 500 MB):
---   - Lo que el stock baja o sube por una venta, compra, tanda, retiro o anulación NO se anota acá: ya queda
---     en ventas_detalle, compras_detalle, lotes, retiros y ajustes_caja. Sí se anota si el stock cambia a mano
---     o por Importar (y cualquier otro cambio del que no se sepa el motivo).
+--   - Lo que el stock baja o sube por una venta, compra, retiro o anulación NO se anota acá: ya queda en
+--     ventas_detalle, compras_detalle, retiros y ajustes_caja. Sí se anota si el stock cambia a mano, por
+--     Importar o por una tanda de producción (la tanda vive en lotes, que se va vaciando y se borra: no alcanza
+--     para el control de cuentas), y cualquier otro cambio del que no se sepa el motivo.
 --   - Las clases que le quedan a un socio (cada reserva las mueve) y la marca interna del aviso de stock bajo
 --     no cuentan como cambio.
 
@@ -85,8 +86,8 @@ begin
     if (antes - ignorar) = (despues - ignorar) then
       return null;
     end if;
-    -- El stock que movió una venta, compra, tanda, retiro o anulación ya tiene su registro en otra tabla
-    if tg_table_name = 'productos' and motivo in ('venta', 'compra', 'tanda', 'retiro', 'anulacion')
+    -- El stock que movió una venta, compra, retiro o anulación ya tiene su registro en otra tabla
+    if tg_table_name = 'productos' and motivo in ('venta', 'compra', 'retiro', 'anulacion')
        and (antes - ignorar - 'stock') = (despues - ignorar - 'stock') then
       return null;
     end if;

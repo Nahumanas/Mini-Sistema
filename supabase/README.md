@@ -85,6 +85,6 @@ Crea una base de prueba, imita lo mínimo de Supabase, carga las tablas, corre l
   los datos del negocio siguen dentro del sobre cifrado.
 - Quién: el Gmail de la cuenta, y si fue el jefe o qué empleado (`rol` = `jefe` o `empleado:<id>`), que lo avisa la API.
   Por qué: `motivo` (`a mano`, `importar`, `alta`, `compra`, `cuota`, `anulacion`...). Desde el SQL Editor queda `base:postgres`.
-- Para no llenar la base, el stock que mueven las ventas, compras, tandas, retiros y anulaciones no se anota acá (ya
-  tiene su registro en su tabla), ni las clases que mueve cada reserva.
+- Para no llenar la base, el stock que mueven las ventas, compras, retiros y anulaciones no se anota acá (ya tiene
+  su registro en su tabla), ni las clases que mueve cada reserva. Las tandas de producción sí (no tienen otro registro fijo).
 - Cada dueño lo puede leer (RLS); nadie lo puede escribir ni cambiar desde afuera. Se borra solo con su comercio.

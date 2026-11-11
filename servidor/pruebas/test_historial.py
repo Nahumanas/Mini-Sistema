@@ -62,6 +62,13 @@ def test_productos_quien_cambio_que_y_por_que(cliente):
     baja = _historial("productos", alfajor["id"])[-1]
     assert (baja["datos_anteriores"]["activo"], baja["datos_nuevos"]["activo"]) == (True, False)
 
+    # Una tanda de producción sí se anota: no tiene otro registro fijo (la tanda se vacía y se borra)
+    pan = cliente.post(f"/comercios/{cid}/productos", json={"nombre": "Pan", "precioVenta": 100, "diasDuracion": 2},
+                       headers=ana).json()
+    assert cliente.post(f"/comercios/{cid}/lotes", json={"productoId": pan["id"], "cantidad": 10}, headers=ana).status_code == 201
+    tanda = _historial("productos", pan["id"])[-1]
+    assert (tanda["motivo"], float(tanda["datos_nuevos"]["stock"])) == ("tanda", 10)
+
     # En el historial nunca aparece un dato a la vista
     todo = _sql(f"select coalesce(string_agg(a::text, ' '), '') from public.auditoria_cambios a where comercio_id = {cid}")
     for dato in ("Alfajor", "Historico", "1500", "1800", "900"):
