@@ -18,6 +18,12 @@ Acá viven las tablas de Mantenete en la nube y las reglas que cuidan que **cada
 
 > La **clave secreta** de Supabase (`sb_secret_...`) se saltea todas estas reglas: solo va en las variables del servidor (Render) y nunca se usa para lo que pide un usuario.
 
+## Migraciones: se aplican solas al mergear
+
+Desde noviembre de 2026 las migraciones **ya no se pegan a mano**: al mergear un PR con una migración nueva, el
+workflow *Migraciones* la aplica con la CLI de Supabase. Cómo funciona, el paso de la primera vez y las reglas:
+[`cli/LEEME.md`](cli/LEEME.md). Lo que sigue más abajo ("pegar en el SQL Editor") es como se hizo hasta entonces.
+
 ## Cómo pasar las tablas a Supabase (una sola vez)
 
 1. En Supabase: **SQL Editor** → **New query**.
