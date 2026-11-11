@@ -26,6 +26,7 @@ class MercadoPagoFalso:
         self.ordenes: dict[str, dict] = {}
         self.clave_buena = CLAVE
         self.falla_sucursal: str | None = None
+        self.falla_caja = 0  # cuántas veces dice que la sucursal recién creada "no existe" (pasa en el Mercado Pago real)
 
     def __call__(self, token, metodo, ruta, cuerpo=None, idempotencia=None):
         self.pedidos.append((metodo, ruta, cuerpo, idempotencia))
@@ -38,7 +39,13 @@ class MercadoPagoFalso:
                 raise mercadopago.ErrorDeMercadoPago("Mercado Pago contestó 400", 400,
                                                      f'{{"message":"{self.falla_sucursal}","error":"bad_request"}}')
             return {"id": 7001, "external_id": cuerpo["external_id"]}
+        if ruta == "/users/555/stores/7001" and metodo == "DELETE":
+            return {}
         if ruta == "/pos":
+            if self.falla_caja:
+                self.falla_caja -= 1
+                raise mercadopago.ErrorDeMercadoPago("Mercado Pago contestó 400", 400,
+                                                     '{"message":"External Store ID does not refer any store.","error":"non_existent_external_store_id"}')
             return {"id": 9001, "external_id": cuerpo["external_id"]}
         if ruta == "/v1/orders" and metodo == "POST":
             orden_id = f"ORD{uuid.uuid4().hex[:12].upper()}"
@@ -63,6 +70,7 @@ class MercadoPagoFalso:
 def mp(monkeypatch):
     falso = MercadoPagoFalso()
     monkeypatch.setattr(mercadopago, "llamar", falso)
+    monkeypatch.setattr(mercadopago, "ESPERAS_CAJA", (0, 0, 0))
     return falso
 
 
@@ -93,7 +101,8 @@ def test_conectar_guarda_la_clave_cifrada_y_crea_sucursal_y_caja(cliente, mp):
     sucursal = next(c for m, ruta, c, _ in mp.pedidos if ruta == "/users/555/stores")
     assert sucursal["location"]["city_name"] == "Palermo" and sucursal["location"]["state_name"] == "Capital Federal"
     caja = next(c for m, ruta, c, _ in mp.pedidos if ruta == "/pos")
-    assert caja["fixed_amount"] is True and caja["external_store_id"] == sucursal["external_id"]
+    # La caja va atada a la sucursal por su número (con external_store_id, Mercado Pago a veces no la encuentra)
+    assert caja["fixed_amount"] is True and caja["store_id"] == 7001 and "external_store_id" not in caja
 
     # En la base la clave NO está tal cual
     guardado = _sql(f"select token_cifrado || ' ' || caja_mp from public.mercadopago_cuentas where comercio_id = {cid}")
@@ -103,6 +112,25 @@ def test_conectar_guarda_la_clave_cifrada_y_crea_sucursal_y_caja(cliente, mp):
     # Desconectar la borra
     assert cliente.delete(f"/comercios/{cid}/mercadopago", headers=ana).json()["conectada"] is False
     assert _sql(f"select count(*) from public.mercadopago_cuentas where comercio_id = {cid}") == "0"
+
+
+def test_si_la_sucursal_recien_creada_todavia_no_aparece_se_reintenta_la_caja(cliente, mp):
+    ana = crear_usuario("ana.mp.reintento@gmail.com")
+    comercio, _ = _kiosco(cliente, ana)
+    cid = comercio["id"]
+    mp.falla_caja = 2
+    r = cliente.put(f"/comercios/{cid}/mercadopago", json={"accessToken": CLAVE, **DIRECCION}, headers=ana)
+    assert r.status_code == 200, r.text
+    assert sum(1 for m, ruta, c, _ in mp.pedidos if ruta == "/pos") == 3
+
+    # Si nunca aparece: avisa que falló la caja (no la dirección), borra la sucursal vacía y no guarda nada
+    otra = crear_usuario("ana.mp.reintento2@gmail.com")
+    comercio2, _ = _kiosco(cliente, otra)
+    mp.falla_caja = 99
+    r = cliente.put(f"/comercios/{comercio2['id']}/mercadopago", json={"accessToken": CLAVE, **DIRECCION}, headers=otra)
+    assert r.status_code == 502 and "no pudo crear la caja" in r.json()["detail"]
+    assert ("DELETE", "/users/555/stores/7001") in [(m, ruta) for m, ruta, c, _ in mp.pedidos]
+    assert _sql(f"select count(*) from public.mercadopago_cuentas where comercio_id = {comercio2['id']}") == "0"
 
 
 def test_conectar_avisa_si_la_clave_o_la_direccion_no_sirven(cliente, mp):

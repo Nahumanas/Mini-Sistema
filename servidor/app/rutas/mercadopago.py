@@ -103,6 +103,9 @@ def conectar(comercio_id: int, datos: Conectar, usuario: Usuario = Depends(usuar
         })
     except ErrorDeMercadoPago as error:
         motivo = _motivo(error)
+        if error.paso == "caja" and 400 <= error.codigo < 500:
+            raise HTTPException(502, "Mercado Pago aceptó la dirección pero no pudo crear la caja con QR"
+                                + (f" ({motivo})" if motivo else "") + ". Probá de nuevo en un rato.") from None
         if 400 <= error.codigo < 500:
             raise HTTPException(422, "Mercado Pago no aceptó la dirección del local" + (f": {motivo}" if motivo else ".")
                                 + " Revisá la ciudad, la provincia y la ubicación.") from None
