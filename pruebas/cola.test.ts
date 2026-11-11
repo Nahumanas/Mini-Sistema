@@ -7,7 +7,7 @@ import { baseLocal } from "@/lib/sin-conexion/almacen";
 import { contar, encolar, espera, listasParaMandar, marcarRechazada, rechazadas, reintentar, reprogramar, siguienteProvisorio } from "@/lib/sin-conexion/cola";
 import { sincronizar } from "@/lib/sin-conexion/sincronizar";
 import type { Caja, Venta } from "@/lib/tipos";
-import { useConexionRed } from "@/store/conexion";
+import { useConexionRed, vigilarConexion } from "@/store/conexion";
 import { useCuenta } from "@/store/cuenta";
 import { useDatos } from "@/store/datos";
 import { item } from "./ayuda";
@@ -260,5 +260,24 @@ describe("¿hay internet?", () => {
     expect(red().estado).toBe("sin_conexion");
     red().anotarExito();
     expect(red()).toMatchObject({ estado: "en_linea", fallas: 0 });
+  });
+
+  it("una respuesta que llega tarde (el pedido salió antes del corte) no saca del modo sin conexión", () => {
+    const ventana = new EventTarget();
+    vi.stubGlobal("window", ventana);
+    vi.stubGlobal("document", Object.assign(new EventTarget(), { visibilityState: "visible" }));
+    const apagar = vigilarConexion(() => {});
+    try {
+      const salioAntes = Date.now() - 1000;
+      ventana.dispatchEvent(new Event("offline")); // el navegador avisa que se cortó
+      expect(red().estado).toBe("sin_conexion");
+      red().anotarExito(salioAntes); // la respuesta de un pedido viejo: no cuenta
+      expect(red().estado).toBe("sin_conexion");
+      red().anotarExito(Date.now()); // un pedido nuevo que anduvo: volvió internet
+      expect(red().estado).toBe("en_linea");
+    } finally {
+      apagar();
+      vi.unstubAllGlobals();
+    }
   });
 });

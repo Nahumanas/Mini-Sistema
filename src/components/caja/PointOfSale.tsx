@@ -14,6 +14,7 @@ import { useSinInternet } from "@/store/nube";
 import { Encabezado } from "../ui/base";
 import { AbrirCaja, CerrarCaja, RelevoTurno } from "./AperturaCierre";
 import { BarraIngreso } from "./BarraIngreso";
+import { useMercadoPago } from "./CobroConQr";
 import { PieCobro } from "./PieCobro";
 import { TablaCarrito } from "./TablaCarrito";
 
@@ -29,6 +30,7 @@ export function PointOfSale() {
   const [cerrando, setCerrando] = useState(false);
   const [relevando, setRelevando] = useState(false);
   const sinInternet = useSinInternet(); // relevo y cierre necesitan internet (se sigue cobrando en efectivo)
+  const conMercadoPago = useMercadoPago(comercio.id);
 
   const caja = cajas.find((c) => c.comercioId === comercio.id && !c.cerrada);
   const productos = useMemo(() => todos.filter((p) => p.comercioId === comercio.id && p.activo), [todos, comercio.id]);
@@ -144,6 +146,7 @@ export function PointOfSale() {
         key={`pie-${comercio.id}`}
         comercioId={comercio.id}
         cuenta={cuenta}
+        conMercadoPago={conMercadoPago}
         medio={medio}
         setMedio={setMedio}
         alCobrar={() => escaner.current?.focus()}
