@@ -16,8 +16,11 @@ type EstadoConexion = {
   faltaLlave: boolean; // hay cola, pero venció la llave: hay que poner el PIN o el código
   deOtraCuenta: number; // ventas guardadas con otra cuenta de Gmail (se mandan cuando entre esa cuenta)
   anotarFalla: () => void;
-  anotarExito: () => void;
+  /** salio: cuándo salió el pedido que anduvo. Si salió antes del último corte, no cuenta (llegó tarde). */
+  anotarExito: (salio?: number) => void;
 };
+
+let ultimoCorte = 0; // cuándo avisó el navegador que se cortó internet (Date.now())
 
 export const useConexionRed = create<EstadoConexion>()((set, get) => ({
   estado: typeof navigator !== "undefined" && navigator.onLine === false ? "sin_conexion" : "en_linea",
@@ -31,13 +34,14 @@ export const useConexionRed = create<EstadoConexion>()((set, get) => ({
     const fallas = get().fallas + 1;
     set({ fallas, ...(fallas >= 2 ? { estado: "sin_conexion" as const } : {}) });
   },
-  anotarExito: () => {
+  anotarExito: (salio) => {
+    if (salio !== undefined && salio < ultimoCorte) return;
     if (get().fallas !== 0 || get().estado !== "en_linea") set({ fallas: 0, estado: "en_linea" });
   },
 }));
 
 red.falla = () => useConexionRed.getState().anotarFalla();
-red.exito = () => useConexionRed.getState().anotarExito();
+red.exito = (salio) => useConexionRed.getState().anotarExito(salio);
 
 export function sinConexion() {
   return useConexionRed.getState().estado === "sin_conexion";
@@ -46,9 +50,10 @@ export function sinConexion() {
 /** Un pedido chiquito a la API para saber si hay internet. */
 export async function latido() {
   if (!hayApi) return;
+  const salio = Date.now();
   try {
     const r = await fetch(`${API}/salud`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
-    if (r.ok) useConexionRed.getState().anotarExito();
+    if (r.ok) useConexionRed.getState().anotarExito(salio);
     else useConexionRed.getState().anotarFalla();
   } catch {
     useConexionRed.getState().anotarFalla();
@@ -60,6 +65,7 @@ export async function latido() {
 export function vigilarConexion(alVolver: () => void, faltaAlgo: () => boolean = () => false) {
   const { anotarFalla } = useConexionRed.getState();
   const offline = () => {
+    ultimoCorte = Date.now();
     anotarFalla();
     anotarFalla(); // cuando el navegador dice que no hay, es seguro: pasa directo
   };

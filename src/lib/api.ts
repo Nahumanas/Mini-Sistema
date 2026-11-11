@@ -53,6 +53,7 @@ export async function pedir<T>(ruta: string, metodo: Metodo = "GET", cuerpo?: un
   if (!sesion) throw new ErrorDeApi("Se cerró la cuenta. Volvé a entrar con tu Gmail.", 401);
   const llave = llaveGuardada();
   let respuesta: Response;
+  const salio = Date.now();
   try {
     respuesta = await fetch(`${API}${ruta}`, {
       method: metodo,
@@ -68,7 +69,7 @@ export async function pedir<T>(ruta: string, metodo: Metodo = "GET", cuerpo?: un
     red.falla();
     throw new ErrorDeApi("No se pudo conectar con el servidor. Revisá internet y probá de nuevo.", 0);
   }
-  red.exito();
+  red.exito(salio);
   if (respuesta.status === 423) {
     // La llave del cifrado falta, venció o no sirve: se borra y se vuelve a pedir el PIN o el código
     borrarLlave();
