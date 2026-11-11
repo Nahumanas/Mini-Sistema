@@ -38,7 +38,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash supabase/pruebas/probar-en-local.sh
-      # El camino de la CLI de Supabase (supabase db push) y el paso de "marcar las que ya se pegaron a mano"
+      # El camino de la CLI de Supabase (supabase db push) y el paso de "marcar las que ya se pegaron a mano".
+      # La CLI solo se conecta con TLS (como Supabase), así que al PostgreSQL de prueba se le prende con un
+      # certificado de un día hecho acá mismo.
+      - name: Prender TLS en el PostgreSQL de prueba
+        run: |
+          openssl req -new -x509 -days 1 -nodes -subj "/CN=localhost" -out server.crt -keyout server.key 2>/dev/null
+          docker cp server.crt ${{ job.services.postgres.id }}:/var/lib/postgresql/data/server.crt
+          docker cp server.key ${{ job.services.postgres.id }}:/var/lib/postgresql/data/server.key
+          docker exec ${{ job.services.postgres.id }} bash -c "chown postgres:postgres /var/lib/postgresql/data/server.* && chmod 600 /var/lib/postgresql/data/server.key"
+          rm server.crt server.key
+          psql -q -d postgres -c "alter system set ssl = on" -c "select pg_reload_conf()"
+          sleep 1
+          psql -tA -d postgres -c "show ssl"
       - uses: supabase/setup-cli@v1
         with:
           version: 2.58.5

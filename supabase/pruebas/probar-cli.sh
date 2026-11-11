@@ -10,14 +10,14 @@ trap 'psql -q -d postgres -c "drop database if exists cli_nueva" -c "drop databa
 
 psql -q -d postgres -c "drop database if exists cli_nueva" -c "create database cli_nueva"
 psql -q -v ON_ERROR_STOP=1 -d cli_nueva -f pruebas/simular-supabase.sql
-(cd .. && supabase db push --db-url "$URL/cli_nueva?sslmode=disable" --yes)
+(cd .. && supabase db push --db-url "$URL/cli_nueva" --yes)
 psql -q -v ON_ERROR_STOP=1 -d cli_nueva -f pruebas/rls.sql
 
 psql -q -d postgres -c "drop database if exists cli_como_la_real" -c "create database cli_como_la_real"
 psql -q -v ON_ERROR_STOP=1 -d cli_como_la_real -f pruebas/simular-supabase.sql
 for m in migrations/*.sql; do psql -q -v ON_ERROR_STOP=1 -d cli_como_la_real -f "$m" > /dev/null; done
-# El PostgreSQL de prueba no tiene TLS (Supabase sí, y la CLI lo usa por defecto)
-export SUPABASE_DB_URL="$URL/cli_como_la_real?sslmode=disable"
+# La CLI exige TLS: en GitHub se le prende al PostgreSQL de prueba (ver pruebas.yml)
+export SUPABASE_DB_URL="$URL/cli_como_la_real"
 if bash cli/frenar-sin-historial.sh 2>/dev/null; then echo "ERROR: el freno dejó pasar una base sin historial"; exit 1; fi
 bash cli/marcar-ya-pegadas.sh
 bash cli/frenar-sin-historial.sh
