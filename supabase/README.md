@@ -76,3 +76,11 @@ Crea una base de prueba, imita lo mínimo de Supabase, carga las tablas, corre l
 - La base no acepta un dato a la vista donde va el sobre (`check`): solo lo que cifró la API.
 - Para pasarla a Supabase: después del merge, SQL Editor → New query → pegar el archivo (botón *Copy raw file* en GitHub) → Run.
 
+
+## El mail del dueño sigue al de su cuenta
+
+- `20261111100000_sincronizar_mail_del_dueno.sql`: cuando cambia `auth.users.email` (corregido en Supabase →
+  Authentication, o un cambio que el dueño confirmó), un disparador lo copia a `duenos.email`. Importa porque
+  `/admin` busca a los clientes por ese mail.
+- Es `security definer` porque el que cambia `auth.users` es Supabase Auth, que no tiene permiso sobre `public.duenos`.
+- Si la copia fallara, no frena el cambio de la cuenta: deja un aviso en los registros de la base.
