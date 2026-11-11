@@ -49,3 +49,7 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+
+# Respaldos: nunca al repositorio (aunque estén cifrados) ni la llave privada
+*.age
+llave-respaldo*
