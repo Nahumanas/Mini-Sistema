@@ -38,6 +38,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash supabase/pruebas/probar-en-local.sh
+      # El camino de la CLI de Supabase (supabase db push) y el paso de "marcar las que ya se pegaron a mano"
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.58.5
+      - run: bash supabase/pruebas/probar-cli.sh
 
   # La API (FastAPI): sus pedidos y que un dueño no pueda tocar lo de otro, contra una base de prueba.
   servidor:
