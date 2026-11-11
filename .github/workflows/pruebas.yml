@@ -65,4 +65,10 @@ jobs:
           cache: pip
           cache-dependency-path: servidor/requirements-pruebas.txt
       - run: pip install -r requirements-pruebas.txt
+      # pg_dump tiene que ser de la versión de la base (17) para la prueba de los respaldos
+      - run: |
+          sudo apt-get install -y -q postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -q postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
       - run: pytest -q
