@@ -38,6 +38,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash supabase/pruebas/probar-en-local.sh
+      # El camino de la CLI de Supabase (supabase db push) y el paso de "marcar las que ya se pegaron a mano".
+      # La CLI solo se conecta con TLS (como Supabase), así que al PostgreSQL de prueba se le prende con un
+      # certificado de un día hecho acá mismo.
+      - name: Prender TLS en el PostgreSQL de prueba
+        run: |
+          openssl req -new -x509 -days 1 -nodes -subj "/CN=localhost" -out server.crt -keyout server.key 2>/dev/null
+          docker cp server.crt ${{ job.services.postgres.id }}:/var/lib/postgresql/data/server.crt
+          docker cp server.key ${{ job.services.postgres.id }}:/var/lib/postgresql/data/server.key
+          docker exec ${{ job.services.postgres.id }} bash -c "chown postgres:postgres /var/lib/postgresql/data/server.* && chmod 600 /var/lib/postgresql/data/server.key"
+          rm server.crt server.key
+          psql -q -d postgres -c "alter system set ssl = on" -c "select pg_reload_conf()"
+          sleep 1
+          psql -tA -d postgres -c "show ssl"
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.58.5
+      - run: bash supabase/pruebas/probar-cli.sh
 
   # La API (FastAPI): sus pedidos y que un dueño no pueda tocar lo de otro, contra una base de prueba.
   servidor:
@@ -65,4 +82,10 @@ jobs:
           cache: pip
           cache-dependency-path: servidor/requirements-pruebas.txt
       - run: pip install -r requirements-pruebas.txt
+      # pg_dump tiene que ser de la versión de la base (17) para la prueba de los respaldos
+      - run: |
+          sudo apt-get install -y -q postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -q postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
       - run: pytest -q

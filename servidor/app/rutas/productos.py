@@ -97,7 +97,7 @@ def crear(comercio_id: int, datos: NuevoProducto, usuario: Usuario = Depends(usu
           llave: Llave = Depends(llave_requerida)):
     codigo, nombre = datos.codigo.strip(), _limpio(datos.nombre)
     try:
-        with como_usuario(usuario) as con:
+        with como_usuario(usuario, llave, "alta") as con:
             cofre = Cofre(con, llave)
             cofre.comercio(comercio_id)
             sobre = cofre.cerrar("productos", comercio_id, {
@@ -127,7 +127,7 @@ def actualizar(producto_id: int, cambios: CambiosProducto, usuario: Usuario = De
         if k in valores:
             valores[k] = valores[k].strip()
     try:
-        with como_usuario(usuario) as con:
+        with como_usuario(usuario, llave, "a mano") as con:
             cofre = Cofre(con, llave)
             actual = cofre.abrir(
                 "productos", con.execute("select * from public.productos where id = %s for update", (producto_id,)).fetchone()
@@ -163,7 +163,7 @@ def importar(comercio_id: int, datos: Importacion, usuario: Usuario = Depends(us
     Se busca por el código; si la fila no tiene código, por el nombre (sin mayúsculas ni tildes)."""
     nuevos = actualizados = 0
     productos = []
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "importar") as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id, bloquear=True)  # que otra compu no cargue el mismo código en el medio
         # Los productos del comercio por nombre: el nombre está cifrado en el sobre, así que no se puede

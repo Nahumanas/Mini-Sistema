@@ -1,0 +1,58 @@
+# MIGRACIONES AUTOMÁTICAS: cuando un PR con una migración nueva se mergea a main, GitHub la aplica en Supabase
+# con la CLI ("supabase db push"). Ya no hay que pegarla a mano en el SQL Editor.
+#
+# - La CLI anota cada migración en supabase_migrations.schema_migrations: nunca corre dos veces la misma y
+#   no deja saltear una (si llega una con fecha más vieja que la última aplicada, frena).
+# - Cada archivo corre en una transacción: si falla, no queda a medias, y el workflow queda en rojo (te llega un mail).
+# - Render también se actualiza con el merge, pero tarda varios minutos más: la migración casi siempre
+#   llega antes que la API nueva. Igual, una migración tiene que dejar andando a la API de antes (ver LEEME).
+#
+# LA PRIMERA VEZ: Actions → Migraciones → Run workflow, con la casilla marcada (ver supabase/cli/LEEME.md).
+name: Migraciones
+
+on:
+  push:
+    branches: [main]
+    paths: ["supabase/migrations/**"]
+  workflow_dispatch:
+    inputs:
+      marcar_ya_pegadas:
+        description: "SOLO LA PRIMERA VEZ: anotar como ya aplicadas las 11 migraciones que pegaste a mano (no corre ninguna)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Nunca dos a la vez, y si hay una en curso la siguiente espera (no la cancela).
+concurrency:
+  group: migraciones
+  cancel-in-progress: false
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: produccion
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Controlar que esté cargada la conexión
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::Falta el secreto SUPABASE_DB_URL en el entorno produccion (ver supabase/cli/LEEME.md)."; exit 1
+          fi
+          case "$SUPABASE_DB_URL" in *:6543/*) echo "::error::SUPABASE_DB_URL usa el puerto 6543. Tiene que ser el Session pooler, puerto 5432."; exit 1;; esac
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.58.5
+      - name: Anotar las que ya se pegaron a mano (solo la primera vez)
+        if: ${{ inputs.marcar_ya_pegadas }}
+        run: bash supabase/cli/marcar-ya-pegadas.sh
+      - name: Frenar si la base no tiene historial (si no, correría todo de nuevo)
+        run: bash supabase/cli/frenar-sin-historial.sh
+      - name: Qué se va a aplicar
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
+      - name: Aplicar
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --yes

@@ -187,3 +187,10 @@ pytest            # crea una base PostgreSQL de prueba, nunca toca Supabase
 GitHub corre estas pruebas solo en cada PR (trabajo `servidor`).
 
 > La carpeta se llama `servidor` (y no `api`) a propósito: Vercel trata una carpeta `api/` en la raíz como funciones suyas y trataría de publicar este código en la página.
+
+## Respaldos
+
+El plan gratis de Supabase no tiene copias para bajar. El workflow **Respaldo** copia la base cada lunes (con las
+llaves del cifrado en el mismo paquete), **prueba restaurarla** en una base vacía y la deja cerrada con tu llave de
+respaldo para bajar 7 días. La prueba de abrir los datos se hace en tu compu con el código de recuperación.
+Todo el paso a paso: [`respaldo/LEEME.md`](respaldo/LEEME.md).

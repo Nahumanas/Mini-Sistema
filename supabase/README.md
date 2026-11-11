@@ -18,6 +18,12 @@ Acá viven las tablas de Mantenete en la nube y las reglas que cuidan que **cada
 
 > La **clave secreta** de Supabase (`sb_secret_...`) se saltea todas estas reglas: solo va en las variables del servidor (Render) y nunca se usa para lo que pide un usuario.
 
+## Migraciones: se aplican solas al mergear
+
+Desde noviembre de 2026 las migraciones **ya no se pegan a mano**: al mergear un PR con una migración nueva, el
+workflow *Migraciones* la aplica con la CLI de Supabase. Cómo funciona, el paso de la primera vez y las reglas:
+[`cli/LEEME.md`](cli/LEEME.md). Lo que sigue más abajo ("pegar en el SQL Editor") es como se hizo hasta entonces.
+
 ## Cómo pasar las tablas a Supabase (una sola vez)
 
 1. En Supabase: **SQL Editor** → **New query**.
@@ -76,6 +82,18 @@ Crea una base de prueba, imita lo mínimo de Supabase, carga las tablas, corre l
 - La base no acepta un dato a la vista donde va el sobre (`check`): solo lo que cifró la API.
 - Para pasarla a Supabase: después del merge, SQL Editor → New query → pegar el archivo (botón *Copy raw file* en GitHub) → Run.
 
+
+## Historial de cambios (auditoría)
+
+- `20261111000000_historial_de_cambios.sql` agrega `public.auditoria_cambios`: un disparador anota solo cada alta,
+  cambio o baja de **productos** (incluye precio, costo, stock a mano y desactivar), **gastos** (cambios y borrados)
+  y **socios** (vencimiento, plan, alta y baja). Guarda la fila de antes y la de después **tal cual está en la base**:
+  los datos del negocio siguen dentro del sobre cifrado.
+- Quién: el Gmail de la cuenta, y si fue el jefe o qué empleado (`rol` = `jefe` o `empleado:<id>`), que lo avisa la API.
+  Por qué: `motivo` (`a mano`, `importar`, `alta`, `compra`, `cuota`, `anulacion`...). Desde el SQL Editor queda `base:postgres`.
+- Para no llenar la base, el stock que mueven las ventas, compras, retiros y anulaciones no se anota acá (ya tiene
+  su registro en su tabla), ni las clases que mueve cada reserva. Las tandas de producción sí (no tienen otro registro fijo).
+- Cada dueño lo puede leer (RLS); nadie lo puede escribir ni cambiar desde afuera. Se borra solo con su comercio.
 
 ## El mail del dueño sigue al de su cuenta
 
