@@ -1,0 +1,4 @@
+# Para los respaldos (crear la llave, abrir un paquete y probar que se lee). Se instala con:
+#   pip install -r requirements-respaldo.txt
+-r requirements.txt
+pyrage==1.4.0

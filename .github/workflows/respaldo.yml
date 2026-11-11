@@ -1,0 +1,91 @@
+# RESPALDO SEMANAL de la base de Supabase (el plan gratis no tiene copias descargables).
+#
+# Cada lunes a las 6 de la mañana (hora de Argentina), y cuando lo pidas con "Run workflow":
+#   1. copia toda la base (estructura, datos, usuarios y las llaves del cifrado, en una sola foto),
+#   2. LA PRUEBA DE RESTAURAR: la arma en una base vacía y controla que cada tabla tenga las mismas filas,
+#   3. la cierra con tu llave PÚBLICA de respaldo (age) y la deja para bajar 7 días en "Artifacts".
+# Si algo falla, el workflow queda en rojo y GitHub te manda un mail.
+#
+# La copia a la vista solo existe unos segundos en la máquina de GitHub, que se borra al terminar.
+# Lo que se puede bajar está cerrado: sin tu llave PRIVADA (que nunca está en GitHub) no se abre.
+#
+# Lo que tenés que cargar una vez (ver servidor/respaldo/LEEME.md):
+#   - el entorno "produccion" (Settings → Environments), con el secreto RESPALDO_BASE_URL
+#     (la conexión "Session pooler" de Supabase, puerto 5432) y la variable RESPALDO_LLAVE_PUBLICA (age1...).
+name: Respaldo
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # lunes 09:00 UTC = 06:00 en Argentina
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: respaldo
+
+jobs:
+  respaldo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: produccion
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # El PostgreSQL de prueba (donde se restaura). La base real llega solo por RESPALDO_BASE_URL.
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - name: Controlar que esté todo cargado
+        env:
+          BASE_URL: ${{ secrets.RESPALDO_BASE_URL }}
+          LLAVE_PUBLICA: ${{ vars.RESPALDO_LLAVE_PUBLICA }}
+        run: |
+          if [ -z "$BASE_URL" ] || [ -z "$LLAVE_PUBLICA" ]; then
+            echo "::error::Falta cargar RESPALDO_BASE_URL (secreto) o RESPALDO_LLAVE_PUBLICA (variable) en el entorno produccion. Ver servidor/respaldo/LEEME.md"
+            exit 1
+          fi
+          case "$BASE_URL" in *:6543/*) echo "::error::RESPALDO_BASE_URL usa el puerto 6543 (Transaction pooler). Para pg_dump tiene que ser el Session pooler, puerto 5432."; exit 1;; esac
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: servidor/requirements-respaldo.txt
+      - run: pip install -r servidor/requirements-respaldo.txt
+      - name: Instalar pg_dump 17 (la versión de Supabase)
+        run: |
+          sudo apt-get install -y -q postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -q postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+      - name: 1. Copiar la base
+        env:
+          BASE_URL: ${{ secrets.RESPALDO_BASE_URL }}
+        run: bash servidor/respaldo/hacer-respaldo.sh "$RUNNER_TEMP/respaldo"
+      - name: 2. Prueba de restaurar
+        run: bash servidor/respaldo/restaurar-y-controlar.sh "$RUNNER_TEMP/respaldo"
+      - name: 3. Cerrar el paquete con tu llave pública
+        id: paquete
+        env:
+          LLAVE_PUBLICA: ${{ vars.RESPALDO_LLAVE_PUBLICA }}
+        run: |
+          NOMBRE="mantenete-respaldo-$(TZ=America/Argentina/Buenos_Aires date +%Y-%m-%d-%H%M)"
+          cd servidor && python -m respaldo.paquete empaquetar "$RUNNER_TEMP/respaldo" "$RUNNER_TEMP/salida/$NOMBRE.tar.gz.age" "$LLAVE_PUBLICA"
+          echo "nombre=$NOMBRE" >> "$GITHUB_OUTPUT"
+      - name: Borrar la copia a la vista
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/respaldo"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.paquete.outputs.nombre }}
+          path: ${{ runner.temp }}/salida/*.age
+          retention-days: 7
+          if-no-files-found: error
