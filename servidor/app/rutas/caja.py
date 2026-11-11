@@ -120,8 +120,9 @@ def cerrar(comercio_id: int, datos: CerrarCaja, tareas: BackgroundTasks, usuario
         (filas,) = viaje(("update public.cajas set cerrada = now(), sobre = %s where id = %s returning *", (sobre, caja["id"])),
                          terminar=chat is None and mail is None)
         cerrada = cofre.abrir("cajas", filas[0])
-        avisos.avisar_a(viaje.con, tareas, "cierre", chat, mail, lambda: avisos.cierre(viaje.con, cofre, comercio, cerrada),
-                        asunto=f"Cierre de caja en {comercio['nombre']}", boton=("Ver el Panel del día", "/panel-del-dia"))
+        avisos.avisar_a(viaje.con, tareas, "cierre", chat, mail,
+                        lambda: avisos.datos_cierre(viaje.con, cofre, comercio, cerrada),
+                        por_telegram=avisos.texto_cierre, por_mail=avisos.mail_cierre)
         return a_camel(cerrada)
 
 

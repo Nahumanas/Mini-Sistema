@@ -10,7 +10,9 @@ import html
 import re
 from collections import Counter, defaultdict
 from collections.abc import Callable
+from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
+from zoneinfo import ZoneInfo
 
 from fastapi import BackgroundTasks
 from psycopg import Connection
@@ -94,23 +96,24 @@ def _mandar_mail(para: str, asunto: str, cuerpo: str, plano: str) -> None:
 
 
 def avisar_a(con: Connection, tareas: BackgroundTasks, tipo: str, chat: int | None, mail: str | None,
-             armar: Callable[[], str | None], asunto: str, boton: tuple[str, str]) -> None:
-    """Como avisar, pero ya sabiendo a qué chat y a qué mail va. El mismo mensaje sirve para los dos:
-    en el mail se le agrega un botón que lleva a la pantalla del sistema."""
+             armar: Callable[[], dict | None], por_telegram: Callable[[dict], str],
+             por_mail: Callable[[dict], tuple[str, str, str]]) -> None:
+    """Como avisar, pero ya sabiendo a qué chat y a qué mail va. `armar` junta los datos UNA vez (consultando la base)
+    y con esos datos se escribe el mensaje de Telegram y el mail, cada uno con su propio formato."""
     if chat is None and mail is None:
         return
     try:
         with con.transaction():  # punto de guardado: si algo falla acá, el cierre sigue
-            mensaje = armar()
+            datos = armar()
+        mensaje = por_telegram(datos) if datos and chat is not None else None
+        correo_listo = por_mail(datos) if datos and mail is not None else None
     except Exception as error:  # noqa: BLE001 (a propósito: el aviso es lo de menos)
         print(f"No se pudo armar el aviso ({tipo}): {type(error).__name__}", flush=True)
         return
-    if not mensaje:
-        return
-    if chat is not None:
+    if mensaje:
         tareas.add_task(_mandar, chat, mensaje)
-    if mail is not None:
-        tareas.add_task(_mandar_mail, mail, _asunto(asunto), mail_desde_mensaje(mensaje, boton), texto_plano(mensaje))
+    if correo_listo:
+        tareas.add_task(_mandar_mail, mail, *correo_listo)
 
 
 def avisar(con: Connection, tareas: BackgroundTasks, tipo: str, armar: Callable[[], str | None]) -> None:
@@ -158,8 +161,14 @@ def relevo(comercio: dict, fila: dict) -> str:
 
 
 def cierre(con: Connection, cofre: Cofre, comercio: dict, caja: dict) -> str:
+    """El aviso de cierre de Telegram (arqueo + resumen del día)."""
+    return texto_cierre(datos_cierre(con, cofre, comercio, caja))
+
+
+def datos_cierre(con: Connection, cofre: Cofre, comercio: dict, caja: dict) -> dict:
     """El arqueo y el resumen del día: lo vendido en esta caja, por medio de pago, lo más vendido
-    y lo que salió hoy (compras y gastos), igual que "Lo que salió hoy" del Panel del día."""
+    y lo que salió hoy (compras y gastos), igual que "Lo que salió hoy" del Panel del día.
+    Con estos datos se escribe el mensaje de Telegram (texto_cierre) y el mail (mail_cierre)."""
     cid = comercio["id"]
     ventas = cofre.abrir_todas("ventas", con.execute(
         "select id, comercio_id, medio_pago, sobre from public.ventas where caja_id = %s and anulada is null", (caja["id"],)
@@ -185,24 +194,37 @@ def cierre(con: Connection, cofre: Cofre, comercio: dict, caja: dict) -> str:
         f"select comercio_id, sobre from public.gastos where comercio_id = %s and fecha = {hoy}", (cid,)
     ).fetchall())), Decimal(0))
 
+    return {
+        "comercio": comercio["nombre"], "responsable": caja["responsable"], "nota": caja.get("nota") or "",
+        "abierta": caja.get("abierta"), "cerrada": caja.get("cerrada"),
+        "esperado": caja["efectivo_esperado"], "contado": caja["efectivo_contado"],
+        "cobrado": cobrado, "ventas": len(ventas),
+        "por_medio": sorted(por_medio.items(), key=lambda x: -x[1]),
+        "mas_vendidos": mas_vendidos.most_common(3), "compras": compras, "gastos": gastos,
+    }
+
+
+def texto_cierre(d: dict) -> str:
+    """El mensaje de cierre para Telegram (con las marcas <b> que entiende Telegram)."""
     lineas = [
-        f"🔴 <b>Se cerró la caja</b> en {texto(comercio['nombre'])}",
-        f"Cerró: {texto(caja['responsable'])}",
+        f"🔴 <b>Se cerró la caja</b> en {texto(d['comercio'])}",
+        f"Cerró: {texto(d['responsable'])}",
         "",
         "<b>Arqueo</b>",
-        f"Efectivo esperado {plata(caja['efectivo_esperado'])}, contado {plata(caja['efectivo_contado'])}",
-        _diferencia(caja["efectivo_esperado"], caja["efectivo_contado"]),
+        f"Efectivo esperado {plata(d['esperado'])}, contado {plata(d['contado'])}",
+        _diferencia(d["esperado"], d["contado"]),
     ]
-    if caja.get("nota"):
-        lineas.append(f"Nota: {texto(caja['nota'])}")
-    lineas += ["", "<b>Resumen</b>", f"Vendido: <b>{plata(cobrado)}</b> en {len(ventas)} venta{'s' if len(ventas) != 1 else ''}"]
-    lineas += [f"  · {MEDIOS.get(m, m)}: {plata(t)}" for m, t in sorted(por_medio.items(), key=lambda x: -x[1])]
-    if mas_vendidos:
-        top = ", ".join(f"{texto(n)} ({cantidad(c)})" for n, c in mas_vendidos.most_common(3))
+    if d["nota"]:
+        lineas.append(f"Nota: {texto(d['nota'])}")
+    n = d["ventas"]
+    lineas += ["", "<b>Resumen</b>", f"Vendido: <b>{plata(d['cobrado'])}</b> en {n} venta{'s' if n != 1 else ''}"]
+    lineas += [f"  · {MEDIOS.get(m, m)}: {plata(t)}" for m, t in d["por_medio"]]
+    if d["mas_vendidos"]:
+        top = ", ".join(f"{texto(nombre)} ({cantidad(c)})" for nombre, c in d["mas_vendidos"])
         lineas.append(f"Lo más vendido: {top}")
-    if compras or gastos:
-        lineas.append(f"Compras de hoy: {plata(compras)} · Gastos de hoy: {plata(gastos)}")
-        lineas.append(f"Quedó: <b>{plata(cobrado - compras - gastos)}</b>")
+    if d["compras"] or d["gastos"]:
+        lineas.append(f"Compras de hoy: {plata(d['compras'])} · Gastos de hoy: {plata(d['gastos'])}")
+        lineas.append(f"Quedó: <b>{plata(d['cobrado'] - d['compras'] - d['gastos'])}</b>")
     return "\n".join(lineas)
 
 
@@ -251,9 +273,25 @@ def stock_bajo_despues(tareas: BackgroundTasks, cofre: Cofre, comercio: dict, fi
 
 
 # ---------------------------------------------------------------- los mails
+# Los mails NO son el texto de Telegram pegado: tienen su propio diseño (cabecera con la caja, tablas y botón).
+# Reglas para que se vean bien en Gmail, Outlook y Apple Mail:
+# - todo con TABLAS y estilos en línea (style="..."): muchos programas de mail ignoran <style> y las <div> con flex
+# - el logo en PNG desde la app (Gmail no muestra SVG ni imágenes pegadas adentro del mail)
+# - los espacios NO sirven para alinear (HTML junta varios espacios en uno): se usa padding
+# - al final va la fecha y hora del aviso: así cada mail termina distinto y Gmail no esconde el botón con "•••"
 
-_ESTILO_BOTON = ("display:inline-block;background:#1f6f5c;color:#ffffff;text-decoration:none;font-weight:600;"
-                 "padding:12px 22px;border-radius:8px")
+LEMA = "Mantenete: control total sin margen de error."
+_ZONA = ZoneInfo("America/Argentina/Buenos_Aires")
+_DIAS = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+_LETRA = "font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+# La paleta (la misma de la vista previa del diseño)
+_OSCURO, _TEXTO, _TENUE, _BORDE, _FONDO_TABLA = "#0F172A", "#0F172A", "#64748B", "#E2E8F0", "#F1F5F9"
+_ACENTO, _ROJO, _VERDE = "#0284C7", "#DC2626", "#15803D"
+_ETIQUETAS = {  # (fondo, borde, letra) de la etiqueta de arriba
+    "alerta": ("#FEF3C7", "#FDE68A", "#92400E"),
+    "bien": ("#DCFCE7", "#BBF7D0", "#166534"),
+    "info": ("#E0F2FE", "#BAE6FD", "#075985"),
+}
 
 
 def _asunto(valor: str) -> str:
@@ -266,24 +304,110 @@ def texto_plano(mensaje: str) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", mensaje))
 
 
-def _pagina(cuerpo: str, boton: tuple[str, str]) -> str:
-    etiqueta, ruta = boton
-    enlace = f"{config.URL_SISTEMA}{ruta}"
+def _e(valor) -> str:
+    """Un dato escrito por el usuario, listo para meter en el HTML del mail."""
+    return html.escape(str(valor))
+
+
+def _hora_ar(momento: datetime | None) -> datetime:
+    return (momento or datetime.now(UTC)).astimezone(_ZONA)
+
+
+def cuando(momento: datetime | None = None) -> str:
+    """'martes 10/11/2026 a las 22:44' (hora de Argentina)."""
+    m = _hora_ar(momento)
+    return f"{_DIAS[m.weekday()]} {m:%d/%m/%Y} a las {m:%H:%M}"
+
+
+def _etiqueta(texto_etiqueta: str, tono: str) -> str:
+    fondo, borde, letra = _ETIQUETAS[tono]
     return (
-        '<!doctype html><html lang="es"><body style="margin:0;padding:24px;background:#f4f5f4;'
-        'font-family:Arial,Helvetica,sans-serif;color:#1c1f1e">'
-        '<div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px">'
-        f"{cuerpo}"
-        f'<p style="margin:28px 0 8px"><a href="{enlace}" style="{_ESTILO_BOTON}">{texto(etiqueta)}</a></p>'
-        '<p style="margin:24px 0 0;font-size:12px;color:#6b716f">Te llega porque lo prendiste en Mantenete → '
-        "Configuración → Avisos por mail. Desde ahí lo podés apagar.</p>"
-        "</div></body></html>"
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
+        f'<td style="background:{fondo};border:1px solid {borde};border-radius:999px;padding:5px 12px;{_LETRA};'
+        f'font-size:12px;font-weight:600;color:{letra}">{texto_etiqueta}</td></tr></table>'
     )
 
 
+def _titulo(texto_titulo: str) -> str:
+    return (f'<h1 style="margin:18px 0 8px;{_LETRA};font-size:24px;line-height:1.3;font-weight:700;'
+            f'color:{_TEXTO}">{texto_titulo}</h1>')
+
+
+def _parrafo(contenido: str, abajo: int = 24) -> str:
+    return f'<p style="margin:0 0 {abajo}px;{_LETRA};font-size:15px;line-height:1.6;color:{_TENUE}">{contenido}</p>'
+
+
+def _subtitulo(texto_sub: str) -> str:
+    return (f'<p style="margin:24px 0 10px;{_LETRA};font-size:12px;font-weight:700;text-transform:uppercase;'
+            f'letter-spacing:0.5px;color:{_TENUE}">{texto_sub}</p>')
+
+
+def _celda(contenido: str, derecha: bool = False, primera: bool = False, estilo: str = "") -> str:
+    borde = "" if primera else f"border-top:1px solid {_BORDE};"
+    alinear = ' align="right"' if derecha else ""
+    if derecha:  # los montos no se cortan en dos renglones en el celular ("$" arriba y "500" abajo)
+        estilo = "white-space:nowrap;" + estilo
+    return (f'<td{alinear} style="padding:12px 16px;{borde}{_LETRA};font-size:15px;color:{_TEXTO};{estilo}">'
+            f"{contenido}</td>")
+
+
+def _tabla(encabezados: list[str] | None, filas: list[str]) -> str:
+    """Una tabla con fondo gris claro y borde de 1px. `filas` ya vienen armadas con _celda (<tr>...</tr>)."""
+    cabeza = ""
+    if encabezados:
+        th = (f'padding:10px 16px;{_LETRA};font-size:12px;font-weight:600;text-transform:uppercase;'
+              f'letter-spacing:0.5px;color:{_TENUE}')
+        derecha = ' align="right"'
+        cabeza = "<tr>" + "".join(
+            f'<td{derecha if i else ""} style="{th}">{h}</td>' for i, h in enumerate(encabezados)
+        ) + "</tr>"
+    return (
+        f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+        f'style="background:{_FONDO_TABLA};border:1px solid {_BORDE};border-radius:8px;border-collapse:separate">'
+        f"{cabeza}{''.join(filas)}</table>"
+    )
+
+
+def _pagina(cuerpo: str, boton: tuple[str, str], momento: datetime | None = None, extra_pie: str = "") -> str:
+    """El mail completo: cabecera oscura con la caja, el cuerpo, el botón y el pie (con la fecha y hora del aviso)."""
+    etiqueta, ruta = boton
+    enlace = _e(f"{config.URL_SISTEMA}{ruta}")
+    logo = _e(f"{config.URL_SISTEMA}/isotipo-mail.png")
+    pie = f"{extra_pie} " if extra_pie else ""
+    return f'''<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>Mantenete</title></head>
+<body style="margin:0;padding:0;background:#F1F5F9">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F1F5F9"><tr><td align="center" style="padding:32px 16px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#FFFFFF;border:1px solid {_BORDE};border-radius:12px;border-collapse:separate">
+<tr><td style="background:{_OSCURO};padding:20px 28px;border-radius:12px 12px 0 0">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+<td style="vertical-align:middle"><img src="{logo}" width="36" height="36" alt="" style="display:block;border:0"></td>
+<td style="vertical-align:middle;padding-left:12px;{_LETRA};font-size:18px;font-weight:800;letter-spacing:0.5px;color:#FFFFFF">MANTENETE</td>
+</tr></table></td></tr>
+<tr><td style="padding:32px 28px 8px">{cuerpo}</td></tr>
+<tr><td align="center" style="padding:28px 28px 32px">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="{_ACENTO}" style="border-radius:8px">
+<a href="{enlace}" style="display:inline-block;padding:14px 28px;{_LETRA};font-size:15px;font-weight:600;color:#FFFFFF;text-decoration:none;border-radius:8px">{_e(etiqueta)}</a>
+</td></tr></table></td></tr>
+<tr><td style="padding:0 28px"><div style="height:1px;line-height:1px;font-size:1px;background:{_BORDE}">&nbsp;</div></td></tr>
+<tr><td style="padding:20px 28px 28px">
+<p style="margin:0 0 8px;{_LETRA};font-size:12px;line-height:1.6;color:{_TENUE}">Este es un aviso automático. {pie}Te llega porque lo prendiste en Mantenete → Configuración → Avisos por mail, y desde ahí lo podés apagar.</p>
+<p style="margin:0 0 8px;{_LETRA};font-size:12px;font-weight:600;color:{_TENUE}">{LEMA}</p>
+<p style="margin:0;{_LETRA};font-size:11px;color:#94A3B8">Aviso del {cuando(momento)}.</p>
+</td></tr>
+</table>
+</td></tr></table>
+</body></html>'''
+
+
 def mail_desde_mensaje(mensaje: str, boton: tuple[str, str]) -> str:
-    """El mismo texto del aviso de Telegram (que ya viene con los datos escapados), con formato de mail."""
-    return _pagina(f'<p style="margin:0;font-size:15px;line-height:1.6">{mensaje.replace(chr(10), "<br>")}</p>', boton)
+    """Un mensaje corto (como el de prueba) con el diseño del mail. El mensaje ya viene con los datos escapados.
+    Los espacios del principio de cada renglón pasan a &nbsp;, porque HTML los borraría."""
+    renglones = [re.sub(r"^ +", lambda m: "&nbsp;" * len(m.group()), r) for r in mensaje.split("\n")]
+    cuerpo = (f'<p style="margin:0;{_LETRA};font-size:15px;line-height:1.6;color:{_TEXTO}">'
+              f'{"<br>".join(renglones)}</p>')
+    return _pagina(cuerpo, boton)
 
 
 def mail_stock_bajo(comercio: dict, productos: list[dict]) -> tuple[str, str, str] | None:
@@ -292,29 +416,77 @@ def mail_stock_bajo(comercio: dict, productos: list[dict]) -> tuple[str, str, st
         return None
     primero = productos[0]["nombre"]
     asunto = f"⚠️ Alerta de Stock Bajo - {primero}" + (f" y {len(productos) - 1} más" if len(productos) > 1 else "")
-    celda = 'style="padding:8px 10px;border-bottom:1px solid #e3e6e4;text-align:{}"'
     filas, lineas = [], []
     for p in productos:
         actual = "Sin stock" if p["stock"] <= 0 else cantidad(p["stock"])
-        color = "#b42318" if p["stock"] <= 0 else "#1c1f1e"
         filas.append(
-            f"<tr><td {celda.format('left')}>{texto(p['nombre'])}</td>"
-            f'<td {celda.format("right")}><b style="color:{color}">{actual}</b></td>'
-            f"<td {celda.format('right')}>{cantidad(p['stock_minimo'])}</td></tr>"
+            "<tr>" + _celda(_e(p["nombre"]))
+            + _celda(f"<b>{actual}</b>", derecha=True, estilo=f"font-size:18px;font-weight:700;color:{_ROJO}")
+            + _celda(cantidad(p["stock_minimo"]), derecha=True, estilo=f"color:{_TENUE}") + "</tr>"
         )
         lineas.append(f"- {p['nombre']}: stock actual {actual}, mínimo {cantidad(p['stock_minimo'])}")
-    th = 'style="padding:8px 10px;border-bottom:2px solid #c9cecb;text-align:{};font-size:13px;color:#6b716f"'
+    uno = len(productos) == 1
     cuerpo = (
-        f'<h1 style="margin:0 0 6px;font-size:20px">📦 Se está terminando en {texto(comercio["nombre"])}</h1>'
-        '<p style="margin:0 0 18px;color:#6b716f">Una venta dejó estos productos en su mínimo o sin stock.</p>'
-        '<table style="width:100%;border-collapse:collapse;font-size:15px">'
-        f"<tr><th {th.format('left')}>Producto</th><th {th.format('right')}>Stock actual</th>"
-        f"<th {th.format('right')}>Mínimo</th></tr>{''.join(filas)}</table>"
-        '<p style="margin:18px 0 0;color:#6b716f">No te vamos a volver a avisar de estos productos hasta que los repongas.</p>'
+        _etiqueta("&#9888;&#65039; Alerta de Inventario", "alerta")
+        + _titulo(f"¡Ojo con el stock en {_e(comercio['nombre'])}!")
+        + _parrafo(f"Una venta dejó {'este producto' if uno else 'estos productos'} en el mínimo que configuraste o sin stock.")
+        + _tabla(["Producto", "Stock actual", "Mínimo"], filas)
     )
+    momento = datetime.now(UTC)
+    extra = f"No te vamos a volver a avisar de {'este producto' if uno else 'estos productos'} hasta que {'lo' if uno else 'los'} repongas."
     plano = "\n".join([f"Se está terminando en {comercio['nombre']}:", *lineas, "",
-                        f"Ver el stock: {config.URL_SISTEMA}/stock"])
-    return _asunto(asunto), _pagina(cuerpo, ("Ver el stock", "/stock")), plano
+                       f"Revisar el stock: {config.URL_SISTEMA}/stock", f"Aviso del {cuando(momento)}."])
+    return _asunto(asunto), _pagina(cuerpo, ("Revisar mi stock en el sistema", "/stock"), momento, extra), plano
+
+
+def mail_cierre(d: dict) -> tuple[str, str, str]:
+    """(asunto, html, texto) del mail de cierre: arqueo en una tabla, lo vendido por medio de pago y lo más vendido."""
+    momento = d.get("cerrada") or datetime.now(UTC)
+    m = _hora_ar(momento)
+    dif = Decimal(str(d["contado"])) - Decimal(str(d["esperado"]))
+    if dif == 0:
+        etiqueta, tono, color_dif, texto_dif = "&#9989; Arqueo justo", "bien", _VERDE, "Justo"
+    elif dif < 0:
+        etiqueta, tono, color_dif, texto_dif = f"&#9888;&#65039; Faltan {plata(-dif)}", "alerta", _ROJO, f"Faltan {plata(-dif)}"
+    else:
+        etiqueta, tono, color_dif, texto_dif = f"&#9888;&#65039; Sobran {plata(dif)}", "alerta", _ROJO, f"Sobran {plata(dif)}"
+
+    horario = f"Cerró <b style=\"color:{_TEXTO}\">{_e(d['responsable'])}</b> el {cuando(momento)}"
+    if d.get("abierta"):
+        horario += f" (la caja estaba abierta desde las {_hora_ar(d['abierta']):%H:%M})"
+    cuerpo = _etiqueta(etiqueta, tono) + _titulo(f"Se cerró la caja en {_e(d['comercio'])}") + _parrafo(horario + ".")
+
+    cuerpo += _subtitulo("Arqueo del efectivo") + _tabla(None, [
+        "<tr>" + _celda("Efectivo esperado", primera=True) + _celda(plata(d["esperado"]), True, True) + "</tr>",
+        "<tr>" + _celda("Efectivo contado") + _celda(plata(d["contado"]), True) + "</tr>",
+        "<tr>" + _celda("<b>Diferencia</b>")
+        + _celda(f"<b>{texto_dif}</b>", True, estilo=f"color:{color_dif};font-weight:700") + "</tr>",
+    ])
+    if d["nota"]:
+        cuerpo += f'<p style="margin:12px 0 0;{_LETRA};font-size:14px;line-height:1.6;color:{_TENUE}">Nota: {_e(d["nota"])}</p>'
+
+    n = d["ventas"]
+    filas = ["<tr>" + _celda(f"<b>Vendido</b> <span style=\"color:{_TENUE}\">({n} venta{'s' if n != 1 else ''})</span>", primera=True)
+             + _celda(f"<b>{plata(d['cobrado'])}</b>", True, True) + "</tr>"]
+    filas += ["<tr>" + _celda(MEDIOS.get(medio, medio), estilo=f"padding-left:32px;color:{_TENUE}")
+              + _celda(plata(t), True, estilo=f"color:{_TENUE}") + "</tr>" for medio, t in d["por_medio"]]
+    if d["compras"] or d["gastos"]:
+        filas += [
+            "<tr>" + _celda("Compras de hoy") + _celda(f"- {plata(d['compras'])}", True) + "</tr>",
+            "<tr>" + _celda("Gastos de hoy") + _celda(f"- {plata(d['gastos'])}", True) + "</tr>",
+            "<tr>" + _celda("<b>Quedó</b>") + _celda(f"<b>{plata(d['cobrado'] - d['compras'] - d['gastos'])}</b>", True) + "</tr>",
+        ]
+    cuerpo += _subtitulo("Resumen de la caja") + _tabla(None, filas)
+
+    if d["mas_vendidos"]:
+        cuerpo += _subtitulo("Lo más vendido") + _tabla(["Producto", "Cantidad vendida"], [
+            "<tr>" + _celda(_e(nombre)) + _celda(f"<b>{cantidad(c)}</b>", True) + "</tr>" for nombre, c in d["mas_vendidos"]
+        ])
+
+    asunto = f"Cierre de caja en {d['comercio']} · {m:%d/%m %H:%M}"
+    plano = "\n".join([texto_plano(texto_cierre(d)), "", f"Ver el Panel del día: {config.URL_SISTEMA}/panel-del-dia",
+                       f"Aviso del {cuando(momento)}."])
+    return _asunto(asunto), _pagina(cuerpo, ("Ver el Panel del día", "/panel-del-dia"), momento), plano
 
 
 def _texto_stock_bajo(comercio: dict, productos: list[dict]) -> str | None:
