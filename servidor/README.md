@@ -194,3 +194,23 @@ El plan gratis de Supabase no tiene copias para bajar. El workflow **Respaldo** 
 llaves del cifrado en el mismo paquete), **prueba restaurarla** en una base vacía y la deja cerrada con tu llave de
 respaldo para bajar 7 días. La prueba de abrir los datos se hace en tu compu con el código de recuperación.
 Todo el paso a paso: [`respaldo/LEEME.md`](respaldo/LEEME.md).
+
+## Control de cuentas (conciliación)
+
+La base no puede controlar que los números cierren, porque los montos están cifrados. Lo hace `app/conciliacion.py`
+con los datos ya abiertos, desde dos lugares que corren exactamente las mismas cuentas:
+
+- **La API**: `GET /comercios/{id}/control-de-cuentas`, solo con la llave del **jefe** (403 a un empleado).
+- **Un respaldo, en tu compu**: `python -m respaldo.controlar_cuentas RESPALDO.tar.gz.age --llave ... --dueno ...`
+  (con el código de recuperación, sin internet). Termina con error si algo no cierra.
+
+No puede ser un cron que corra solo en el servidor: para abrir los datos hace falta una clave que solo tiene el dueño
+(y así tiene que ser). Qué controla:
+
+| Control | Regla | Si no cierra |
+|---|---|---|
+| Ventas | `total = subtotal - descuento` y `subtotal = suma de cantidad x precio del detalle` | problema |
+| Stock | `stock = inicial + cambios a mano/Importar/tandas (historial) + compras - ventas sin anular - retiros` | problema (solo productos creados después del historial) |
+| Socios | `vence` = el vence nuevo de la última cuota sin anular | aviso si alguien lo cambió a mano después (dice quién); si no, problema |
+
+Un cambio hecho "por atrás" (sin pasar por la API ni dejar rastro en el historial) es justo lo que estos controles encuentran.
