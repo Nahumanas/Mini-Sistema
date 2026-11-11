@@ -3,6 +3,8 @@
 Nunca se manda un mail de verdad: un "correo de mentira" anota lo que la API quiere mandar.
 """
 
+import re
+
 import pytest
 
 from app import config, correo
@@ -79,6 +81,7 @@ def test_stock_bajo_por_mail_una_vez_hasta_reponer(cliente, mails):
     assert mail["para"] == "jefa@kiosco.com"
     assert mail["asunto"] == "⚠️ Alerta de Stock Bajo - Alfajor"
     assert "Alfajor" in mail["html"] and ">3</b>" in mail["html"] and "/stock" in mail["html"]
+    assert "¡Ojo con el stock en Kiosco de Ana!" in mail["html"] and "Revisar mi stock en el sistema" in mail["html"]
     assert "stock actual 3, mínimo 3" in mail["texto"]
 
     # No repite en cada venta
@@ -115,8 +118,15 @@ def test_cierre_por_mail_y_telegram_a_la_vez(cliente, mails, monkeypatch):
     cliente.post(f"/comercios/{cid}/caja/cerrar", json={"efectivoContado": 16000}, headers=ana)
     assert "Se cerró la caja" in tg.para(555)[-1]
     (mail,) = mails.mails
-    assert mail["para"] == "ana.cierremail@gmail.com" and mail["asunto"] == "Cierre de caja en Kiosco de Ana"
-    assert "Se cerró la caja" in mail["html"] and "Vendido: <b>$ 15.000</b>" in mail["html"] and "/panel-del-dia" in mail["html"]
+    assert mail["para"] == "ana.cierremail@gmail.com"
+    # La fecha y hora van en el asunto (si no, Gmail junta todos los cierres en una conversación)
+    assert re.fullmatch(r"Cierre de caja en Kiosco de Ana · \d\d/\d\d \d\d:\d\d", mail["asunto"])
+    html = mail["html"]
+    assert "Se cerró la caja en Kiosco de Ana" in html and "/panel-del-dia" in html and "/isotipo-mail.png" in html
+    assert "Efectivo esperado" in html and "Efectivo contado" in html and "Diferencia" in html
+    assert "<b>$ 15.000</b>" in html and "Cantidad vendida" in html  # lo más vendido con encabezado: se entiende el número
+    assert "  ·" not in html  # la sangría de Telegram no se cuela en el mail (HTML borra esos espacios)
+    assert "Aviso del " in html  # termina distinto en cada mail: Gmail no esconde el botón con "•••"
     assert "<b>" not in mail["texto"] and "Vendido: $ 15.000" in mail["texto"]
 
 
@@ -130,3 +140,13 @@ def test_un_error_del_mail_no_frena_la_venta(cliente, mails):
     assert cliente.post(f"/comercios/{cid}/ventas", json=_venta(alfajor["id"], cantidad=10), headers=ana).status_code == 201
     assert _sql(f"select stock from public.productos where id = {alfajor['id']}") == "0.000"
     assert cliente.post(f"/comercios/{cid}/caja/cerrar", json={"efectivoContado": 15000}, headers=ana).status_code == 200
+
+
+def test_el_mail_respeta_la_sangria_y_escapa_los_nombres():
+    from app import avisos
+
+    html = avisos.mail_desde_mensaje("Vendido: $ 10\n  · Efectivo: $ 10", ("Abrir Mantenete", "/inicio"))
+    assert "&nbsp;&nbsp;· Efectivo" in html  # los espacios del principio no se pierden
+    asunto, html, _ = avisos.mail_stock_bajo({"nombre": "Kiosco <b>"}, [{"nombre": "Alfajor & Co", "stock": 0, "stock_minimo": 5}])
+    assert "Kiosco &lt;b&gt;" in html and "Alfajor &amp; Co" in html and "Sin stock" in html
+    assert asunto == "⚠️ Alerta de Stock Bajo - Alfajor & Co"
