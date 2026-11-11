@@ -60,7 +60,12 @@ def respaldo(cliente, tmp_path_factory):
     cliente.post(f"/comercios/{gym}/socios", json={"nombre": "Lucía Ñandú", "dni": "30111222"}, headers=ana)
 
     carpeta = tmp_path_factory.mktemp("respaldo")
-    _correr("bash", str(RESPALDO / "hacer-respaldo.sh"), str(carpeta), BASE_URL=os.environ["DATABASE_URL"])
+    # En Supabase auth.users tiene el RLS prendido: la copia tiene que traerlo y el control, reconocerlo
+    _psql("-d", BASE, "-c", "alter table auth.users enable row level security")
+    try:
+        _correr("bash", str(RESPALDO / "hacer-respaldo.sh"), str(carpeta), BASE_URL=os.environ["DATABASE_URL"])
+    finally:
+        _psql("-d", BASE, "-c", "alter table auth.users disable row level security")
     return {"carpeta": carpeta, "frase": frase, "kiosco": kiosco, "gym": gym}
 
 
@@ -79,6 +84,10 @@ def test_la_copia_trae_los_datos_y_sus_llaves_juntos(respaldo):
 def test_se_restaura_en_una_base_vacia_y_queda_igual(respaldo):
     r = _correr("bash", str(RESPALDO / "restaurar-y-controlar.sh"), str(respaldo["carpeta"]), "mantenete_prueba_restaurada")
     assert "La restauración coincide con la copia" in r.stdout
+    rls = subprocess.run(["psql", "-d", "mantenete_prueba_restaurada", "-Atc",
+                          "select relrowsecurity from pg_class where oid = 'auth.users'::regclass"],
+                         check=True, capture_output=True, text=True).stdout.strip()
+    assert rls == "t"
     _psql("-d", "postgres", "-c", "drop database if exists mantenete_prueba_restaurada")
 
 
