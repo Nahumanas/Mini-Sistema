@@ -16,6 +16,7 @@ Documentación: https://www.mercadopago.com.ar/developers/es/docs/qr-code/paymen
 import json
 import re
 import secrets
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -44,6 +45,12 @@ class ErrorDeMercadoPago(Exception):
         super().__init__(motivo)
         self.codigo = codigo
         self.detalle = detalle  # lo que dijo Mercado Pago (sin la clave), para el registro de Render
+        self.paso = ""  # al conectar: "sucursal" (la dirección) o "caja" (la caja con QR)
+
+
+# Recién creada, la sucursal puede tardar unos segundos en "existir" para el resto de Mercado Pago:
+# si la caja falla por eso, se espera y se reintenta (segundos entre intento e intento).
+ESPERAS_CAJA = (1.5, 3, 5)
 
 
 # ---------------------------------------------------------------- la clave guardada
@@ -111,29 +118,49 @@ def _id_externo(prefijo: str, comercio_id: int) -> str:
 def crear_sucursal_y_caja(token: str, usuario_mp: int, comercio_id: int, nombre: str, ubicacion: dict) -> tuple[str, str]:
     """La sucursal (con la dirección de verdad del comercio, lo pide Mercado Pago) y su caja con QR.
     Devuelve (id de la sucursal, external_id de la caja)."""
-    externa = _id_externo("S", comercio_id)
-    sucursal = _pedir(token, "POST", f"/users/{usuario_mp}/stores", {
-        "name": nombre[:60],
-        "external_id": externa,
-        "location": {
-            "street_name": ubicacion["calle"],
-            "street_number": ubicacion["numero"],
-            "city_name": ubicacion["ciudad"],
-            "state_name": ubicacion["provincia"],
-            "latitude": ubicacion["latitud"],
-            "longitude": ubicacion["longitud"],
-            "reference": ubicacion.get("referencia") or "",
-        },
-    })
+    try:
+        sucursal = _pedir(token, "POST", f"/users/{usuario_mp}/stores", {
+            "name": nombre[:60],
+            "external_id": _id_externo("S", comercio_id),
+            "location": {
+                "street_name": ubicacion["calle"],
+                "street_number": ubicacion["numero"],
+                "city_name": ubicacion["ciudad"],
+                "state_name": ubicacion["provincia"],
+                "latitude": ubicacion["latitud"],
+                "longitude": ubicacion["longitud"],
+                "reference": ubicacion.get("referencia") or "",
+            },
+        })
+    except ErrorDeMercadoPago as error:
+        error.paso = "sucursal"
+        raise
     caja = _id_externo("C", comercio_id)
-    _pedir(token, "POST", "/pos", {
+    # La caja va atada a la sucursal por su número (store_id). Sin external_store_id: con la sucursal recién
+    # creada, Mercado Pago a veces todavía no la encuentra por ese nombre ("External Store ID does not refer any store").
+    datos_caja = {
         "name": re.sub(r"[^A-Za-z0-9 _-]", "", f"Caja {nombre}")[:40].strip() or "Caja Mantenete",
         "fixed_amount": True,
         "store_id": int(sucursal["id"]),
-        "external_store_id": externa,
         "external_id": caja,
-    }, idempotencia=str(uuid.uuid4()))
-    return str(sucursal["id"]), caja
+    }
+    for intento in range(len(ESPERAS_CAJA) + 1):
+        try:
+            _pedir(token, "POST", "/pos", datos_caja, idempotencia=str(uuid.uuid4()))
+            return str(sucursal["id"]), caja
+        except ErrorDeMercadoPago as error:
+            sucursal_todavia_no = error.codigo in (400, 404) and "store" in error.detalle.lower()
+            if sucursal_todavia_no and intento < len(ESPERAS_CAJA):
+                time.sleep(ESPERAS_CAJA[intento])
+                continue
+            # No se pudo: se borra la sucursal que quedó sola, así no se juntan sucursales vacías en la cuenta
+            try:
+                _pedir(token, "DELETE", f"/users/{usuario_mp}/stores/{sucursal['id']}")
+            except ErrorDeMercadoPago:
+                pass
+            error.paso = "caja"
+            raise
+    raise AssertionError("no se llega")
 
 
 def _plata(valor: Decimal) -> str:
