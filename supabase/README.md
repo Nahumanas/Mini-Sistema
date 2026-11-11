@@ -94,3 +94,11 @@ Crea una base de prueba, imita lo mínimo de Supabase, carga las tablas, corre l
 - Para no llenar la base, el stock que mueven las ventas, compras, retiros y anulaciones no se anota acá (ya tiene
   su registro en su tabla), ni las clases que mueve cada reserva. Las tandas de producción sí (no tienen otro registro fijo).
 - Cada dueño lo puede leer (RLS); nadie lo puede escribir ni cambiar desde afuera. Se borra solo con su comercio.
+
+## El mail del dueño sigue al de su cuenta
+
+- `20261111100000_sincronizar_mail_del_dueno.sql`: cuando cambia `auth.users.email` (corregido en Supabase →
+  Authentication, o un cambio que el dueño confirmó), un disparador lo copia a `duenos.email`. Importa porque
+  `/admin` busca a los clientes por ese mail.
+- Es `security definer` porque el que cambia `auth.users` es Supabase Auth, que no tiene permiso sobre `public.duenos`.
+- Si la copia fallara, no frena el cambio de la cuenta: deja un aviso en los registros de la base.
