@@ -87,7 +87,7 @@ def registrar_compra(comercio_id: int, compra: NuevaCompra, usuario: Usuario = D
     """Carga lo que llegó del proveedor, todo junto o nada (como registrarCompra de la página):
     suma al stock, el costo de cada producto pasa a ser el de esta compra, y lo que vence
     entra como una tanda nueva (vence = hoy + los días que dura el producto)."""
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "compra") as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id)
         exigir(con, llave, comercio_id, "compras")
@@ -147,7 +147,7 @@ def registrar_compra(comercio_id: int, compra: NuevaCompra, usuario: Usuario = D
 @router.post("/comercios/{comercio_id}/gastos", status_code=201)
 def cargar_gasto(comercio_id: int, gasto: NuevoGasto, usuario: Usuario = Depends(usuario_actual),
                  llave: Llave = Depends(llave_requerida)):
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "alta") as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id)
         exigir(con, llave, comercio_id, "gastos")
@@ -162,7 +162,7 @@ def cargar_gasto(comercio_id: int, gasto: NuevoGasto, usuario: Usuario = Depends
 
 @router.delete("/gastos/{gasto_id}")
 def borrar_gasto(gasto_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "a mano") as con:
         cofre = Cofre(con, llave)
         gasto = con.execute("select comercio_id from public.gastos where id = %s", (gasto_id,)).fetchone()
         if gasto is None:

@@ -171,7 +171,7 @@ def registrar(comercio_id: int, venta: NuevaVenta, tareas: BackgroundTasks, resp
     ya = (_YA_ESTABA, (comercio_id, venta.idCliente)) if venta.idCliente else ("select null where false", None)
     ya_detalle = ((_DETALLE.format(f"in ({_YA_ESTABA.replace('*', 'id')})"), (comercio_id, venta.idCliente)) if venta.idCliente
                   else ("select null where false", None))
-    with en_viajes(usuario) as viaje:
+    with en_viajes(usuario, llave, "venta") as viaje:
         comercios, claves, ya_estaba, detalle_ya, cajas, filas, fichas = viaje(
             (_TRABAR_COMERCIO, (comercio_id,)), (LEER_CLAVES, None), ya, ya_detalle, (_LEER_CAJA, (comercio_id,)),
             (_LEER_PRODUCTOS, (comercio_id, ids)), (avisos.FICHA, None),
@@ -301,7 +301,7 @@ def sincronizar(comercio_id: int, lote: LoteSinConexion, usuario: Usuario = Depe
     El stock se RESTA (nunca se escribe "el stock es X"): dos compus que vendieron sin internet no se pisan.
     """
     resultados, tocados = [], set()
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "venta") as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id, bloquear=True)  # de a una por comercio, como registrar()
         for v in sorted(lote.ventas, key=lambda v: _utc(v.cobradaEn)):

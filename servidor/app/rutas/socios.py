@@ -128,7 +128,7 @@ def _sobre_socio(cofre: Cofre, comercio_id: int, d: dict) -> tuple[str, str]:
 def crear_socio(comercio_id: int, datos: DatosSocio, usuario: Usuario = Depends(usuario_actual),
                 llave: Llave = Depends(llave_requerida)):
     d = _validar_socio(datos)
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "alta") as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id, bloquear=True)
         repetido = _con_dni(con, cofre, comercio_id, d["dni"])
@@ -145,7 +145,7 @@ def crear_socio(comercio_id: int, datos: DatosSocio, usuario: Usuario = Depends(
 def actualizar_socio(socio_id: int, datos: DatosSocio, usuario: Usuario = Depends(usuario_actual),
                      llave: Llave = Depends(llave_requerida)):
     d = _validar_socio(datos)
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "a mano") as con:
         cofre = Cofre(con, llave)
         socio = _socio_trabado(con, cofre, socio_id)
         exigir(con, llave, socio["comercio_id"], "socios")  # editar o dar de baja va en Socios (el alta también se hace en Ingreso por DNI)
@@ -162,7 +162,7 @@ def actualizar_socio(socio_id: int, datos: DatosSocio, usuario: Usuario = Depend
 @router.post("/socios/{socio_id}/baja")
 def dar_de_baja(socio_id: int, datos: HechaPor, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
     """No se borra nada: deja de figurar entre los activos y sus reservas que vienen se cancelan."""
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "a mano") as con:
         cofre = Cofre(con, llave)
         socio = _socio_trabado(con, cofre, socio_id)
         exigir(con, llave, socio["comercio_id"], "socios")
@@ -175,7 +175,7 @@ def dar_de_baja(socio_id: int, datos: HechaPor, usuario: Usuario = Depends(usuar
 
 @router.post("/socios/{socio_id}/reactivar")
 def reactivar_socio(socio_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "a mano") as con:
         cofre = Cofre(con, llave)
         socio = _socio_trabado(con, cofre, socio_id)
         exigir(con, llave, socio["comercio_id"], "socios")
@@ -188,7 +188,7 @@ def importar_socios(comercio_id: int, datos: Importacion, usuario: Usuario = Dep
                     llave: Llave = Depends(llave_requerida)):
     """El Excel de socios, todo o nada. Si el DNI ya está, se actualizan sus datos (sin borrar lo que venga
     vacío). Si trae plan y vencimiento, se le cargan las clases de un mes de ese plan."""
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "importar") as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id, bloquear=True)
         planes = {p["id"]: p for p in con.execute("select * from public.planes where comercio_id = %s", (comercio_id,)).fetchall()}
@@ -236,7 +236,7 @@ def cobrar_cuota(comercio_id: int, datos: NuevaCuota, usuario: Usuario = Depends
                  llave: Llave = Depends(llave_requerida)):
     """La cuota entra a la caja abierta como una venta (suma en el arqueo y en el cierre), y el socio queda
     con el plan, el vencimiento y las clases nuevas. Todo junto o nada."""
-    with como_usuario(usuario) as con:
+    with como_usuario(usuario, llave, "cuota") as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id, bloquear=True)
         caja = con.execute(

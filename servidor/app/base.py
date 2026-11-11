@@ -3,6 +3,8 @@
 Cada pedido abre una transacción y, adentro, se "pone el traje" del usuario:
   role = authenticated                    → deja de ser administrador: el RLS se aplica
   request.jwt.claims = <su token>         → auth.uid() devuelve SU id
+  mantenete.quien = "jefe" o "empleado:12" → lo anota el historial de cambios (si se pasó la llave)
+  mantenete.motivo = "venta", "a mano"...   → por qué cambió el stock o un precio (historial de cambios)
 Al terminar la transacción todo vuelve a como estaba, así la conexión siguiente arranca limpia.
 """
 
@@ -16,6 +18,7 @@ from psycopg_pool import ConnectionPool
 
 from . import config
 from .autenticacion import Usuario
+from .cifrado import Llave
 
 _pool: ConnectionPool | None = None
 
@@ -44,17 +47,33 @@ def cerrar_pool() -> None:
         _pool = None
 
 
+# El "traje" del usuario, todo en una sola consulta (la base está lejos del servidor: cada ida y vuelta se nota).
+# set_config('role', ..., true) es lo mismo que "set local role authenticated".
+TRAJE = """select set_config('role', 'authenticated', true),
+                  set_config('request.jwt.claims', %s, true),
+                  set_config('request.jwt.claim.sub', %s, true),
+                  set_config('mantenete.quien', %s, true),
+                  set_config('mantenete.motivo', %s, true)"""
+
+
+def quien(llave: Llave | None) -> str:
+    """Quién está haciendo el cambio, para el historial: la base solo conoce el Gmail de la cuenta."""
+    if llave is None:
+        return ""
+    if llave.rol == "empleado":
+        return f"empleado:{llave.empleado}" if llave.empleado is not None else "empleado"
+    return llave.rol
+
+
+def traje(usuario: Usuario, llave: Llave | None = None, motivo: str = "") -> tuple:
+    return (json.dumps(usuario.claims), usuario.id, quien(llave), motivo)
+
+
 @contextmanager
-def como_usuario(usuario: Usuario) -> Iterator[Connection]:
+def como_usuario(usuario: Usuario, llave: Llave | None = None, motivo: str = "") -> Iterator[Connection]:
+    """llave y motivo son para el historial de cambios (quién y por qué); no cambian lo que se puede hacer."""
     with pool().connection() as con, con.transaction():
-        # Las tres cosas en una sola consulta (la base está lejos del servidor: cada ida y vuelta se nota).
-        # set_config('role', ..., true) es lo mismo que "set local role authenticated".
-        con.execute(
-            """select set_config('role', 'authenticated', true),
-                      set_config('request.jwt.claims', %s, true),
-                      set_config('request.jwt.claim.sub', %s, true)""",
-            (json.dumps(usuario.claims), usuario.id),
-        )
+        con.execute(TRAJE, traje(usuario, llave, motivo))
         yield con
 
 
@@ -67,21 +86,18 @@ class Viaje:
     terminar=True la cierra (COMMIT) en el mismo viaje. Si algo falla en el medio, se deshace todo.
     """
 
-    def __init__(self, con: Connection, usuario: Usuario):
+    def __init__(self, con: Connection, usuario: Usuario, llave: Llave | None = None, motivo: str = ""):
         self.con = con
         self.usuario = usuario
+        self.llave = llave
+        self.motivo = motivo
         self.abierta = False
 
     def __call__(self, *consultas: tuple[str, tuple | dict | None], terminar: bool = False) -> list[list[dict]]:
         poner = ClientCursor(self.con).mogrify
         partes = []
         if not self.abierta:
-            partes += ["begin", poner(
-                """select set_config('role', 'authenticated', true),
-                          set_config('request.jwt.claims', %s, true),
-                          set_config('request.jwt.claim.sub', %s, true)""",
-                (json.dumps(self.usuario.claims), self.usuario.id),
-            )]
+            partes += ["begin", poner(TRAJE, traje(self.usuario, self.llave, self.motivo))]
             self.abierta = True
         partes += [poner(sql, params) if params is not None else sql for sql, params in consultas]
         if terminar:
@@ -101,10 +117,10 @@ class Viaje:
 
 
 @contextmanager
-def en_viajes(usuario: Usuario) -> Iterator[Viaje]:
+def en_viajes(usuario: Usuario, llave: Llave | None = None, motivo: str = "") -> Iterator[Viaje]:
     """Como como_usuario, pero para mandar las consultas en tandas (Viaje). Si no se terminó, se termina al salir."""
     with pool().connection() as con:
-        viaje = Viaje(con, usuario)
+        viaje = Viaje(con, usuario, llave, motivo)
         try:
             yield viaje
             if viaje.abierta:
