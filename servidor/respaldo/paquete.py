@@ -167,7 +167,7 @@ def controlar(carpeta: Path, destino: str) -> list[str]:
         # Las reglas RLS tienen que volver: sin ellas, un dueño vería lo de otro.
         con_rls = {r[0] for r in con.execute(
             """select n.nspname || '.' || c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
-               where n.nspname in ('public', 'privado') and c.relkind = 'r' and c.relrowsecurity""").fetchall()}
+               where n.nspname in ('public', 'privado', 'auth') and c.relkind = 'r' and c.relrowsecurity""").fetchall()}
         sin_rls = sorted(_tablas_con_rls(carpeta) - con_rls)
         if sin_rls:
             diferencias.append(f"Tablas que en la copia tienen RLS y restauradas no: {', '.join(sin_rls)}")
