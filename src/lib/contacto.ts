@@ -45,3 +45,11 @@ export function whatsappLegible(numero: string): string {
   const local = resto.slice(caracteristica.length);
   return `+54 9 ${caracteristica} ${local}-${m[4]}`;
 }
+
+// Perfil de Instagram de Mantenete. Va el link "limpio": sin los ?psln=...&utm_source=qr
+// que agrega Instagram al compartir desde el QR (son marcas para medir de dónde vino
+// la visita, no hacen falta para abrir el perfil).
+export const INSTAGRAM = {
+  usuario: "mant.enete",
+  url: "https://www.instagram.com/mant.enete/",
+};
