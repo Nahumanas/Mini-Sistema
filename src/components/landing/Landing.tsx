@@ -1,14 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { ComponentType } from "react";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight, CalendarClock, Check, Dumbbell, FileSpreadsheet, Gift, Globe, Lock, LogIn, MessageCircle, Package, Percent, RefreshCw, Send, ShoppingCart, Store, Users } from "lucide-react";
-import { CONTACTO_PRINCIPAL, linkWhatsapp, whatsappLegible } from "@/lib/contacto";
+import { CONTACTO_PRINCIPAL, INSTAGRAM, linkWhatsapp, whatsappLegible } from "@/lib/contacto";
 import { PROMO_PLAN } from "@/lib/plan";
 import { PreciosPlan } from "./PreciosPlan";
 import { LINK_INGRESAR } from "@/lib/direcciones";
 import { MenuCelular } from "./MenuCelular";
 import { FormularioContacto } from "./FormularioContacto";
 import { MailProtegido } from "./MailProtegido";
+import { IconoInstagram } from "./IconoInstagram";
 import { CajaAnimada } from "./CajaAnimada";
 import { Cascada, CascadaItem, ConfigAnimaciones, EntradaSuave, Presionable } from "./Animaciones";
 
@@ -293,9 +295,9 @@ function Planes() {
 
 // ---------- 5. Contacto y cierre ----------
 
-function DatoDeContacto({ icono: Icono, valor, href }: { icono: LucideIcon; valor: string; href: string }) {
+function DatoDeContacto({ icono: Icono, valor, href, etiqueta }: { icono: ComponentType<{ className?: string }>; valor: string; href: string; etiqueta?: string }) {
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="flex min-w-0 items-center gap-2.5 text-[15px] hover:text-[#43DDE3]">
+    <a href={href} target="_blank" rel="noopener noreferrer" aria-label={etiqueta} className="flex min-w-0 items-center gap-2.5 text-[15px] hover:text-[#43DDE3]">
       <Icono className="size-4.5 flex-none text-[#43DDE3]" />
       <span className="break-all">{valor}</span>
     </a>
@@ -312,6 +314,7 @@ function TarjetaContacto() {
       <div className="mt-3 space-y-2.5">
         <DatoDeContacto icono={MessageCircle} valor={`WhatsApp Comercial ${whatsappLegible(c.whatsapp)}`} href={linkWhatsapp("Hola, quiero saber más sobre Mantenete.")} />
         <MailProtegido className="flex min-w-0 items-center gap-2.5 text-[15px] hover:text-[#43DDE3]" />
+        <DatoDeContacto icono={IconoInstagram} valor={`Instagram @${INSTAGRAM.usuario}`} href={INSTAGRAM.url} etiqueta={`Instagram de Mantenete (@${INSTAGRAM.usuario}), se abre en otra pestaña`} />
       </div>
     </div>
   );
@@ -353,7 +356,19 @@ export function Pie() {
             Términos y condiciones
           </Link>
         </div>
-        <p>© 2026 Mantenete</p>
+        <div className="flex items-center gap-4">
+          <a
+            href={INSTAGRAM.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Instagram de Mantenete (@${INSTAGRAM.usuario}), se abre en otra pestaña`}
+            title={`@${INSTAGRAM.usuario} en Instagram`}
+            className="grid size-9 place-items-center rounded-full border border-white/15 text-[#B9C7DA] transition-colors hover:border-[#43DDE3] hover:text-[#43DDE3]"
+          >
+            <IconoInstagram className="size-4.5" />
+          </a>
+          <p>© 2026 Mantenete</p>
+        </div>
       </div>
     </footer>
   );
