@@ -50,15 +50,19 @@ export function PointOfSale() {
   }
 
   // Si quedó abierta de otro día, primero hay que cerrarla (así cada día arranca con una caja nueva)
-  if (cerrando || caja.abierta.slice(0, 10) < hoy()) {
-    const deOtroDia = !cerrando;
+  const deOtroDia = caja.abierta.slice(0, 10) < hoy();
+  if (cerrando || deOtroDia) {
     return (
       <div className="mx-auto flex max-w-4xl flex-col gap-6">
         <Encabezado
           titulo="Cerrar caja"
           descripcion={deOtroDia ? `Esta caja quedó abierta desde el ${ddmm(caja.abierta)}. Cerrala para empezar el día con una caja nueva.` : undefined}
         />
-        <CerrarCaja caja={caja} alTerminar={() => setCerrando(false)} />
+        <CerrarCaja
+          caja={caja}
+          alTerminar={() => setCerrando(false)}
+          sinVolver={deOtroDia ? `No se puede volver a la caja: quedó abierta desde el ${ddmm(caja.abierta)} y hay que cerrarla antes de seguir vendiendo.` : undefined}
+        />
       </div>
     );
   }

@@ -78,8 +78,10 @@ export function AbrirCaja({ comercioId, nombreComercio, responsable }: { comerci
 /**
  * Cerrar la caja con el arqueo: el sistema calcula cuánto efectivo tendría que haber
  * (inicial + ventas en efectivo) y se compara con lo que se contó.
+ * sinVolver: por qué no se puede volver a la caja sin cerrarla (quedó abierta de otro día):
+ * el botón "Volver a la caja" queda apagado y abajo se explica el motivo.
  */
-export function CerrarCaja({ caja, alTerminar }: { caja: Caja; alTerminar: () => void }) {
+export function CerrarCaja({ caja, alTerminar, sinVolver }: { caja: Caja; alTerminar: () => void; sinVolver?: string }) {
   const ventas = useDatos((s) => s.ventas);
   const relevos = useDatos((s) => s.relevos);
   const cerrarCaja = useDatos((s) => s.cerrarCaja);
@@ -176,13 +178,18 @@ export function CerrarCaja({ caja, alTerminar }: { caja: Caja; alTerminar: () =>
             <input id="nota" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Ej.: retiré $ 20.000 para pagar al proveedor" className={claseInput} />
           </Campo>
           <div className="flex justify-end gap-2">
-            <Boton variante="fantasma" onClick={alTerminar}>
+            <Boton variante="fantasma" onClick={alTerminar} disabled={Boolean(sinVolver)} aria-describedby={sinVolver ? "por-que-no-volver" : undefined}>
               Volver a la caja
             </Boton>
             <Boton type="submit" variante="primario" icono={Lock} disabled={contado === "" || enviando || Boolean(bloqueo)}>
               Cerrar caja
             </Boton>
           </div>
+          {sinVolver && (
+            <p id="por-que-no-volver" className="text-right text-sm text-texto-suave">
+              {sinVolver}
+            </p>
+          )}
           <Bloqueo motivo={bloqueo} />
         </form>
       </Tarjeta>
