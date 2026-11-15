@@ -128,6 +128,26 @@ input[type="number"] {
   animation: pulso-suave 3.5s ease-in-out infinite;
 }
 
+/* ---------- Entradas de la página de presentación (components/landing/Entradas.tsx) ----------
+   Solo CSS: el texto viene visible en el HTML y la animación es un adorno. Si el JavaScript del
+   celular tarda o falla, la página se lee igual. */
+@keyframes entrada-suave {
+  from { opacity: 0; transform: translateY(12px); }
+}
+.entrada-suave {
+  animation: entrada-suave 0.4s cubic-bezier(0.22, 1, 0.36, 1) var(--demora, 0s) backwards;
+}
+/* Tarjetas que aparecen con el scroll: la animación avanza a medida que la tarjeta entra en
+   pantalla (animation-timeline: view()). Cada una arranca un 10 % más tarde que la anterior.
+   Los navegadores que no entienden esto (algunos iPhone viejos) muestran las tarjetas quietas. */
+@supports (animation-timeline: view()) {
+  .revelar {
+    animation: entrada-suave linear both;
+    animation-timeline: view();
+    animation-range: entry calc(var(--i, 0) * 10%) entry calc(60% + var(--i, 0) * 10%);
+  }
+}
+
 /* ---------- Caja animada de la portada (components/landing/CajaAnimada.tsx) ----------
    Todo dura 2,5 s y corre una sola vez. Cada parte usa la misma duración, así los
    porcentajes son el mismo "reloj": 16% = 0,4 s · 32% = 0,8 s · 40% = 1 s · 80% = 2 s.
@@ -232,6 +252,8 @@ input[type="number"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .entrada-suave,
+  .revelar,
   .brillo-boton::after,
   .pulso-suave,
   .caja-salto,

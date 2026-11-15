@@ -13,7 +13,8 @@ import { FormularioContacto } from "./FormularioContacto";
 import { MailProtegido } from "./MailProtegido";
 import { IconoInstagram } from "./IconoInstagram";
 import { CajaAnimada } from "./CajaAnimada";
-import { Cascada, CascadaItem, ConfigAnimaciones, EntradaSuave, Presionable } from "./Animaciones";
+import { ConfigAnimaciones, Presionable } from "./Animaciones";
+import { Cascada, CascadaItem, EntradaSuave } from "./Entradas";
 
 // Página de presentación de Mantenete (lo primero que ve alguien que entra a la dirección).
 //
@@ -195,8 +196,8 @@ function Problema() {
           <p className="mt-6 text-lg text-texto-suave">Mantenete ordena el día a día de tu local para que cada peso tenga explicación.</p>
         </div>
         <Cascada className="mt-16 grid gap-6 md:grid-cols-3">
-          {SOLUCIONES.map(({ icono, titulo, texto }) => (
-            <CascadaItem key={titulo} className="h-full rounded-xl border border-borde bg-superficie p-6 transition-[translate,border-color] duration-200 hover:-translate-y-1 hover:border-primary/50">
+          {SOLUCIONES.map(({ icono, titulo, texto }, i) => (
+            <CascadaItem key={titulo} indice={i} className="h-full rounded-xl border border-borde bg-superficie p-6 transition-[translate,border-color] duration-200 hover:-translate-y-1 hover:border-primary/50">
               <IconoEnCaja icono={icono} />
               <h3 className="mt-6 text-xl font-bold text-texto">{titulo}</h3>
               <p className="mt-2 leading-relaxed text-texto-suave">{texto}</p>
@@ -241,8 +242,8 @@ function Caracteristicas() {
         {/* Una sola hoja con renglones, como una libreta: las líneas de 1 px son el "gap" de la
             grilla, que deja ver el color del borde que está de fondo. */}
         <Cascada className="mt-12 grid gap-px overflow-hidden rounded-xl border border-borde bg-borde sm:grid-cols-2">
-          {CARACTERISTICAS.map(({ icono, titulo, texto, pronto }) => (
-            <CascadaItem key={titulo} className="flex h-full gap-4 bg-superficie p-6 sm:p-8">
+          {CARACTERISTICAS.map(({ icono, titulo, texto, pronto }, i) => (
+            <CascadaItem key={titulo} indice={i} className="flex h-full gap-4 bg-superficie p-6 sm:p-8">
               <IconoEnCaja icono={icono} />
               <div>
                 <div className="flex flex-wrap items-center gap-2">
