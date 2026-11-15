@@ -2,25 +2,20 @@
 name: Mantenete
 description: Caja, stock y finanzas para comercios de barrio.
 colors:
-  fondo: "#f9fafb"
+  fondo: "#f8fafc"
   superficie: "#ffffff"
-  superficie-suave: "#f3f4f6"
-  borde: "#e5e7eb"
-  borde-fuerte: "#d1d5db"
-  texto: "#111827"
-  texto-suave: "#6b7280"
-  primary: "#3ecf8e"
-  primary-hover: "#34b97d"
-  primary-texto: "#0b2e1e"
+  superficie-suave: "#f1f5f9"
+  borde: "#e2e8f0"
+  borde-fuerte: "#cbd5e1"
+  texto: "#0f2340"
+  texto-suave: "#475569"
+  primary: "#1a6fc2"
+  primary-hover: "#145a9e"
+  primary-texto: "#ffffff"
   positivo: "#15803d"
   peligro: "#b91c1c"
-  landing-marino: "#0F2340"
-  landing-azul: "#1C7BD6"
-  landing-azul-hover: "#1767b4"
-  landing-cian: "#43DDE3"
-  landing-pizarra: "#475569"
-  landing-borde: "#DCE6F0"
-  landing-niebla: "#F3F7FB"
+  logo-azul: "#1C7BD6"
+  logo-cian: "#43DDE3"
 typography:
   headline:
     fontFamily: "Inter, Segoe UI, Arial, sans-serif"
@@ -105,9 +100,10 @@ components:
     backgroundColor: "{colors.superficie-suave}"
     textColor: "{colors.texto}"
   landing-button-demo:
-    backgroundColor: "{colors.landing-azul}"
-    textColor: "{colors.superficie}"
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.primary-texto}"
     rounded: "{rounded.lg}"
+    height: "3.5rem"
 ---
 
 # Design System: Mantenete
@@ -116,48 +112,51 @@ components:
 
 **Creative North Star: "La Libreta de Caja"**
 
-Mantenete se ve como un cuaderno de caja bien llevado: renglones finos, números en columna, nada que distraiga del monto. La pantalla es papel claro (o pizarra oscura), los bordes de 1 px son los renglones, y el único color fuerte es el verde de la acción principal: Cobrar, Agregar, lo elegido. Todo lo demás es gris y tinta.
+Mantenete se ve como un cuaderno de caja bien llevado: renglones finos, números en columna, nada que distraiga del monto. La pantalla es papel claro (o pizarra oscura), los bordes de 1 px son los renglones, y el único color fuerte es el azul de la marca en la acción principal: Cobrar, Agregar, Probar la demo, lo elegido. Todo lo demás es gris y tinta marina.
 
 La densidad es de herramienta, pero con letra grande: la base sube a 17 px (`html { font-size: 106.25% }`) porque el dueño tiene entre 40 y 60 años y el empleado mira de reojo con un cliente adelante. Las superficies son planas; la profundidad se arma con tono (fondo, superficie, superficie suave) y bordes, no con sombras. El modo oscuro cambia solo las variables, nunca la estructura.
 
-El repo tiene **dos mundos visuales, separados a propósito**. El sistema (panel, Caja, admin, reservas) es La Libreta de Caja. La landing (`src/components/landing/`, `mantenete.vercel.app`) es una página de venta con su propia paleta marina y celeste, degradés y animación; está documentada aparte en Components → Landing. Las paletas no se cruzan.
+**Un solo mundo visual (desde 2026-11-15).** El sistema (panel, Caja, admin, reservas) y la landing (`src/components/landing/`, `mantenete.vercel.app`) usan las mismas variables de `globals.css`, en claro y en oscuro. Antes eran dos paletas separadas (verde Supabase en el sistema, marino y celeste en la landing); se unificaron para que lo que se promete en la landing sea exactamente lo que el cliente ve al entrar. El azul sale del logo, así marca y producto son la misma cosa.
 
 **Key Characteristics:**
-- Planos y firmes: bordes finos, sin sombras, verde solo en la acción principal.
+- Planos y firmes: bordes finos, sin sombras, azul solo en la acción principal.
 - Números tabulares en todo lo que es plata (`.numeros`).
 - Letra base de 17 px, cuerpo a 15 px literales.
 - Zonas táctiles grandes en la caja: mínimo 44 px de alto.
-- Claro y oscuro por variables CSS en `src/app/globals.css`.
+- Claro y oscuro por variables CSS en `src/app/globals.css`, las mismas en la landing.
 
 ## Colors
 
-Neutros grises fríos con un solo acento verde menta; la plata buena va en verde oscuro, la mala en rojo ladrillo.
+Neutros "slate" (gris con un toque de azul) con un solo acento: el azul del logo. La plata buena va en verde, la mala en rojo ladrillo.
 
 ### Primary
-- **Verde Cobrar** (primary): el fondo de la acción principal de cada pantalla (Cobrar, Agregar, Guardar), el ícono del ítem de menú activo, el borde de foco de los campos, el checkbox. Hover en **Verde Cobrar Hondo** (primary-hover; en oscuro se aclara a `#5fdca3`).
-- **Tinta sobre Verde** (primary-texto): la letra encima del verde. Nunca blanco sobre el verde: no alcanza contraste.
+- **Azul Mantenete** (primary, `#1a6fc2`): el fondo de la acción principal de cada pantalla (Cobrar, Agregar, Guardar, Probar Demo Gratis), el ícono del ítem de menú activo, el borde de foco de los campos, el checkbox, los títulos chicos de sección de la landing. Hover en **Azul Hondo** (primary-hover, `#145a9e`). En oscuro se aclara a `#5aa8ee` (hover `#7dbbf2`).
+- **Letra sobre Azul** (primary-texto): blanco en claro (contraste 5,1:1), marino `#0b1a30` en oscuro (6,9:1). El azul de los botones es un punto más oscuro que el del logo (`#1C7BD6`) porque ese, con letra blanca, da 4,3:1 y no llega al 4,5:1 que pide WCAG AA para texto.
 
 ### Neutral
 - **Papel** (fondo): el fondo de la página. Oscuro: `#0f172a`.
 - **Hoja** (superficie): tarjetas, barra lateral, tablas, campos. Oscuro: `#1e293b`.
-- **Hoja Gastada** (superficie-suave): fila al pasar el mouse, botón secundario en hover, ítem de menú activo, fondo del segmentado. Oscuro: `#273449`.
+- **Hoja Gastada** (superficie-suave): fila al pasar el mouse, botón secundario en hover, ítem de menú activo, fondo del segmentado y de los íconos de la landing. Oscuro: `#273449`.
 - **Renglón** (borde): divisores, borde de tarjetas y tablas. Oscuro: `#334155`.
-- **Renglón Marcado** (borde-fuerte): borde de campos y del vacío punteado. Oscuro: `#475569`.
-- **Tinta** (texto): texto principal. Oscuro: `#e2e8f0`.
-- **Lápiz** (texto-suave): descripciones, encabezados de tabla, etiquetas secundarias. Oscuro: `#94a3b8`.
+- **Renglón Marcado** (borde-fuerte): borde de campos, del vacío punteado y de los botones contorno. Oscuro: `#475569`.
+- **Tinta Marina** (texto, `#0f2340`): texto principal; es el marino de las líneas del logo. Oscuro: `#e2e8f0`.
+- **Lápiz** (texto-suave, `#475569`): descripciones, encabezados de tabla, etiquetas secundarias. Oscuro: `#94a3b8`.
 
 ### Semantic
-- **Vuelto** (positivo): el vuelto, los cambios a favor, el chip verde. Oscuro: `#4ade80`.
+- **Vuelto** (positivo): el vuelto, los cambios a favor, el chip verde, el arqueo que cierra justo, los descuentos del plan. Oscuro: `#4ade80`. El verde ya no es color de botón: ahora solo significa "plata a favor", y por eso se lee más claro.
 - **Faltante** (peligro): lo que falta, errores, botón de peligro. Oscuro: `#fca5a5`.
 - Amarillo de aviso: `amber` de Tailwind (`amber-700` / `amber-300` en oscuro) solo en el chip amarillo.
 
+### Marca (solo en el logo)
+- **Azul Logo** `#1C7BD6` y **Celeste Brillo** `#43DDE3` viven solo dentro del dibujo de la caja (`isotipo.svg`, `CajaAnimada`) y en el brillo del nombre animado. No se usan como color de interfaz.
+
 ### Named Rules
-**The Un Solo Verde Rule.** El verde lleno aparece en una sola acción por zona de pantalla. Si dos botones son verdes, uno está mal.
-**The Variables Primero Rule.** El sistema usa solo las variables de `globals.css` (`bg-superficie`, `text-texto-suave`, `border-borde`...). Un hex suelto en un componente del sistema es deuda.
+**The Un Solo Azul Rule.** El azul lleno aparece en una sola acción por zona de pantalla. Si dos botones son azules, uno está mal: el otro va en contorno (en la landing, "Probar Demo Gratis" pasa a contorno en Contacto, donde manda "Enviar por WhatsApp").
+**The Variables Primero Rule.** Sistema y landing usan solo las variables de `globals.css` (`bg-superficie`, `text-texto-suave`, `border-borde`...). Un hex suelto en un componente es deuda (excepciones: el dibujo del logo, los íconos de marcas ajenas como Google o WhatsApp y los QR).
 
 ## Typography
 
-**Body Font:** Inter (con Segoe UI, Arial, sans-serif), cargada con `next/font` como `--font-inter`.
+**Body Font:** Inter (con Segoe UI, Arial, sans-serif), cargada con `next/font` como `--font-inter` y conectada en `@theme` como `--font-sans`. Verificado 2026-11-15: carga bien en sistema y landing.
 
 **Character:** Una sola familia, sin adornos: la letra de una planilla prolija. La jerarquía sale de peso y tamaño, no de tipografías distintas.
 
@@ -184,7 +183,7 @@ Ritmo interno: tarjetas con 1.25rem de relleno, KPIs con 1rem × 0.875rem, celda
 
 ## Elevation & Depth
 
-Plano por defecto. La profundidad es tonal: Papel → Hoja → Hoja Gastada, separadas por Renglón de 1 px. Las sombras son mínimas y excepcionales: `shadow-sm` en el botón Cobrar y en la opción elegida del segmentado. Ningún panel flota.
+Plano por defecto, en el sistema y en la landing. La profundidad es tonal: Papel → Hoja → Hoja Gastada, separadas por Renglón de 1 px. Las sombras son mínimas y excepcionales: `shadow-sm` en el botón Cobrar y en la opción elegida del segmentado; los menús y diálogos que flotan encima de todo pueden llevar sombra para despegarse. En la landing las tarjetas suben 4 px y su borde se tiñe de azul al pasar el mouse, sin ganar sombra.
 
 ### Named Rules
 **The Sin Sombra Rule.** Si algo necesita separarse, lleva borde o cambia de tono; no lleva sombra.
@@ -196,20 +195,20 @@ Esquinas suavemente redondeadas y chicas: 0.375rem en botones, campos e ítems d
 ## Components
 
 ### Buttons
-Firmes y callados: el verde manda, el resto es gris.
+Firmes y callados: el azul manda, el resto es gris.
 - **Shape:** suavemente redondeado (0.375rem).
-- **Primario:** Verde Cobrar con Tinta sobre Verde, peso 500, 15 px, relleno 0.5rem × 0.875rem. Hover a Verde Cobrar Hondo.
+- **Primario:** Azul Mantenete con Letra sobre Azul, peso 500, 15 px, relleno 0.5rem × 0.875rem. Hover a Azul Hondo.
 - **Secundario (por defecto):** Hoja con borde Renglón; hover a Hoja Gastada.
 - **Fantasma:** sin fondo, Lápiz; hover a Hoja Gastada y Tinta.
 - **Peligro:** borde Renglón con letra Faltante.
-- **Focus:** contorno de 2 px Verde Cobrar con 2 px de separación. **Disabled:** 50 % de opacidad y cursor prohibido.
+- **Focus:** contorno de 2 px Azul Mantenete con 2 px de separación. **Disabled:** 50 % de opacidad y cursor prohibido.
 
 ### Botón Cobrar (signature)
-El botón más importante del sistema (`PieCobro`): Verde Cobrar, 1.125rem semibold, relleno 0.75rem × 2rem, `shadow-sm`, ocupa todo el ancho en celular. Es la única acción verde de la caja.
+El botón más importante del sistema (`PieCobro`): Azul Mantenete, 1.125rem semibold, relleno 0.75rem × 2rem, `shadow-sm`, ocupa todo el ancho en celular. Es la única acción azul llena de la caja.
 
 ### Chips
 - **Style:** píldora con borde, 0.75rem medium, relleno 0.125rem × 0.625rem, opcional punto del color del texto adelante.
-- **Tonos:** verde (verde al 10 %, letra Vuelto), gris (Hoja Gastada, Lápiz), amarillo (ámbar), rojo (rojo al 10 %, letra Faltante).
+- **Tonos:** verde (Vuelto al 10 % de fondo y 40 % de borde, letra Vuelto), gris (Hoja Gastada, Lápiz), amarillo (ámbar), rojo (rojo al 10 %, letra Faltante).
 
 ### Cards / Containers
 - **Tarjeta:** Hoja, borde Renglón, 0.5rem, relleno 1.25rem; si tiene título, va en una franja con borde abajo.
@@ -218,7 +217,7 @@ El botón más importante del sistema (`PieCobro`): Verde Cobrar, 1.125rem semib
 
 ### Inputs / Fields
 - **Style:** 2.5rem de alto, Hoja, borde Renglón Marcado, 0.375rem, 15 px; placeholder en Lápiz.
-- **Focus:** borde Verde Cobrar más anillo de 2 px verde al 25 %.
+- **Focus:** borde Azul Mantenete más anillo de 2 px azul al 25 %.
 - **Disabled:** 60 % de opacidad.
 - **Campo:** etiqueta 0.875rem medium arriba, ayuda 0.75rem Lápiz abajo.
 - Los campos numéricos no tienen flechitas; se usan botones − y +.
@@ -230,21 +229,21 @@ Grupo de radio en una bandeja Hoja Gastada con borde; la opción elegida es Hoja
 Borde Renglón y 0.5rem alrededor, números tabulares, encabezado en mayúsculas chicas Lápiz, filas separadas por Renglón, pie con borde arriba.
 
 ### Navigation
-Barra lateral Hoja con borde derecho. Grupos con título en mayúsculas chicas. Ítem: 15 px Lápiz con ícono de 18 px, relleno 0.5rem × 0.75rem; hover y activo pasan a Hoja Gastada y Tinta, el activo en peso 500 y con el ícono en Verde Cobrar. Abajo: cerrar sesión, nombre de quien entró y el botón de tema (sol/luna).
+Barra lateral Hoja con borde derecho. Grupos con título en mayúsculas chicas. Ítem: 15 px Lápiz con ícono de 18 px, relleno 0.5rem × 0.75rem; hover y activo pasan a Hoja Gastada y Tinta, el activo en peso 500 y con el ícono en Azul Mantenete. Abajo: cerrar sesión, nombre de quien entró y el botón de tema (sol/luna).
 
-### Landing (mundo aparte)
-La página de presentación (`src/components/landing/`) usa hex directos, no las variables del sistema:
-- **Marino Mostrador** (landing-marino): títulos, fondo de la sección oscura y del video.
-- **Azul Demo** (landing-azul, hover landing-azul-hover): el botón "Probar Demo Gratis" (0.5rem, blanco semibold, brillo diagonal animado `.brillo-boton`) y los acentos.
-- **Celeste Brillo** (landing-cian): etiqueta sobre fondo oscuro, final de los degradés azul → celeste y el brillo del logo animado (`CajaAnimada`).
-- **Pizarra** (landing-pizarra) para el cuerpo, **Borde Neblina** (landing-borde) y **Niebla** (landing-niebla) para bordes y fondos de íconos.
-- Titular en Inter 800 con interlineado 1.05; tarjetas de 0.75rem que suben 4 px y ganan sombra en hover.
-- Animaciones con `prefers-reduced-motion` respetado en `globals.css`.
+### Landing
+La página de presentación (`src/components/landing/`) usa las mismas variables y reglas que el sistema; el modo oscuro se elige con el mismo botón sol/luna (`BotonTema`, misma clave `mantenete-tema`).
+- **Encabezado:** logo + menú + sol/luna + "Ingresar" (contorno) + "Probar Demo Gratis" (lleno). En celular: sol/luna y menú hamburguesa, botones de 44 px.
+- **Portada:** caja animada (`CajaAnimada`), titular Inter 800 con interlineado 1.05 y "dolor de cabeza." en azul, "Probar Demo Gratis" grande (56 px) con el brillo `.brillo-boton` cada 5 s, "Ver el video" en contorno solo en celular, PIN 1234 abajo. El video 16:9 va en un marco de 1 px, sin halo.
+- **Secciones:** alternan Hoja y Papel separadas por Renglón; ritmo vertical de 96 px (`py-24`). Nada de bandas oscuras ni degradés.
+- **Tarjetas:** Hoja, borde Renglón, 0.75rem; íconos en un cuadrado Hoja Gastada con borde. Las características van en una sola hoja con renglones de 1 px entre celdas (la grilla con `gap-px` sobre fondo Renglón).
+- **Plan:** tarjeta con borde Azul de 1 px, montos de `src/lib/plan.ts` con `.numeros`, descuentos en verde Vuelto (son plata a favor). "Próximamente" con pulso suave solo de opacidad.
+- **Animaciones:** entrada de 0,4 s subiendo 12 px y cascada de 0,1 s entre tarjetas (framer-motion), todo apagado con `prefers-reduced-motion`.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** usar solo las variables de `globals.css` en el sistema (`bg-superficie`, `border-borde`, `text-texto-suave`, `bg-primary`).
+- **Do** usar solo las variables de `globals.css` en el sistema y en la landing (`bg-superficie`, `border-borde`, `text-texto-suave`, `bg-primary`).
 - **Do** poner `.numeros` y `pesos()` en todo monto.
 - **Do** dar 44 px de alto mínimo a cada botón y campo de la Caja.
 - **Do** separar con borde de 1 px o cambio de tono antes que con sombra.
@@ -252,8 +251,8 @@ La página de presentación (`src/components/landing/`) usa hex directos, no las
 - **Do** usar `Boton`, `Tarjeta`, `Campo`, `Chip`, `Kpi`, `Tabla`, `Vacio` y `Segmentado` de `src/components/ui/base.tsx` antes de armar uno nuevo.
 
 ### Don't:
-- **Don't** poner dos acciones verdes llenas en la misma zona.
-- **Don't** usar blanco sobre Verde Cobrar; va Tinta sobre Verde.
-- **Don't** traer la paleta marina/celeste, los degradés ni el brillo de la landing al sistema, ni el verde del sistema a la landing.
+- **Don't** poner dos acciones azules llenas en la misma zona.
+- **Don't** usar el verde como color de botón: el verde es solo plata a favor.
+- **Don't** usar el azul del logo (`#1C7BD6`) ni el celeste (`#43DDE3`) como color de interfaz, ni volver a los degradés, halos o bandas oscuras en la landing.
 - **Don't** usar `text-xs` fuera de chips, ayudas y encabezados de tabla.
 - **Don't** escribir hex sueltos en componentes del sistema.

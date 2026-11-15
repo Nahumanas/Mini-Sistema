@@ -393,7 +393,7 @@ function QueVeElEmpleado({ empleado, comercio, alCerrar }: { empleado: Empleado;
 }
 
 /**
- * Un interruptor (prendido/apagado) con los colores del tema: verde prendido, gris apagado, igual en claro y oscuro.
+ * Un interruptor (prendido/apagado) con los colores del tema: azul prendido, gris apagado, igual en claro y oscuro.
  * `bloqueado`: queda prendido y no se puede tocar (el candado y el renglón chico dicen por qué).
  */
 function Interruptor({ id, texto, detalle, prendido, alCambiar, bloqueado = false }: {
@@ -429,7 +429,7 @@ function Interruptor({ id, texto, detalle, prendido, alCambiar, bloqueado = fals
         disabled={bloqueado}
         onClick={alCambiar}
         className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed ${
-          // Bloqueado: verde más apagado, pero la bolita sigue blanca (con opacidad, en oscuro parecía apagado)
+          // Bloqueado: azul más apagado, pero la bolita sigue blanca (con opacidad, en oscuro parecía apagado)
           bloqueado ? "border-transparent bg-primary/50" : prendido ? "border-primary bg-primary" : "border-borde-fuerte bg-borde-fuerte"
         }`}
       >

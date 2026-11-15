@@ -26,7 +26,7 @@ type Props = {
 };
 
 // Abajo de la tabla: a la izquierda cómo paga (y el vuelto si es en efectivo),
-// a la derecha el total (con las promos ya descontadas) y el botón Cobrar, bien grande y en verde.
+// a la derecha el total (con las promos ya descontadas) y el botón Cobrar, bien grande y en el azul de la marca.
 export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar, conMercadoPago }: Props) {
   const items = useItemsDe(comercioId);
   const vaciar = useCarrito((s) => s.vaciar);

@@ -20,7 +20,7 @@ export function MailProtegido({ className }: { className?: string }) {
         if (!mail) e.preventDefault();
       }}
     >
-      <Mail className="size-4.5 flex-none text-[#43DDE3]" />
+      <Mail className="size-4.5 flex-none text-primary" />
       <span className="break-all">{mail ?? "Correo"}</span>
     </a>
   );

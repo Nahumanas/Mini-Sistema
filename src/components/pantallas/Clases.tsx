@@ -114,7 +114,7 @@ function SemanaYReservas({ comercio }: { comercio: Comercio }) {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-flow-col lg:auto-cols-fr lg:grid-cols-none">
             {dias.map((d) => (
               <div key={d.fecha} className="flex min-w-0 flex-col gap-2">
-                <p className={`rounded-md px-2 py-1 text-center text-sm font-semibold ${d.fecha === hoy() ? "bg-primary/15 text-positivo" : "bg-superficie-suave text-texto-suave"}`}>
+                <p className={`rounded-md px-2 py-1 text-center text-sm font-semibold ${d.fecha === hoy() ? "bg-positivo/15 text-positivo" : "bg-superficie-suave text-texto-suave"}`}>
                   {d.nombre.slice(0, 3)} {ddmm(d.fecha)}
                 </p>
                 {d.clases.map((c) => {

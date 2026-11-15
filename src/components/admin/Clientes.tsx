@@ -197,7 +197,7 @@ function AccionesCliente({ cliente: c, enviando, alEditar, alConfirmar, clase }:
               : `Listo: ${nombre} ya puede elegir qué ve cada empleado en Mis comercios.`,
           )
         }
-        className={`!px-2 !py-1.5 ${c.permisosPorEmpleado ? "bg-primary/15 !text-positivo" : ""}`}
+        className={`!px-2 !py-1.5 ${c.permisosPorEmpleado ? "bg-positivo/15 !text-positivo" : ""}`}
       />
       <Boton variante="fantasma" icono={Pencil} disabled={enviando} title="Editar plan y vencimiento" aria-label={`Editar plan de ${c.email}`}
         onClick={alEditar} className="!px-2 !py-1.5" />

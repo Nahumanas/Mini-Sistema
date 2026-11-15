@@ -64,7 +64,7 @@ export function Campo({ etiqueta, ayuda, children, className = "" }: { etiqueta:
 }
 
 const TONOS = {
-  verde: "border-primary/40 bg-primary/10 text-positivo",
+  verde: "border-positivo/40 bg-positivo/10 text-positivo",
   gris: "border-borde bg-superficie-suave text-texto-suave",
   amarillo: "border-amber-400/50 bg-amber-400/10 text-amber-700 dark:text-amber-300",
   rojo: "border-red-400/50 bg-red-400/10 text-peligro",

@@ -9,20 +9,20 @@ const ACTUALIZADO = VERSION_TERMINOS_LARGA;
 
 function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
-    <section className="border-t border-[#DCE6F0] pt-8">
-      <h2 className="text-xl font-bold text-[#0F2340] sm:text-2xl">{titulo}</h2>
-      <div className="mt-3 space-y-3 leading-relaxed text-[#475569]">{children}</div>
+    <section className="border-t border-borde pt-8">
+      <h2 className="text-xl font-bold text-texto sm:text-2xl">{titulo}</h2>
+      <div className="mt-3 space-y-3 leading-relaxed text-texto-suave">{children}</div>
     </section>
   );
 }
 
 export function Condiciones() {
   return (
-    <div className="min-h-full bg-white text-[#0F2340]">
-      <header className="border-b border-[#DCE6F0] bg-white">
+    <div className="min-h-full bg-superficie text-texto">
+      <header className="border-b border-borde bg-superficie">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Logo />
-          <Link href="/#planes" className="inline-flex items-center gap-1.5 text-[15px] font-medium text-[#475569] hover:text-[#0F2340]">
+          <Link href="/#planes" className="inline-flex items-center gap-1.5 text-[15px] font-medium text-texto-suave hover:text-texto">
             <ArrowLeft className="size-4" />
             Volver a los planes
           </Link>
@@ -31,15 +31,15 @@ export function Condiciones() {
 
       <main className="mx-auto max-w-3xl space-y-8 px-4 py-14 sm:px-6 lg:py-20">
         <div>
-          <p className="text-sm font-semibold tracking-[0.18em] text-[#1C7BD6] uppercase">Términos y condiciones</p>
+          <p className="text-sm font-semibold tracking-[0.18em] text-primary uppercase">Términos y condiciones</p>
           <h1 className="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">Lo que tenés que saber antes de contratar</h1>
-          <p className="mt-3 text-[#475569]">Última actualización: {ACTUALIZADO}.</p>
+          <p className="mt-3 text-texto-suave">Última actualización: {ACTUALIZADO}.</p>
         </div>
 
         <Seccion titulo="Precios y forma de pago">
           <p>
             El servicio se paga por adelantado por 1, 3 o 6 meses. Los precios vigentes están en la{" "}
-            <Link href="/#planes" className="font-semibold text-[#1C7BD6] hover:underline">
+            <Link href="/#planes" className="font-semibold text-primary hover:underline">
               sección Planes
             </Link>{" "}
             e incluyen el mantenimiento.
@@ -69,7 +69,7 @@ export function Condiciones() {
             <li>Si el cliente pierde el PIN y también el código de recuperación, sus datos no se pueden recuperar de ninguna forma, y Mantenete no es responsable por esa pérdida.</li>
             <li>Los informes de Excel que el cliente ya haya descargado siguen siendo suyos y no se ven afectados.</li>
           </ol>
-          <p className="rounded-xl border border-[#DCE6F0] bg-[#F3F7FB] p-4 text-[#0F2340]">
+          <p className="rounded-xl border border-borde bg-superficie-suave p-4 text-texto">
             Al crear el comercio, el cliente acepta esta condición marcando la casilla: “Entiendo que si pierdo el PIN de jefe y este código de recuperación, mis datos no se pueden recuperar (ni el
             soporte de Mantenete puede).”
           </p>
@@ -78,7 +78,7 @@ export function Condiciones() {
         <Seccion titulo="¿Tenés dudas?">
           <p>
             Escribinos desde el{" "}
-            <Link href="/#contacto" className="font-semibold text-[#1C7BD6] hover:underline">
+            <Link href="/#contacto" className="font-semibold text-primary hover:underline">
               formulario de contacto
             </Link>{" "}
             y te respondemos.

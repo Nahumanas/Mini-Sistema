@@ -170,7 +170,7 @@ export function CerrarCaja({ caja, alTerminar, sinVolver }: { caja: Caja; alTerm
             <input id="contado" type="number" min={0} inputMode="numeric" value={contado} onChange={(e) => setContado(e.target.value)} className={`${claseInput} numeros`} required autoFocus />
           </Campo>
           {diferencia !== null && (
-            <p className={`numeros rounded-md border p-3 ${diferencia === 0 ? "border-primary/40 bg-primary/10 text-positivo" : "border-amber-400/50 bg-amber-400/10"}`}>
+            <p className={`numeros rounded-md border p-3 ${diferencia === 0 ? "border-positivo/40 bg-positivo/10 text-positivo" : "border-amber-400/50 bg-amber-400/10"}`}>
               {diferencia === 0 ? "Da justo. 👌" : diferencia > 0 ? `Sobran ${pesos(diferencia)}.` : `Faltan ${pesos(-diferencia)}.`}
             </p>
           )}
@@ -302,7 +302,7 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
             <input id="contado-relevo" type="number" min={0} inputMode="numeric" value={contado} onChange={(e) => setContado(e.target.value)} className={`${claseInput} numeros`} required />
           </Campo>
           {diferencia !== null && (
-            <p className={`numeros rounded-md border p-3 ${diferencia === 0 ? "border-primary/40 bg-primary/10 text-positivo" : "border-amber-400/50 bg-amber-400/10"}`}>
+            <p className={`numeros rounded-md border p-3 ${diferencia === 0 ? "border-positivo/40 bg-positivo/10 text-positivo" : "border-amber-400/50 bg-amber-400/10"}`}>
               {diferencia === 0 ? "Da justo. 👌" : diferencia > 0 ? `Sobran ${pesos(diferencia)}.` : `Faltan ${pesos(-diferencia)}.`}
             </p>
           )}
