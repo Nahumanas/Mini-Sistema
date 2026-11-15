@@ -34,24 +34,25 @@ export function FormularioContacto() {
     }
   };
 
-  const campo = "h-11 w-full rounded-lg border border-white/15 bg-white/[0.06] px-3.5 text-white outline-none placeholder:text-[#8FA3BF] focus:border-[#43DDE3]";
-  const boton = "inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg font-semibold transition-colors";
+  // Igual que los campos del sistema (claseInput), pero de 44 px o más de alto: se completa desde el celular.
+  const campo = "h-11 w-full rounded-lg border border-borde-fuerte bg-superficie px-3.5 text-texto outline-none placeholder:text-texto-suave focus:border-primary focus:ring-2 focus:ring-primary/25";
+  const boton = "inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-lg font-semibold transition-colors";
 
   return (
-    <form id="formulario" onSubmit={enviar} className="scroll-mt-20 rounded-2xl border border-white/10 bg-white/[0.04] p-6 sm:p-7">
-      <h3 className="text-xl font-bold">Contanos de tu comercio</h3>
-      <p className="mt-1 text-[#B9C7DA]">Dejanos tu consulta y te respondemos a la brevedad.</p>
+    <form id="formulario" onSubmit={enviar} className="scroll-mt-20 rounded-xl border border-borde bg-fondo p-6 sm:p-8">
+      <h3 className="text-xl font-bold text-texto">Contanos de tu comercio</h3>
+      <p className="mt-1 text-texto-suave">Dejanos tu consulta y te respondemos a la brevedad.</p>
       <div className="mt-6 space-y-4">
         <label className="block">
-          <span className="text-sm text-[#B9C7DA]">Tu nombre</span>
+          <span className="text-sm font-medium text-texto">Tu nombre</span>
           <input required maxLength={80} value={nombre} onChange={(e) => setNombre(e.target.value)} className={`mt-1.5 ${campo}`} placeholder="Ej: Marta" />
         </label>
         <label className="block">
-          <span className="text-sm text-[#B9C7DA]">Rubro de tu comercio</span>
+          <span className="text-sm font-medium text-texto">Rubro de tu comercio</span>
           <input maxLength={80} value={rubro} onChange={(e) => setRubro(e.target.value)} className={`mt-1.5 ${campo}`} placeholder="Ej: kiosco, ferretería, gimnasio" />
         </label>
         <label className="block">
-          <span className="text-sm text-[#B9C7DA]">Consulta</span>
+          <span className="text-sm font-medium text-texto">Consulta</span>
           <textarea
             required
             maxLength={1000}
@@ -70,18 +71,18 @@ export function FormularioContacto() {
           </label>
         </div>
       </div>
-      <p className="mt-6 text-sm text-[#B9C7DA]">Enviá tu consulta por:</p>
+      <p className="mt-6 text-sm text-texto-suave">Enviá tu consulta por:</p>
       <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-        <button type="submit" value="whatsapp" className={`${boton} bg-white text-[#0F2340] hover:bg-[#E6F4FB]`}>
+        <button type="submit" value="whatsapp" className={`${boton} bg-primary text-primary-texto hover:bg-primary-hover`}>
           <Send className="size-4" />
           Enviar por WhatsApp
         </button>
-        <button type="submit" value="mail" className={`${boton} border border-white/20 text-white hover:bg-white/5`}>
+        <button type="submit" value="mail" className={`${boton} border border-borde-fuerte text-texto hover:bg-superficie-suave`}>
           <Mail className="size-4" />
           Enviar por mail
         </button>
       </div>
-      <p className="mt-3 text-center text-sm text-[#8FA3BF]" aria-live="polite">
+      <p className="mt-3 text-center text-sm text-texto-suave" aria-live="polite">
         {listo ? "¡Listo! Tocá enviar en la ventana que se abrió y te respondemos." : "Se abre tu WhatsApp o tu correo con la consulta lista para enviar."}
       </p>
     </form>

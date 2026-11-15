@@ -15,7 +15,7 @@ export function ConfigAnimaciones({ children }: { children: React.ReactNode }) {
 // Aparece desde un poquito más abajo al cargar la página. "demora" en segundos.
 export function EntradaSuave({ children, demora = 0, className }: { children: React.ReactNode; demora?: number; className?: string }) {
   return (
-    <motion.div className={className} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: demora, ease: SUAVE }}>
+    <motion.div className={className} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: demora, ease: SUAVE }}>
       {children}
     </motion.div>
   );
@@ -23,7 +23,7 @@ export function EntradaSuave({ children, demora = 0, className }: { children: Re
 
 const PADRE: Variants = {
   oculto: {},
-  visible: { transition: { staggerChildren: 0.15 } },
+  visible: { transition: { staggerChildren: 0.1 } },
 };
 
 const HIJO: Variants = {

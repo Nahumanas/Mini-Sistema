@@ -20,7 +20,7 @@ export function PreciosPlan() {
 
   return (
     <div>
-      <div role="radiogroup" aria-label="Por cuántos meses" className="grid w-full grid-cols-3 rounded-lg border border-[#DCE6F0] bg-[#F3F7FB] p-1 sm:inline-grid sm:w-auto">
+      <div role="radiogroup" aria-label="Por cuántos meses" className="grid w-full grid-cols-3 rounded-lg border border-borde bg-superficie-suave p-1 sm:inline-grid sm:w-auto">
         {PERIODOS.map((p) => (
           <button
             key={p.id}
@@ -28,10 +28,10 @@ export function PreciosPlan() {
             role="radio"
             aria-checked={p.id === elegido}
             onClick={() => setElegido(p.id)}
-            className={`flex min-h-9 flex-col items-center justify-center gap-0.5 rounded-md px-2 py-1 sm:flex-row sm:gap-1.5 sm:py-0 text-[15px] font-semibold whitespace-nowrap sm:px-3.5 transition-colors ${p.id === elegido ? "bg-white text-[#0F2340] shadow-sm" : "text-[#475569] hover:text-[#0F2340]"}`}
+            className={`flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-md px-2 py-1 sm:flex-row sm:gap-1.5 sm:py-0 text-[15px] font-semibold whitespace-nowrap sm:px-3.5 transition-colors ${p.id === elegido ? "bg-superficie text-texto shadow-sm" : "text-texto-suave hover:text-texto"}`}
           >
             {p.nombre}
-            {p.descuento > 0 && <span className="rounded bg-[#E3FAFB] px-1 text-xs font-bold text-[#0E7C86]">-{p.descuento}%</span>}
+            {p.descuento > 0 && <span className="rounded bg-positivo/10 px-1 text-xs font-bold text-positivo">-{p.descuento}%</span>}
           </button>
         ))}
       </div>
@@ -39,14 +39,14 @@ export function PreciosPlan() {
       <div className="mt-5 flex flex-wrap items-end justify-between gap-6">
         <div>
           <p className="flex flex-wrap items-baseline gap-x-1.5">
-            <span className="text-4xl font-extrabold tracking-tight text-[#0F2340]">{pesos(periodo.total)}</span>
-            <span className="text-lg font-medium text-[#475569]">{periodo.meses === 1 ? "/ mes" : `por ${periodo.nombre}`}</span>
+            <span className="numeros text-4xl font-extrabold tracking-tight text-texto">{pesos(periodo.total)}</span>
+            <span className="text-lg font-medium text-texto-suave">{periodo.meses === 1 ? "/ mes" : `por ${periodo.nombre}`}</span>
           </p>
-          <p className="mt-1 flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1 text-[15px] text-[#475569]">
+          <p className="mt-1 flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1 text-[15px] text-texto-suave">
             {periodo.meses > 1 && (
               <>
                 Equivale a {pesos(porMes)} por mes
-                {ahorro > 0 && <span className="rounded-full bg-[#E3FAFB] px-2 py-0.5 text-sm font-semibold text-[#0E7C86]">Ahorrás {pesos(ahorro)} y congelás el precio</span>}
+                {ahorro > 0 && <span className="rounded-full bg-positivo/10 px-2 py-0.5 text-sm font-semibold text-positivo">Ahorrás {pesos(ahorro)} y congelás el precio</span>}
               </>
             )}
           </p>
@@ -54,27 +54,27 @@ export function PreciosPlan() {
         <button
           type="button"
           onClick={() => ventana.current?.showModal()}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#1C7BD6] px-6 font-semibold text-white transition-colors hover:bg-[#1767b4]"
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-primary px-6 font-semibold text-primary-texto transition-colors hover:bg-primary-hover"
         >
           <MessageCircle className="size-5" />
           Contratar plan
         </button>
       </div>
 
-      <ul className="mt-5 space-y-1.5 rounded-xl border border-[#DCE6F0] bg-[#F8FAFC] px-4 py-3 text-[15px] text-[#475569]">
+      <ul className="mt-5 space-y-1.5 rounded-xl border border-borde bg-fondo px-4 py-3 text-[15px] text-texto-suave">
         {EXTRAS.map((x) => (
           <li key={x.texto} className="flex flex-wrap justify-between gap-x-4">
             <span>{x.texto}</span>
-            <span className="font-semibold text-[#0F2340]">
+            <span className="numeros font-semibold text-texto">
               + {pesos(x.precio)}
-              {x.detalle && <span className="font-normal text-[#475569]"> {x.detalle}</span>}
+              {x.detalle && <span className="font-normal text-texto-suave"> {x.detalle}</span>}
             </span>
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-sm text-[#64748B]">
+      <p className="mt-2 text-sm text-texto-suave">
         {NOTA_PRECIOS}{" "}
-        <Link href="/condiciones" className="font-semibold text-[#1C7BD6] hover:underline">
+        <Link href="/condiciones" className="font-semibold text-primary hover:underline">
           Ver términos y condiciones
         </Link>
       </p>
@@ -109,41 +109,41 @@ function ConfirmarContratacion({ ventana, periodo, ahorro }: { ventana: React.Re
         if (e.target === e.currentTarget) cerrar(); // tocar afuera cierra
       }}
       aria-labelledby="titulo-contratar"
-      className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-2xl p-0 text-[#0F2340] shadow-2xl backdrop:bg-[#0F2340]/60 backdrop:backdrop-blur-sm"
+      className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-xl border border-borde bg-superficie p-0 text-texto backdrop:bg-black/40"
     >
       <div className="p-6 sm:p-7">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold tracking-[0.18em] text-[#1C7BD6] uppercase">Antes de contratar</p>
+            <p className="text-sm font-semibold tracking-[0.18em] text-primary uppercase">Antes de contratar</p>
             <h3 id="titulo-contratar" className="mt-1 text-xl font-bold">
               Plan Mantenete · {periodo.nombre}
             </h3>
           </div>
-          <button type="button" onClick={cerrar} aria-label="Cerrar" className="-m-1.5 flex size-9 flex-none items-center justify-center rounded-lg text-[#475569] hover:bg-[#F3F7FB]">
+          <button type="button" onClick={cerrar} aria-label="Cerrar" className="-m-1.5 flex size-9 flex-none items-center justify-center rounded-lg text-texto-suave hover:bg-superficie-suave">
             <X className="size-5" />
           </button>
         </div>
 
         <p className="mt-4 flex flex-wrap items-baseline gap-x-1.5">
-          <span className="text-3xl font-extrabold tracking-tight">{pesos(periodo.total)}</span>
-          <span className="text-[#475569]">{periodo.meses === 1 ? "/ mes" : `por ${periodo.nombre}`}</span>
-          {ahorro > 0 && <span className="ml-1 rounded-full bg-[#E3FAFB] px-2 py-0.5 text-sm font-semibold text-[#0E7C86]">Ahorrás {pesos(ahorro)}</span>}
+          <span className="numeros text-3xl font-extrabold tracking-tight">{pesos(periodo.total)}</span>
+          <span className="text-texto-suave">{periodo.meses === 1 ? "/ mes" : `por ${periodo.nombre}`}</span>
+          {ahorro > 0 && <span className="ml-1 rounded-full bg-positivo/10 px-2 py-0.5 text-sm font-semibold text-positivo">Ahorrás {pesos(ahorro)}</span>}
         </p>
 
-        <ul className="mt-5 space-y-2.5 rounded-xl border border-[#DCE6F0] bg-[#F8FAFC] p-4 text-[15px] text-[#475569]">
+        <ul className="mt-5 space-y-2.5 rounded-xl border border-borde bg-fondo p-4 text-[15px] text-texto-suave">
           {puntos.map((t) => (
             <li key={t} className="flex gap-2.5">
-              <Check className="mt-0.5 size-4.5 flex-none text-[#1C7BD6]" />
+              <Check className="mt-0.5 size-4.5 flex-none text-primary" />
               {t}
             </li>
           ))}
         </ul>
 
         <label className="mt-5 flex cursor-pointer items-start gap-3 text-[15px]">
-          <input type="checkbox" checked={acepto} onChange={(e) => setAcepto(e.target.checked)} className="mt-0.5 size-5 flex-none accent-[#1C7BD6]" />
+          <input type="checkbox" checked={acepto} onChange={(e) => setAcepto(e.target.checked)} className="mt-0.5 size-5 flex-none accent-[var(--primary-color)]" />
           <span>
             Leí y acepto los{" "}
-            <Link href="/condiciones" target="_blank" className="font-semibold text-[#1C7BD6] underline-offset-2 hover:underline">
+            <Link href="/condiciones" target="_blank" className="font-semibold text-primary underline-offset-2 hover:underline">
               Términos y condiciones
             </Link>
             .
@@ -160,13 +160,13 @@ function ConfirmarContratacion({ ventana, periodo, ahorro }: { ventana: React.Re
             else cerrar();
           }}
           className={`mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-lg font-semibold transition-colors ${
-            acepto ? "bg-[#1C7BD6] text-white hover:bg-[#1767b4]" : "cursor-not-allowed bg-[#DCE6F0] text-[#8FA3BF]"
+            acepto ? "bg-primary text-primary-texto hover:bg-primary-hover" : "cursor-not-allowed bg-superficie-suave text-texto-suave"
           }`}
         >
           <MessageCircle className="size-5" />
           Continuar por WhatsApp
         </a>
-        <p className="mt-2 text-center text-sm text-[#64748B]">{acepto ? "Se abre WhatsApp con tu pedido listo para enviar." : "Marcá la casilla para continuar."}</p>
+        <p className="mt-2 text-center text-sm text-texto-suave">{acepto ? "Se abre WhatsApp con tu pedido listo para enviar." : "Marcá la casilla para continuar."}</p>
       </div>
     </dialog>
   );

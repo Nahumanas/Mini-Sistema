@@ -12,7 +12,7 @@ function useColores() {
   return useMemo(() => {
     const css = getComputedStyle(document.documentElement);
     const leer = (v: string) => css.getPropertyValue(v).trim();
-    return { tema, verde: leer("--primary-color"), texto: leer("--texto-suave"), borde: leer("--borde"), fondo: leer("--superficie") };
+    return { tema, marca: leer("--primary-color"), texto: leer("--texto-suave"), borde: leer("--borde"), fondo: leer("--superficie") };
   }, [tema]);
 }
 
@@ -45,7 +45,7 @@ export function GraficoBarras({ datos, x, y, alto = 240 }: Props) {
           <XAxis dataKey={x} tick={{ fill: c.texto, fontSize: 12 }} tickLine={false} axisLine={{ stroke: c.borde }} interval="preserveStartEnd" />
           <YAxis tickFormatter={corto} tick={{ fill: c.texto, fontSize: 12 }} tickLine={false} axisLine={false} width={76} />
           <Tooltip content={<Globito />} cursor={{ fill: c.borde, opacity: 0.4 }} />
-          <Bar dataKey={y} fill={c.verde} radius={[4, 4, 0, 0]} maxBarSize={36} />
+          <Bar dataKey={y} fill={c.marca} radius={[4, 4, 0, 0]} maxBarSize={36} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -60,15 +60,15 @@ export function GraficoArea({ datos, x, y, alto = 260 }: Props) {
         <AreaChart data={datos} margin={{ top: 8, right: 4, bottom: 0, left: 4 }}>
           <defs>
             <linearGradient id="relleno" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={c.verde} stopOpacity={0.35} />
-              <stop offset="100%" stopColor={c.verde} stopOpacity={0} />
+              <stop offset="0%" stopColor={c.marca} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={c.marca} stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid vertical={false} stroke={c.borde} />
           <XAxis dataKey={x} tick={{ fill: c.texto, fontSize: 12 }} tickLine={false} axisLine={{ stroke: c.borde }} minTickGap={24} />
           <YAxis tickFormatter={corto} tick={{ fill: c.texto, fontSize: 12 }} tickLine={false} axisLine={false} width={76} />
           <Tooltip content={<Globito />} cursor={{ stroke: c.borde }} />
-          <Area type="monotone" dataKey={y} stroke={c.verde} strokeWidth={2} fill="url(#relleno)" activeDot={{ r: 4, fill: c.verde, stroke: c.fondo, strokeWidth: 2 }} />
+          <Area type="monotone" dataKey={y} stroke={c.marca} strokeWidth={2} fill="url(#relleno)" activeDot={{ r: 4, fill: c.marca, stroke: c.fondo, strokeWidth: 2 }} />
         </AreaChart>
       </ResponsiveContainer>
     </div>

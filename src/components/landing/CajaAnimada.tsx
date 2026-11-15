@@ -9,7 +9,7 @@
 //   "reducir movimiento", o el navegador no anima, se ve el logo terminado.
 // Los movimientos están en globals.css (buscar "Caja animada").
 
-const LINEA = { stroke: "#0F2340", strokeWidth: 16, strokeLinejoin: "round", strokeLinecap: "round" } as const;
+const LINEA = { stroke: "var(--caja-linea)", strokeWidth: 16, strokeLinejoin: "round", strokeLinecap: "round" } as const;
 
 // Cada solapa "nace" desde su bisagra (el borde de la caja donde está pegada).
 const SOLAPAS_FONDO = [

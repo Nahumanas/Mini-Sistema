@@ -1,27 +1,38 @@
 @import "tailwindcss";
 
 /*
-  Colores de Mantenete, al estilo de los paneles de Supabase.
+  Colores de Mantenete: una sola paleta para el sistema Y para la página de presentación.
+
+  De dónde sale cada color:
+  - El azul y el marino son los del logo (la caja): así la marca y la pantalla son lo mismo.
+  - Los grises son "slate" (gris con un toque de azul), los mismos en claro y en oscuro,
+    para que el gris no pelee con el azul.
+  - El verde quedó SOLO para la plata a favor (vuelto, "todo cierra"); ya no es el color de los botones.
 
   Cómo funciona el modo claro/oscuro (sin recargar la página):
   - Cada color es una variable de CSS (--fondo, --texto, --primary-color...).
   - El modo oscuro solo cambia esas variables cuando <html> tiene la clase "dark".
   - Tailwind las usa con nombres cortos: bg-fondo, text-texto, border-borde, bg-primary...
-  Para cambiar los colores del sistema alcanza con tocar estos dos bloques.
+  Para cambiar los colores de todo Mantenete alcanza con tocar estos dos bloques.
+
+  Contraste (WCAG AA pide 4,5 a 1 para texto): blanco sobre --primary-color da 5,1 en claro;
+  en oscuro el azul se aclara y la letra de arriba pasa a ser marino (6,9). Por eso el azul
+  de los botones (#1a6fc2) es un punto más oscuro que el del logo (#1C7BD6, que da 4,3 con blanco).
 */
 :root {
-  --fondo: #f9fafb;            /* gray-50: fondo de la página */
+  --fondo: #f8fafc;            /* slate-50: fondo de la página */
   --superficie: #ffffff;       /* tarjetas, barra lateral, tablas */
-  --superficie-suave: #f3f4f6; /* fila al pasar el mouse, botones secundarios */
-  --borde: #e5e7eb;            /* gray-200 */
-  --borde-fuerte: #d1d5db;
-  --texto: #111827;
-  --texto-suave: #6b7280;
-  --primary-color: #3ecf8e;    /* verde de Supabase: Cobrar, Agregar, lo elegido */
-  --primary-hover: #34b97d;
-  --primary-texto: #0b2e1e;    /* letra arriba del verde */
-  --positivo: #15803d;         /* vuelto */
+  --superficie-suave: #f1f5f9; /* slate-100: fila al pasar el mouse, botones secundarios */
+  --borde: #e2e8f0;            /* slate-200 */
+  --borde-fuerte: #cbd5e1;     /* slate-300 */
+  --texto: #0f2340;            /* marino: la misma tinta de las líneas del logo */
+  --texto-suave: #475569;      /* slate-600 */
+  --primary-color: #1a6fc2;    /* azul Mantenete: Cobrar, Agregar, Probar la demo, lo elegido */
+  --primary-hover: #145a9e;
+  --primary-texto: #ffffff;    /* letra arriba del azul */
+  --positivo: #15803d;         /* vuelto, plata a favor */
   --peligro: #b91c1c;
+  --caja-linea: #0f2340;       /* contorno del dibujo de la caja (logo animado) */
 }
 
 .dark {
@@ -32,11 +43,12 @@
   --borde-fuerte: #475569;
   --texto: #e2e8f0;
   --texto-suave: #94a3b8;
-  --primary-color: #3ecf8e;
-  --primary-hover: #5fdca3;
-  --primary-texto: #052e1c;
+  --primary-color: #5aa8ee;    /* el mismo azul, aclarado para que se lea sobre fondo oscuro */
+  --primary-hover: #7dbbf2;
+  --primary-texto: #0b1a30;    /* sobre el azul claro va letra oscura, no blanca */
   --positivo: #4ade80;
   --peligro: #fca5a5;
+  --caja-linea: #0b1a30;
   color-scheme: dark;          /* barras de desplazamiento y casilleros del navegador, oscuros */
 }
 
@@ -86,7 +98,7 @@ input[type="number"] {
 
 /* ---------- Animaciones de la página de presentación ---------- */
 
-/* Brillo diagonal que cruza el botón "Probar Demo Gratis" cada tanto */
+/* Brillo diagonal que cruza el botón "Probar Demo Gratis" cada 5 segundos */
 @keyframes brillo {
   0% { transform: translateX(-150%) skewX(-20deg); }
   30%, 100% { transform: translateX(350%) skewX(-20deg); }
@@ -102,15 +114,15 @@ input[type="number"] {
   inset: 0 auto 0 0;
   width: 35%;
   background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.35), transparent);
-  animation: brillo 4s ease-in-out 1.2s infinite;
+  animation: brillo 5s ease-in-out 1.2s infinite;
   pointer-events: none;
   z-index: -1;
 }
 
-/* Pulso muy lento y tenue (para la etiqueta "Próximamente") */
+/* Pulso muy lento y tenue (para la etiqueta "Próximamente"): solo cambia la opacidad */
 @keyframes pulso-suave {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgb(28 123 214 / 0); }
-  50% { opacity: 0.7; box-shadow: 0 0 0 4px rgb(28 123 214 / 0.12); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 .pulso-suave {
   animation: pulso-suave 3.5s ease-in-out infinite;
@@ -205,7 +217,7 @@ input[type="number"] {
       degradé tres veces más ancho que el texto: al correrlo, pasa la franja celeste. */
 .caja-nombre {
   color: transparent;
-  background-image: linear-gradient(100deg, #0f2340 0%, #0f2340 42%, #43dde3 50%, #0f2340 58%, #0f2340 100%);
+  background-image: linear-gradient(100deg, var(--texto) 0%, var(--texto) 42%, #43dde3 50%, var(--texto) 58%, var(--texto) 100%);
   background-size: 300% 100%;
   background-position: 0% 0;
   -webkit-background-clip: text;
