@@ -13,6 +13,7 @@ import { FormularioContacto } from "./FormularioContacto";
 import { MailProtegido } from "./MailProtegido";
 import { IconoInstagram } from "./IconoInstagram";
 import { CajaAnimada } from "./CajaAnimada";
+import { ArqueoQueCierra } from "./ArqueoQueCierra";
 import { ConfigAnimaciones, Presionable } from "./Animaciones";
 import { Cascada, CascadaItem, EntradaSuave } from "./Entradas";
 
@@ -84,11 +85,15 @@ function Proximamente({ pulso = false }: { pulso?: boolean }) {
   return <span className={`${pulso ? "pulso-suave " : ""}rounded-full border border-borde bg-superficie-suave px-2.5 py-0.5 text-xs font-semibold text-texto-suave`}>Próximamente</span>;
 }
 
+// Cómo reacciona cada ícono cuando se pasa el mouse por su tarjeta (los movimientos están en globals.css,
+// "Íconos que reaccionan"). Cada uno hace lo que su dibujo cuenta: el de relevo gira, el de Telegram vuela.
+type Gesto = "girar" | "volar" | "saltar" | "avanzar" | "sacudir" | "mecer";
+
 // El cuadradito con el ícono de cada tarjeta: mismo dibujo en toda la página.
-function IconoEnCaja({ icono: Icono }: { icono: LucideIcon }) {
+function IconoEnCaja({ icono: Icono, gesto }: { icono: LucideIcon; gesto: Gesto }) {
   return (
     <div className="flex size-12 flex-none items-center justify-center rounded-lg border border-borde bg-superficie-suave">
-      <Icono className="size-6 text-primary" strokeWidth={1.75} />
+      <Icono className={`icono-gesto icono-${gesto} size-6 text-primary`} strokeWidth={1.75} />
     </div>
   );
 }
@@ -180,10 +185,10 @@ function Portada() {
 
 // ---------- 2. El problema ----------
 
-const SOLUCIONES: { icono: LucideIcon; titulo: string; texto: string }[] = [
-  { icono: ShoppingCart, titulo: "Ventas ágiles", texto: "Cobrá rápido con lector de código de barras. El sistema calcula el vuelto y registra el pago." },
-  { icono: Package, titulo: "Stock inteligente", texto: "La mercadería se descuenta sola y el sistema te avisa qué falta reponer antes de que te quedes sin stock." },
-  { icono: Lock, titulo: "Control de dueño", texto: "Vos ves la ganancia neta y los reportes; tus empleados solo ven la caja y operan su turno." },
+const SOLUCIONES: { icono: LucideIcon; gesto: Gesto; titulo: string; texto: string }[] = [
+  { icono: ShoppingCart, gesto: "avanzar", titulo: "Ventas ágiles", texto: "Cobrá rápido con lector de código de barras. El sistema calcula el vuelto y registra el pago." },
+  { icono: Package, gesto: "saltar", titulo: "Stock inteligente", texto: "La mercadería se descuenta sola y el sistema te avisa qué falta reponer antes de que te quedes sin stock." },
+  { icono: Lock, gesto: "sacudir", titulo: "Control de dueño", texto: "Vos ves la ganancia neta y los reportes; tus empleados solo ven la caja y operan su turno." },
 ];
 
 function Problema() {
@@ -195,10 +200,13 @@ function Problema() {
           <h2 className="mt-4 text-3xl leading-tight font-extrabold tracking-tight text-texto sm:text-[2.6rem]">¿Te falta plata en la caja al cerrar? ¿Tenés stock que no cierra o ganancias calculadas a ojo?</h2>
           <p className="mt-6 text-lg text-texto-suave">Mantenete ordena el día a día de tu local para que cada peso tenga explicación.</p>
         </div>
+        <div className="mt-12">
+          <ArqueoQueCierra />
+        </div>
         <Cascada className="mt-16 grid gap-6 md:grid-cols-3">
-          {SOLUCIONES.map(({ icono, titulo, texto }, i) => (
-            <CascadaItem key={titulo} indice={i} className="h-full rounded-xl border border-borde bg-superficie p-6 transition-[translate,border-color] duration-200 hover:-translate-y-1 hover:border-primary/50">
-              <IconoEnCaja icono={icono} />
+          {SOLUCIONES.map(({ icono, gesto, titulo, texto }, i) => (
+            <CascadaItem key={titulo} indice={i} className="group h-full rounded-xl border border-borde bg-superficie p-6 transition-[translate,border-color] duration-200 hover:-translate-y-1 hover:border-primary/50">
+              <IconoEnCaja icono={icono} gesto={gesto} />
               <h3 className="mt-6 text-xl font-bold text-texto">{titulo}</h3>
               <p className="mt-2 leading-relaxed text-texto-suave">{texto}</p>
             </CascadaItem>
@@ -211,15 +219,16 @@ function Problema() {
 
 // ---------- 3. Características ----------
 
-const CARACTERISTICAS: { icono: LucideIcon; titulo: string; texto: string; pronto?: boolean }[] = [
-  { icono: RefreshCw, titulo: "Relevos sin cerrar caja", texto: "Cambiá de turno sin frenar el negocio. Controlá qué empleado operó y si hubo faltantes en ese tramo." },
-  { icono: Store, titulo: "Varios comercios, un solo panel", texto: "Si tenés más de un local, controlá todos desde tu celular en un solo panel. Las sucursales no se cobran aparte." },
+const CARACTERISTICAS: { icono: LucideIcon; gesto: Gesto; titulo: string; texto: string; pronto?: boolean }[] = [
+  { icono: RefreshCw, gesto: "girar", titulo: "Relevos sin cerrar caja", texto: "Cambiá de turno sin frenar el negocio. Controlá qué empleado operó y si hubo faltantes en ese tramo." },
+  { icono: Store, gesto: "saltar", titulo: "Varios comercios, un solo panel", texto: "Si tenés más de un local, controlá todos desde tu celular en un solo panel. Las sucursales no se cobran aparte." },
   {
     icono: Send,
+    gesto: "volar",
     titulo: "Avisos a tu Telegram",
     texto: "Recibí un aviso cuando se abre o se cierra la caja (con el resumen del día), hay un relevo o se está terminando un producto, estés donde estés.",
   },
-  { icono: Globe, titulo: "Cero instalación", texto: "Funciona desde el navegador de la compu, la tablet o el celular, sin descargar programas pesados." },
+  { icono: Globe, gesto: "mecer", titulo: "Cero instalación", texto: "Funciona desde el navegador de la compu, la tablet o el celular, sin descargar programas pesados." },
 ];
 
 const ADEMAS: { icono: LucideIcon; texto: string }[] = [
@@ -242,9 +251,9 @@ function Caracteristicas() {
         {/* Una sola hoja con renglones, como una libreta: las líneas de 1 px son el "gap" de la
             grilla, que deja ver el color del borde que está de fondo. */}
         <Cascada className="mt-12 grid gap-px overflow-hidden rounded-xl border border-borde bg-borde sm:grid-cols-2">
-          {CARACTERISTICAS.map(({ icono, titulo, texto, pronto }, i) => (
-            <CascadaItem key={titulo} indice={i} className="flex h-full gap-4 bg-superficie p-6 sm:p-8">
-              <IconoEnCaja icono={icono} />
+          {CARACTERISTICAS.map(({ icono, gesto, titulo, texto, pronto }, i) => (
+            <CascadaItem key={titulo} indice={i} className="group flex h-full gap-4 bg-superficie p-6 sm:p-8">
+              <IconoEnCaja icono={icono} gesto={gesto} />
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-lg font-bold text-texto">{titulo}</h3>
