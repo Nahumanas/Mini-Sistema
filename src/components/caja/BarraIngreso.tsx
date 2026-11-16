@@ -90,7 +90,8 @@ export function BarraIngreso({ comercioId, productos, inputRef }: Props) {
     }
   }
 
-  const campo = "h-12 bg-transparent px-3 outline-none placeholder:text-texto-suave numeros";
+  // h-13 (≈55 px) deja lugar para que el botón Agregar, con su margen de 4 px, mida ≈47 px (mínimo 44 px en la Caja)
+  const campo = "h-13 bg-transparent px-3 outline-none placeholder:text-texto-suave numeros";
 
   return (
     <div className="relative">
@@ -114,7 +115,7 @@ export function BarraIngreso({ comercioId, productos, inputRef }: Props) {
               setResaltado(0);
             }}
             onKeyDown={teclaEnBuscador}
-            placeholder="Escanear producto o escribir el nombre…"
+            placeholder="Escanear o escribir el nombre…"
             autoComplete="off"
             role="combobox"
             aria-expanded={sugerencias.length > 0}
@@ -155,7 +156,7 @@ export function BarraIngreso({ comercioId, productos, inputRef }: Props) {
 
         <button
           type="submit"
-          className="m-1.5 flex items-center gap-1.5 rounded-md bg-primary px-4 font-medium text-primary-texto hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="m-1 flex min-h-11 items-center gap-1.5 rounded-md bg-primary px-4 font-medium text-primary-texto hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           <Plus className="size-4" strokeWidth={2.5} />
           Agregar

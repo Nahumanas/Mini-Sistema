@@ -179,7 +179,7 @@ Barra lateral fija de 16rem a la izquierda desde `lg` (se puede achicar a ícono
 Ritmo interno: tarjetas con 1.25rem de relleno, KPIs con 1rem × 0.875rem, celdas de tabla 1rem × 0.625rem, botones 0.875rem × 0.5rem. Las tablas que no entran en el celular se deslizan de costado dentro de su borde; columnas secundarias se ocultan bajo `sm`.
 
 ### Named Rules
-**The Dedo en la Caja Rule.** En la Caja (y todo lo que se toca con el cliente adelante), cada botón y campo mide **mínimo 44 px de alto**. El botón Cobrar ya lo cumple; el `Boton` base (~40 px) y `claseInput` (2.5rem ≈ 42.5 px) quedan cortos y se agrandan donde se usen en la caja.
+**The Dedo en la Caja Rule.** En la Caja (y todo lo que se toca con el cliente adelante), cada botón y campo mide **mínimo 44 px de alto**. Cumplido desde 2026-11-16: en la Caja se usa `<Boton tamano="caja">` (`min-h-11` ≈ 47 px) y `claseInputCaja` (`h-11` ≈ 47 px); los botones propios de la caja (medios de pago, − y +, Quitar, Relevo, Cerrar caja, Agregar) también llevan `min-h-11` o `size-11`. El resto del sistema sigue con el `Boton` normal (~40 px) y `claseInput` (2.5rem ≈ 42.5 px): ahí se usa mouse y no hay apuro. En el celular, el − cantidad + y Quitar del carrito bajan abajo del nombre, porque con botones de 44 px no entran como columnas.
 
 ## Elevation & Depth
 
@@ -201,6 +201,7 @@ Firmes y callados: el azul manda, el resto es gris.
 - **Secundario (por defecto):** Hoja con borde Renglón; hover a Hoja Gastada.
 - **Fantasma:** sin fondo, Lápiz; hover a Hoja Gastada y Tinta.
 - **Peligro:** borde Renglón con letra Faltante.
+- **Tamaño caja** (`tamano="caja"`): mínimo 44 px de alto, para la Caja y lo que se toca con el cliente adelante.
 - **Focus:** contorno de 2 px Azul Mantenete con 2 px de separación. **Disabled:** 50 % de opacidad y cursor prohibido.
 
 ### Botón Cobrar (signature)
@@ -216,7 +217,7 @@ El botón más importante del sistema (`PieCobro`): Azul Mantenete, 1.125rem sem
 - **Vacío:** borde punteado Renglón Marcado, ícono de 24 px trazo 1.5, texto Lápiz centrado.
 
 ### Inputs / Fields
-- **Style:** 2.5rem de alto, Hoja, borde Renglón Marcado, 0.375rem, 15 px; placeholder en Lápiz.
+- **Style:** 2.5rem de alto (en la Caja, `claseInputCaja`: 2.75rem ≈ 47 px), Hoja, borde Renglón Marcado, 0.375rem, 15 px; placeholder en Lápiz.
 - **Focus:** borde Azul Mantenete más anillo de 2 px azul al 25 %.
 - **Disabled:** 60 % de opacidad.
 - **Campo:** etiqueta 0.875rem medium arriba, ayuda 0.75rem Lápiz abajo.

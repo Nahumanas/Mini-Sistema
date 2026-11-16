@@ -124,7 +124,7 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar, conMer
                   aria-pressed={elegido}
                   disabled={apagado}
                   title={apagado ? "Necesita internet" : undefined}
-                  className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-[15px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                  className={`flex min-h-11 items-center gap-2 rounded-md border px-3.5 text-[15px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                     elegido ? "border-primary bg-primary/10 font-medium text-texto" : "border-borde text-texto-suave hover:bg-superficie-suave hover:text-texto"
                   }`}
                 >
@@ -138,7 +138,7 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar, conMer
 
         {medio === "efectivo" && !vacio && (
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            <label className="flex items-center rounded-md border border-borde focus-within:border-primary">
+            <label className="flex items-center rounded-md border border-borde-fuerte focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25">
               <span className="pl-3 text-sm text-texto-suave">Paga con $</span>
               <input
                 id="paga-con"
@@ -148,7 +148,7 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar, conMer
                 value={pagaCon}
                 onChange={(e) => setPagaCon(e.target.value)}
                 placeholder="opcional"
-                className="numeros h-10 w-32 bg-transparent px-3 text-right outline-none placeholder:text-texto-suave"
+                className="numeros h-11 w-32 bg-transparent px-3 text-right outline-none placeholder:text-texto-suave"
               />
             </label>
             {vuelto !== null && (
@@ -164,13 +164,13 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar, conMer
         {comercio?.usaTicket && (
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[15px]">
             {!vacio && (
-              <label className="flex items-center gap-2">
-                <input id="con-ticket" type="checkbox" checked={conTicket} onChange={(e) => setConTicket(e.target.checked)} className="size-4 accent-[var(--primary-color)]" />
+              <label className="flex min-h-11 cursor-pointer items-center gap-2.5">
+                <input id="con-ticket" type="checkbox" checked={conTicket} onChange={(e) => setConTicket(e.target.checked)} className="size-5 accent-[var(--primary-color)]" />
                 El cliente pide ticket
               </label>
             )}
             {ultima && (
-              <button type="button" onClick={() => bajarTicket(ultima)} className="inline-flex items-center gap-1.5 text-sm text-texto-suave underline-offset-2 hover:text-texto hover:underline">
+              <button type="button" onClick={() => bajarTicket(ultima)} className="inline-flex min-h-11 items-center gap-1.5 text-sm text-texto-suave underline-offset-2 hover:text-texto hover:underline">
                 <Printer className="size-3.5" />
                 Ticket de la venta {ultima.provisorio ?? `N° ${ultima.numero}`}
               </button>
@@ -206,7 +206,7 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar, conMer
               setPagaCon("");
             }}
             disabled={vacio}
-            className="rounded-md px-4 py-3 text-texto-suave hover:bg-superficie-suave hover:text-texto disabled:opacity-40"
+            className="min-h-11 rounded-md px-4 py-3 text-texto-suave hover:bg-superficie-suave hover:text-texto disabled:opacity-40"
           >
             Cancelar
           </button>

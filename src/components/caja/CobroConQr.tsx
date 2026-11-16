@@ -40,7 +40,7 @@ function Ventana({ total, children, alCerrar, cerrando }: { total: number; child
             <QrCode className="size-5 text-primary" strokeWidth={1.75} />
             Cobrar con Mercado Pago
           </h2>
-          <button type="button" onClick={alCerrar} disabled={cerrando} aria-label="Cancelar el cobro" className="rounded-md p-1 text-texto-suave hover:bg-superficie-suave hover:text-texto disabled:opacity-40">
+          <button type="button" onClick={alCerrar} disabled={cerrando} aria-label="Cancelar el cobro" className="-m-2 flex size-11 items-center justify-center rounded-md text-texto-suave hover:bg-superficie-suave hover:text-texto disabled:opacity-40">
             <X className="size-5" />
           </button>
         </div>
@@ -165,7 +165,7 @@ function EnLaNube({ comercioId, items, cuenta, vendidoPor, alPagar, alCerrar }: 
         {cobro ? `Esperando el pago${falta !== null ? ` · vence en ${minutosYSegundos(falta)}` : ""}` : "Armando el QR…"}
       </p>
       {sinInternet && <p className="text-sm text-peligro">No hay conexión con el servidor. Sigo intentando: si el cliente paga, la venta se guarda igual.</p>}
-      <Boton variante="fantasma" onClick={() => void cancelar()} disabled={cancelando} className="w-full">
+      <Boton tamano="caja" variante="fantasma" onClick={() => void cancelar()} disabled={cancelando} className="w-full">
         {cancelando ? "Cancelando…" : "Cancelar y cobrar de otra forma"}
       </Boton>
     </Ventana>
@@ -201,10 +201,10 @@ function EnLaDemo({ comercioId, items, cuenta, vendidoPor, alPagar, alCerrar }: 
       <p className="text-texto-suave">
         En la demo el QR es de prueba: no sirve para pagar. Con tu cuenta, el cliente lo escanea con Mercado Pago y la venta se guarda sola.
       </p>
-      <Boton variante="primario" icono={CheckCircle2} onClick={() => void simular()} disabled={pagando} className="w-full">
+      <Boton tamano="caja" variante="primario" icono={CheckCircle2} onClick={() => void simular()} disabled={pagando} className="w-full">
         Simular que el cliente pagó
       </Boton>
-      <Boton variante="fantasma" onClick={() => alCerrar()} className="w-full">
+      <Boton tamano="caja" variante="fantasma" onClick={() => alCerrar()} className="w-full">
         Cancelar
       </Boton>
     </Ventana>

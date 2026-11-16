@@ -13,7 +13,7 @@ import { useConexionRed } from "@/store/conexion";
 import { useInterfaz } from "@/store/interfaz";
 import { useNombreJefe } from "@/store/jefe";
 import { useSinInternet } from "@/store/nube";
-import { Boton, Campo, claseInput, Tarjeta } from "../ui/base";
+import { Boton, Campo, claseInputCaja, Tarjeta } from "../ui/base";
 
 /**
  * Abrir, cerrar y el relevo necesitan internet (el arqueo lo hace el servidor). Cerrar y el relevo, además,
@@ -63,9 +63,9 @@ export function AbrirCaja({ comercioId, nombreComercio, responsable }: { comerci
         <p className="text-texto-suave">Contá el efectivo que hay en el cajón para empezar. Queda anotado a nombre de {responsable}.</p>
         <div className="flex flex-wrap items-end gap-3">
           <Campo etiqueta="Efectivo inicial ($)" className="w-48">
-            <input id="monto-inicial" type="number" min={0} inputMode="numeric" value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="0" className={`${claseInput} numeros`} autoFocus />
+            <input id="monto-inicial" type="number" min={0} inputMode="numeric" value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="0" className={`${claseInputCaja} numeros`} autoFocus />
           </Campo>
-          <Boton type="submit" variante="primario" icono={LockOpen} disabled={enviando || Boolean(bloqueo)}>
+          <Boton tamano="caja" type="submit" variante="primario" icono={LockOpen} disabled={enviando || Boolean(bloqueo)}>
             Abrir caja
           </Boton>
         </div>
@@ -167,7 +167,7 @@ export function CerrarCaja({ caja, alTerminar, sinVolver }: { caja: Caja; alTerm
           className="flex flex-col gap-4"
         >
           <Campo etiqueta="Efectivo que contaste ($)">
-            <input id="contado" type="number" min={0} inputMode="numeric" value={contado} onChange={(e) => setContado(e.target.value)} className={`${claseInput} numeros`} required autoFocus />
+            <input id="contado" type="number" min={0} inputMode="numeric" value={contado} onChange={(e) => setContado(e.target.value)} className={`${claseInputCaja} numeros`} required autoFocus />
           </Campo>
           {diferencia !== null && (
             <p className={`numeros rounded-md border p-3 ${diferencia === 0 ? "border-positivo/40 bg-positivo/10 text-positivo" : "border-amber-400/50 bg-amber-400/10"}`}>
@@ -175,13 +175,13 @@ export function CerrarCaja({ caja, alTerminar, sinVolver }: { caja: Caja; alTerm
             </p>
           )}
           <Campo etiqueta="Nota (opcional)">
-            <input id="nota" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Ej.: retiré $ 20.000 para pagar al proveedor" className={claseInput} />
+            <input id="nota" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Ej.: retiré $ 20.000 para pagar al proveedor" className={claseInputCaja} />
           </Campo>
           <div className="flex justify-end gap-2">
-            <Boton variante="fantasma" onClick={alTerminar} disabled={Boolean(sinVolver)} aria-describedby={sinVolver ? "por-que-no-volver" : undefined}>
+            <Boton tamano="caja" variante="fantasma" onClick={alTerminar} disabled={Boolean(sinVolver)} aria-describedby={sinVolver ? "por-que-no-volver" : undefined}>
               Volver a la caja
             </Boton>
-            <Boton type="submit" variante="primario" icono={Lock} disabled={contado === "" || enviando || Boolean(bloqueo)}>
+            <Boton tamano="caja" type="submit" variante="primario" icono={Lock} disabled={contado === "" || enviando || Boolean(bloqueo)}>
               Cerrar caja
             </Boton>
           </div>
@@ -275,7 +275,7 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
           <p className="text-sm text-texto-suave">La caja sigue abierta. Contá el efectivo del cajón antes de entregarla: con eso arranca el que entra.</p>
           {turnos.length > 0 && (
             <Campo etiqueta="Turno que termina">
-              <select id="turno-relevo" value={nombreTurno} onChange={(e) => setNombreTurno(e.target.value)} className={claseInput}>
+              <select id="turno-relevo" value={nombreTurno} onChange={(e) => setNombreTurno(e.target.value)} className={claseInputCaja}>
                 {turnos.map((t) => (
                   <option key={t.nombre} value={t.nombre}>
                     {t.nombre} ({t.desde} a {t.hasta})
@@ -286,7 +286,7 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
             </Campo>
           )}
           <Campo etiqueta="¿Quién recibe la caja?" ayuda="Si no está en la lista, el jefe lo agrega en Mis comercios.">
-            <select id="entra" value={entra} onChange={(e) => setEntra(e.target.value)} className={claseInput} required autoFocus>
+            <select id="entra" value={entra} onChange={(e) => setEntra(e.target.value)} className={claseInputCaja} required autoFocus>
               <option value="" disabled>
                 Elegí quién entra
               </option>
@@ -299,7 +299,7 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
             </select>
           </Campo>
           <Campo etiqueta="Efectivo que contaste ($)">
-            <input id="contado-relevo" type="number" min={0} inputMode="numeric" value={contado} onChange={(e) => setContado(e.target.value)} className={`${claseInput} numeros`} required />
+            <input id="contado-relevo" type="number" min={0} inputMode="numeric" value={contado} onChange={(e) => setContado(e.target.value)} className={`${claseInputCaja} numeros`} required />
           </Campo>
           {diferencia !== null && (
             <p className={`numeros rounded-md border p-3 ${diferencia === 0 ? "border-positivo/40 bg-positivo/10 text-positivo" : "border-amber-400/50 bg-amber-400/10"}`}>
@@ -307,14 +307,14 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
             </p>
           )}
           <Campo etiqueta="Nota (opcional)">
-            <input id="nota-relevo" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Ej.: dejé $ 5.000 en cambio chico" className={claseInput} />
+            <input id="nota-relevo" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Ej.: dejé $ 5.000 en cambio chico" className={claseInputCaja} />
           </Campo>
           {error && <p className="text-sm text-peligro">{error}</p>}
           <div className="flex justify-end gap-2">
-            <Boton variante="fantasma" onClick={alTerminar}>
+            <Boton tamano="caja" variante="fantasma" onClick={alTerminar}>
               Volver a la caja
             </Boton>
-            <Boton type="submit" variante="primario" icono={Repeat} disabled={contado === "" || !entra.trim() || enviando || Boolean(bloqueo)}>
+            <Boton tamano="caja" type="submit" variante="primario" icono={Repeat} disabled={contado === "" || !entra.trim() || enviando || Boolean(bloqueo)}>
               Registrar relevo
             </Boton>
           </div>

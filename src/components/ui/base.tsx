@@ -7,6 +7,12 @@ import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 export const claseInput =
   "h-10 w-full rounded-md border border-borde-fuerte bg-superficie px-3 text-[15px] outline-none placeholder:text-texto-suave focus:border-primary focus:ring-2 focus:ring-primary/25 disabled:opacity-60";
 
+/**
+ * El mismo campo, pero para la Caja (regla "Dedo en la Caja" de DESIGN.md): h-11 = 2.75rem ≈ 47 px con la letra base de 17 px,
+ * así pasa los 44 px que se necesitan para tocarlo sin errar con el cliente adelante. El resto del sistema sigue con claseInput.
+ */
+export const claseInputCaja = claseInput.replace("h-10 ", "h-11 ");
+
 export function Encabezado({ titulo, descripcion, acciones }: { titulo: string; descripcion?: ReactNode; acciones?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
@@ -40,12 +46,15 @@ const VARIANTES = {
   peligro: "border border-borde text-peligro hover:bg-superficie-suave",
 };
 
-export function Boton({ variante = "secundario", icono: Icono, className = "", children, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variante?: keyof typeof VARIANTES; icono?: LucideIcon }) {
+// "caja": mínimo 44 px de alto (min-h-11 ≈ 47 px), para la Caja y todo lo que se toca con el cliente adelante.
+const TAMANOS = { normal: "", caja: "min-h-11" };
+
+export function Boton({ variante = "secundario", tamano = "normal", icono: Icono, className = "", children, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variante?: keyof typeof VARIANTES; tamano?: keyof typeof TAMANOS; icono?: LucideIcon }) {
   return (
     <button
       type="button"
       {...props}
-      className={`inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-[15px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50 ${VARIANTES[variante]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-[15px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50 ${TAMANOS[tamano]} ${VARIANTES[variante]} ${className}`}
     >
       {Icono && <Icono className="size-4" strokeWidth={2} />}
       {children}
