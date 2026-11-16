@@ -18,3 +18,11 @@ do $$ begin
 end $$;
 grant usage on schema public, auth to anon, authenticated;
 grant execute on function auth.uid() to anon, authenticated;
+-- Como en Supabase: cada tabla nueva de public le da a anon y authenticated permisos que saltean el RLS
+-- (TRUNCATE y compañía). Las migraciones los tienen que sacar; rls.sql revisa que no quede ninguno.
+alter default privileges in schema public grant truncate, trigger, references on tables to anon, authenticated;
+do $$ begin
+  if current_setting('server_version_num')::int >= 170000 then
+    execute 'alter default privileges in schema public grant maintain on tables to anon, authenticated';
+  end if;
+end $$;

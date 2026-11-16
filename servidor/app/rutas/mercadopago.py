@@ -49,6 +49,10 @@ class Conectar(BaseModel):
     referencia: str = Field(default="", max_length=100)
 
 
+# Las columnas de mercadopago_cuentas que se pueden leer (todas menos la clave)
+_COLUMNAS = "comercio_id, usuario_mp, nombre_mp, sucursal_mp, caja_mp, conectada"
+
+
 def _estado_cuenta(fila: dict | None) -> dict:
     if fila is None:
         return {"conectada": False, "nombre": "", "conectadaEl": None}
@@ -74,7 +78,7 @@ def estado(comercio_id: int, usuario: Usuario = Depends(usuario_actual), _llave:
     """¿El comercio tiene su cuenta de Mercado Pago conectada? (para mostrar el botón en la Caja)"""
     with como_usuario(usuario) as con:
         comercio_mio(con, comercio_id)
-        fila = con.execute("select * from public.mercadopago_cuentas where comercio_id = %s", (comercio_id,)).fetchone()
+        fila = con.execute(f"select {_COLUMNAS} from public.mercadopago_cuentas where comercio_id = %s", (comercio_id,)).fetchone()
     return _estado_cuenta(fila)
 
 
@@ -112,11 +116,12 @@ def conectar(comercio_id: int, datos: Conectar, usuario: Usuario = Depends(usuar
         raise HTTPException(502, SIN_MP) from None
     with como_usuario(usuario) as con:
         fila = con.execute(
-            """insert into public.mercadopago_cuentas (comercio_id, token_cifrado, usuario_mp, nombre_mp, sucursal_mp, caja_mp)
+            # Los valores van repetidos (y no "excluded.token_cifrado") porque la columna del token no se puede leer
+            f"""insert into public.mercadopago_cuentas (comercio_id, token_cifrado, usuario_mp, nombre_mp, sucursal_mp, caja_mp)
                values (%(c)s, %(t)s, %(u)s, %(n)s, %(s)s, %(caja)s)
-               on conflict (comercio_id) do update set token_cifrado = excluded.token_cifrado, usuario_mp = excluded.usuario_mp,
-                 nombre_mp = excluded.nombre_mp, sucursal_mp = excluded.sucursal_mp, caja_mp = excluded.caja_mp, conectada = now()
-               returning *""",
+               on conflict (comercio_id) do update set token_cifrado = %(t)s, usuario_mp = %(u)s,
+                 nombre_mp = %(n)s, sucursal_mp = %(s)s, caja_mp = %(caja)s, conectada = now()
+               returning {_COLUMNAS}""",
             {"c": comercio_id, "t": mercadopago.cerrar_token(comercio_id, token), "u": int(cuenta["id"]),
              "n": str(cuenta.get("nickname") or cuenta.get("email") or "")[:100], "s": sucursal, "caja": caja},
         ).fetchone()
@@ -135,7 +140,10 @@ def desconectar(comercio_id: int, usuario: Usuario = Depends(usuario_actual), _j
 
 # ---------------------------------------------------------------- cobrar
 
-_LEER_CUENTA = "select * from public.mercadopago_cuentas where comercio_id = %s"
+# La clave (token_cifrado) no se puede leer con un select común: sale solo por privado.token_mercadopago,
+# que revisa que el comercio sea del usuario (ver 20261116000000_seguridad_tablas_nuevas.sql).
+_LEER_CUENTA = (f"select {_COLUMNAS}, privado.token_mercadopago(comercio_id) as token_cifrado"
+                " from public.mercadopago_cuentas where comercio_id = %s")
 _LEER_COBRO = "select * from public.cobros_mp where comercio_id = %s and id = %s"
 
 
