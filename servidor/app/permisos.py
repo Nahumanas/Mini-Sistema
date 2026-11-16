@@ -20,11 +20,12 @@ from psycopg import Connection
 
 from .cifrado import Llave
 
-Permiso = Literal["panel_del_dia", "stock", "compras", "gastos", "vencimientos", "socios", "cuotas", "clases"]
+# "precios" no es una pantalla: deja al empleado cambiar el precio de venta desde Stock (lo demás de un producto, solo el jefe)
+Permiso = Literal["panel_del_dia", "stock", "precios", "compras", "gastos", "vencimientos", "socios", "cuotas", "clases"]
 
 # Cómo se nombra cada sección en los mensajes de error
 NOMBRES = {
-    "panel_del_dia": "Panel del día", "stock": "Stock", "compras": "Compras", "gastos": "Gastos",
+    "panel_del_dia": "Panel del día", "stock": "Stock", "precios": "Cambiar precios", "compras": "Compras", "gastos": "Gastos",
     "vencimientos": "Vencimientos", "socios": "Socios", "cuotas": "Cuotas", "clases": "Clases",
 }
 

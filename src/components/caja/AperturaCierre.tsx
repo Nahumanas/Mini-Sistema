@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Lock, LockOpen, Repeat } from "lucide-react";
 import { turnoEnCurso } from "@/lib/caja";
+import { nombreComparable } from "@/lib/empleados";
 import { ahora, hora } from "@/lib/fechas";
 import { turnoEntre } from "@/lib/horarios";
 import { MEDIOS_DE_PAGO, type MedioDePago, pesos } from "@/lib/formato";
@@ -201,7 +202,7 @@ export function CerrarCaja({ caja, alTerminar, sinVolver }: { caja: Caja; alTerm
  * Relevo de turno: cambia quien atiende, pero la caja sigue abierta. El que se va cuenta el efectivo
  * y queda anotado si faltó o sobró algo en SU turno. El que entra arranca con lo contado.
  */
-export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () => void }) {
+export function RelevoTurno({ caja, alTerminar, entraSugerido }: { caja: Caja; alTerminar: () => void; entraSugerido?: string }) {
   const { ventas, relevos, empleados, comercios, registrarRelevo } = useDatos();
   const { sesion, ingresar } = useSesion();
   const avisar = useInterfaz((s) => s.avisar);
@@ -222,6 +223,10 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
   const mismo = (nombre: string) => nombre.trim().toLowerCase() === caja.responsable.trim().toLowerCase();
   const otros = empleados.filter((e) => e.comercioId === caja.comercioId && e.activo && !mismo(e.nombre));
   const jefeRecibe = !mismo(nombreJefe) && !otros.some((e) => e.nombre.trim().toLowerCase() === nombreJefe.toLowerCase());
+  // Si ya entró otra persona (por ejemplo Laura, con la caja a nombre de Carlos), se propone que reciba ella
+  const opciones = [...otros.map((e) => e.nombre), ...(jefeRecibe ? [nombreJefe] : [])];
+  const sugerido = entraSugerido ? opciones.find((n) => nombreComparable(n) === nombreComparable(entraSugerido)) : undefined;
+  const quienEntra = entra || sugerido || "";
 
   return (
     <div className="grid gap-5 md:grid-cols-[1fr_1fr]">
@@ -255,7 +260,7 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
             setError("");
             setEnviando(true);
             try {
-              const r = await registrarRelevo(caja.comercioId, entra, Number(contado), nota, nombreTurno || null);
+              const r = await registrarRelevo(caja.comercioId, quienEntra, Number(contado), nota, nombreTurno || null);
               // En esta compu ahora atiende el que entró: las ventas siguientes quedan a su nombre
               if (sesion?.rol === "empleado") ingresar({ ...sesion, nombre: r.entra });
               avisar(
@@ -286,7 +291,7 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
             </Campo>
           )}
           <Campo etiqueta="¿Quién recibe la caja?" ayuda="Si no está en la lista, el jefe lo agrega en Mis comercios.">
-            <select id="entra" value={entra} onChange={(e) => setEntra(e.target.value)} className={claseInputCaja} required autoFocus>
+            <select id="entra" value={quienEntra} onChange={(e) => setEntra(e.target.value)} className={claseInputCaja} required autoFocus>
               <option value="" disabled>
                 Elegí quién entra
               </option>
@@ -314,7 +319,7 @@ export function RelevoTurno({ caja, alTerminar }: { caja: Caja; alTerminar: () =
             <Boton tamano="caja" variante="fantasma" onClick={alTerminar}>
               Volver a la caja
             </Boton>
-            <Boton tamano="caja" type="submit" variante="primario" icono={Repeat} disabled={contado === "" || !entra.trim() || enviando || Boolean(bloqueo)}>
+            <Boton tamano="caja" type="submit" variante="primario" icono={Repeat} disabled={contado === "" || !quienEntra.trim() || enviando || Boolean(bloqueo)}>
               Registrar relevo
             </Boton>
           </div>

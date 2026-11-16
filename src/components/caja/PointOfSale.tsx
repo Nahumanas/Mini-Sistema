@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Clock, Lock, LockOpen, Repeat } from "lucide-react";
+import { Clock, Lock, LockOpen, Repeat, UserRound } from "lucide-react";
 import { relevosDe, turnoEnCurso } from "@/lib/caja";
 import { ahora, ddmm, hora, hoy } from "@/lib/fechas";
+import { nombreComparable } from "@/lib/empleados";
 import { dentroDelHorario, turnoDeLaHora, turnoEntre } from "@/lib/horarios";
 import { type MedioDePago, pesos } from "@/lib/formato";
 import { calcular } from "@/lib/promos";
@@ -39,6 +40,10 @@ export function PointOfSale() {
   const cuenta = useMemo(() => calcular(promos, items, medio, comercio.combinarPromos), [promos, items, medio, comercio.combinarPromos]);
 
   const ultimoRelevo = caja ? relevosDe(relevos, caja.id).at(-1) : undefined;
+  // Quién está usando la caja ahora (el que entró) y si es el mismo que la tiene a su nombre.
+  // Las ventas ya se guardan a nombre del que entró; lo que no cambia sin relevo es de quién es el efectivo del cajón.
+  const atiende = sesion?.nombre || caja?.responsable || "";
+  const otraPersona = Boolean(caja && sesion?.nombre && nombreComparable(sesion.nombre) !== nombreComparable(caja.responsable));
 
   if (!caja) {
     return (
@@ -71,7 +76,7 @@ export function PointOfSale() {
     return (
       <div className="mx-auto flex max-w-4xl flex-col gap-6">
         <Encabezado titulo="Relevo de turno" descripcion="Cambia quien atiende y la caja sigue abierta. La caja se cierra una sola vez, al final del día." />
-        <RelevoTurno caja={caja} alTerminar={() => setRelevando(false)} />
+        <RelevoTurno caja={caja} alTerminar={() => setRelevando(false)} entraSugerido={otraPersona ? atiende : undefined} />
       </div>
     );
   }
@@ -94,14 +99,16 @@ export function PointOfSale() {
         <div className="flex flex-wrap items-center gap-2.5">
           <LockOpen className="size-4 shrink-0 text-primary" strokeWidth={2} />
           <p className="text-sm text-texto-suave">
-            {ultimoRelevo ? (
+            Atiende <span className="font-medium text-texto">{atiende}</span>
+            {otraPersona ? (
+              <> · la caja está a nombre de {caja.responsable}</>
+            ) : ultimoRelevo ? (
               <>
-                Atiende <span className="font-medium text-texto">{caja.responsable}</span> desde las {hora(ultimoRelevo.fecha)} · abierta a las {hora(caja.abierta)}
+                {" "}desde las {hora(ultimoRelevo.fecha)} · abierta a las {hora(caja.abierta)}
               </>
             ) : (
               <>
-                Abierta por <span className="font-medium text-texto">{caja.responsable}</span> a las {hora(caja.abierta)} · inicial{" "}
-                <span className="numeros">{pesos(caja.montoInicial)}</span>
+                {" "}· abierta a las {hora(caja.abierta)} con <span className="numeros">{pesos(caja.montoInicial)}</span>
               </>
             )}
           </p>
@@ -125,6 +132,27 @@ export function PointOfSale() {
           </button>
         </div>
       </div>
+
+      {/* Entró otra persona sin relevo: se avisa (no se obliga). Sin relevo, al cerrar se suma el efectivo de los dos
+          turnos y si falta plata no se sabe en cuál faltó. */}
+      {otraPersona && (
+        <div className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-amber-400/50 bg-amber-400/10 p-3 text-[15px]">
+          <UserRound className="size-4 shrink-0" />
+          <p className="min-w-0 flex-1">
+            Esta caja está a nombre de <span className="font-medium">{caja.responsable}</span>. Si cambió quien atiende, hacé el relevo: así cada uno
+            cuenta su efectivo y, si falta plata, se sabe en qué turno.
+          </p>
+          <button
+            onClick={() => setRelevando(true)}
+            disabled={sinInternet}
+            title={sinInternet ? "Necesita internet" : undefined}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-borde bg-superficie px-3.5 text-[15px] hover:bg-superficie-suave disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Repeat className="size-3.5" />
+            Hacer el relevo
+          </button>
+        </div>
+      )}
 
       {avisoHorario && (
         <p className="-mt-1 flex items-start gap-2 rounded-md border border-amber-400/50 bg-amber-400/10 p-3 text-[15px]">

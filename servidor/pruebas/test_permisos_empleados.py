@@ -147,3 +147,31 @@ def test_el_empleado_no_se_da_permisos_a_si_mismo(cliente):
     # Sin la llave (antes de poner el PIN) tampoco
     sin_llave = {k: v for k, v in jefe.items() if k != "X-Llave"}
     assert cliente.put(f"/empleados/{martina}/permisos", json={"permisos": ["gastos"]}, headers=sin_llave).status_code == 423
+
+
+def test_productos_solo_el_jefe_y_precio_con_permiso(cliente):
+    """Los productos los maneja el jefe. El empleado solo puede cambiar el PRECIO, y solo si el jefe le dio
+    "Cambiar precios". Antes la API no lo controlaba: con la llave de empleado se podía cambiar todo a mano."""
+    jefe, kiosco, alfajor, martina, lucas = _preparar(cliente, "ana.precios@gmail.com")
+    ella, el = _entrar(cliente, jefe, kiosco, "Martina"), _entrar(cliente, jefe, kiosco, "Lucas")
+    nuevo = {"nombre": "Chicle", "precioVenta": 300}
+
+    # Sin el permiso: ni precio, ni alta, ni importar, ni stock, ni dar de baja
+    r = cliente.patch(f"/productos/{alfajor['id']}", json={"precioVenta": 1}, headers=ella)
+    assert r.status_code == 403 and "Cambiar precios" in r.json()["detail"]
+    assert cliente.post(f"/comercios/{kiosco}/productos", json=nuevo, headers=ella).status_code == 403
+    assert cliente.post(f"/comercios/{kiosco}/productos/importar", json={"filas": [nuevo]}, headers=ella).status_code == 403
+    assert cliente.patch(f"/productos/{alfajor['id']}", json={"stock": 999}, headers=ella).status_code == 403
+    assert cliente.patch(f"/productos/{alfajor['id']}", json={"activo": False}, headers=ella).status_code == 403
+
+    # El jefe le da "Cambiar precios" a Martina (Lucas no): ella cambia el precio, pero nada más
+    r = cliente.put(f"/empleados/{martina}/permisos", json={"permisos": ["stock", "precios"]}, headers=jefe)
+    assert r.status_code == 200 and r.json()["permisos"] == ["precios", "stock"]
+    r = cliente.patch(f"/productos/{alfajor['id']}", json={"precioVenta": 1700}, headers=ella)
+    assert r.status_code == 200 and r.json()["precioVenta"] == 1700
+    assert cliente.patch(f"/productos/{alfajor['id']}", json={"precioVenta": 1800, "costo": 1}, headers=ella).status_code == 403
+    assert cliente.patch(f"/productos/{alfajor['id']}", json={"precioVenta": 1}, headers=el).status_code == 403
+
+    # El jefe puede todo
+    assert cliente.patch(f"/productos/{alfajor['id']}", json={"precioVenta": 1600, "stock": 12, "stockAntes": 10}, headers=jefe).status_code == 200
+    assert cliente.post(f"/comercios/{kiosco}/productos", json=nuevo, headers=jefe).status_code in (200, 201)

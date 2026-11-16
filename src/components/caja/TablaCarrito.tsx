@@ -1,10 +1,10 @@
 "use client";
 
-import { Minus, Plus, ShoppingCart, X } from "lucide-react";
+import { Minus, Plus, ShoppingCart, Undo2, X } from "lucide-react";
 import type { Cuenta } from "@/lib/promos";
 import type { Producto } from "@/lib/tipos";
 import { pesos } from "@/lib/formato";
-import { useCarrito, useItemsDe } from "@/store/carrito";
+import { useCanceladosDe, useCarrito, useItemsDe } from "@/store/carrito";
 
 // Lo que se lleva el cliente: una tabla simple con borde de 1 px.
 // Los botones − y + cambian la cantidad (nunca baja de 1 ni pasa el stock); la X saca el producto.
@@ -12,6 +12,8 @@ export function TablaCarrito({ comercioId, productos, cuenta }: { comercioId: nu
   const items = useItemsDe(comercioId);
   const cambiarCantidad = useCarrito((s) => s.cambiarCantidad);
   const quitar = useCarrito((s) => s.quitar);
+  const deshacer = useCarrito((s) => s.deshacer);
+  const cancelados = useCanceladosDe(comercioId);
   const stockDe = (id: number) => productos.find((p) => p.id === id)?.stock ?? 0;
   const unidades = items.reduce((s, i) => s + i.cantidad, 0);
 
@@ -20,6 +22,22 @@ export function TablaCarrito({ comercioId, productos, cuenta }: { comercioId: nu
       <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-borde-fuerte px-6 py-12 text-center text-texto-suave">
         <ShoppingCart className="size-6" strokeWidth={1.5} />
         <p>Escaneá un producto o buscalo por el nombre para empezar la venta.</p>
+        {/* Si se tocó Cancelar sin querer: la venta vuelve tal cual. Queda hasta que se agrega otro producto. */}
+        {cancelados.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-texto">
+            <span>
+              Cancelaste una venta de {cancelados.length} {cancelados.length === 1 ? "producto" : "productos"}.
+            </span>
+            <button
+              type="button"
+              onClick={() => deshacer(comercioId)}
+              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-borde bg-superficie px-3.5 text-[15px] font-medium hover:bg-superficie-suave focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <Undo2 className="size-4" strokeWidth={2} />
+              Deshacer
+            </button>
+          </div>
+        )}
       </div>
     );
   }

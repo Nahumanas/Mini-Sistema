@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Clock, KeyRound, Lock, Plus, RotateCcw, Save, SlidersHorizontal, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { mensajeNombreRepetido, nombreRepetido } from "@/lib/empleados";
 import { ddmm, hora } from "@/lib/fechas";
@@ -25,6 +25,13 @@ const DETALLE: Record<Permiso, string> = {
   clases: "Anotar socios, lista de espera y asistencia",
   panel_del_dia: "Lo cobrado hoy",
   stock: "Solo mirar",
+  precios: "Solo el precio de venta, desde Stock",
+};
+
+// Permisos que no son una pantalla sino algo que se puede hacer ADENTRO de una: van colgados abajo de ella
+// y solo sirven si esa pantalla está prendida (sin Stock no hay dónde cambiar el precio).
+const DENTRO_DE: Partial<Record<Permiso, { clave: Permiso; titulo: string }>> = {
+  stock: { clave: "precios", titulo: "Cambiar precios" },
 };
 
 /**
@@ -84,7 +91,8 @@ export function MisComercios() {
 
   function cambiarPermiso(clave: Permiso) {
     const tiene = comercio.permisosEmpleado.includes(clave);
-    void intentar(actualizarComercio(comercio.id, { permisosEmpleado: tiene ? comercio.permisosEmpleado.filter((p) => p !== clave) : [...comercio.permisosEmpleado, clave] }));
+    const dentro = DENTRO_DE[clave]?.clave; // al sacar Stock se saca también "Cambiar precios"
+    void intentar(actualizarComercio(comercio.id, { permisosEmpleado: tiene ? comercio.permisosEmpleado.filter((p) => p !== clave && p !== dentro) : [...comercio.permisosEmpleado, clave] }));
   }
 
   return (
@@ -262,14 +270,35 @@ export function MisComercios() {
                   ? "Vale para los que dicen «Todos». Para elegir distinto a alguien, tocá «Qué ve» al lado de su nombre."
                   : "¿Querés que cada empleado vea algo distinto? Es una personalización: pedila a Mantenete y se activa en tu cuenta."}
               </p>
-              {permisosEn(comercio).map(({ seccion, clave }) => (
-                <label key={clave} className="flex items-center gap-2.5 text-[15px]">
-                  <input type="checkbox" checked={comercio.permisosEmpleado.includes(clave)} onChange={() => cambiarPermiso(clave)} className="size-4 accent-[var(--primary-color)]" />
-                  <span>
-                    {seccion.titulo} <span className="text-texto-suave">({enMinuscula(DETALLE[clave])})</span>
-                  </span>
-                </label>
-              ))}
+              {permisosEn(comercio).map(({ seccion, clave }) => {
+                const dentro = DENTRO_DE[clave];
+                const madrePrendida = comercio.permisosEmpleado.includes(clave);
+                return (
+                  <Fragment key={clave}>
+                    <label className="flex items-center gap-2.5 text-[15px]">
+                      <input type="checkbox" checked={madrePrendida} onChange={() => cambiarPermiso(clave)} className="size-4 accent-[var(--primary-color)]" />
+                      <span>
+                        {seccion.titulo} <span className="text-texto-suave">({enMinuscula(DETALLE[clave])})</span>
+                      </span>
+                    </label>
+                    {dentro && (
+                      <label className={`ml-6 flex items-center gap-2.5 text-[15px] ${madrePrendida ? "" : "opacity-50"}`}>
+                        <input
+                          type="checkbox"
+                          id={`permiso-todos-${dentro.clave}`}
+                          checked={madrePrendida && comercio.permisosEmpleado.includes(dentro.clave)}
+                          disabled={!madrePrendida}
+                          onChange={() => cambiarPermiso(dentro.clave)}
+                          className="size-4 accent-[var(--primary-color)]"
+                        />
+                        <span>
+                          {dentro.titulo} <span className="text-texto-suave">({enMinuscula(DETALLE[dentro.clave])})</span>
+                        </span>
+                      </label>
+                    )}
+                  </Fragment>
+                );
+              })}
             </fieldset>
           </div>
         </Tarjeta>
@@ -370,6 +399,8 @@ function QueVeElEmpleado({ empleado, comercio, alCerrar }: { empleado: Empleado;
                 if (!s.permiso) return <li key={s.ruta}><Interruptor id={`fija-${s.ruta.slice(1)}`} texto={s.titulo} detalle="Obligatorio para operar" prendido bloqueado /></li>;
                 const clave = s.permiso;
                 const prendido = elegidos.includes(clave);
+                const dentro = DENTRO_DE[clave];
+                const dentroPrendido = dentro ? prendido && elegidos.includes(dentro.clave) : false;
                 return (
                   <li key={s.ruta}>
                     <Interruptor
@@ -377,8 +408,20 @@ function QueVeElEmpleado({ empleado, comercio, alCerrar }: { empleado: Empleado;
                       texto={s.titulo}
                       detalle={DETALLE[clave]}
                       prendido={prendido}
-                      alCambiar={() => setElegidos(prendido ? elegidos.filter((x) => x !== clave) : [...elegidos, clave])}
+                      // Al apagar la pantalla se apaga también lo de adentro (sin Stock no hay dónde cambiar precios)
+                      alCambiar={() => setElegidos(prendido ? elegidos.filter((x) => x !== clave && x !== dentro?.clave) : [...elegidos, clave])}
                     />
+                    {dentro && prendido && (
+                      <div className="pl-6">
+                        <Interruptor
+                          id={`permiso-${dentro.clave}`}
+                          texto={dentro.titulo}
+                          detalle={DETALLE[dentro.clave]}
+                          prendido={dentroPrendido}
+                          alCambiar={() => setElegidos(dentroPrendido ? elegidos.filter((x) => x !== dentro.clave) : [...elegidos, dentro.clave])}
+                        />
+                      </div>
+                    )}
                   </li>
                 );
               })}

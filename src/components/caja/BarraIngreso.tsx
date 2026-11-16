@@ -10,6 +10,8 @@ import { useInterfaz } from "@/store/interfaz";
 type Props = { comercioId: number; productos: Producto[]; inputRef: RefObject<HTMLInputElement | null> };
 
 // La barra unificada:  [ Escanear producto... ] [ Cantidad ] [ Precio ] [ + Agregar ]
+// El precio NO se escribe acá: es siempre el de la lista (se cambia solo en Stock). Así no hay errores de tipeo
+// en la caja, y lo que se ve es lo que se cobra (en la nube la API ya usa el precio de la base, no el de la página).
 // - El lector de barras "escribe" el código y aprieta Enter: el producto se suma solo.
 // - Sin código: se escribe parte del nombre y se elige de la lista (con las flechas o el mouse).
 export function BarraIngreso({ comercioId, productos, inputRef }: Props) {
@@ -20,7 +22,6 @@ export function BarraIngreso({ comercioId, productos, inputRef }: Props) {
   const [texto, setTexto] = useState("");
   const [elegido, setElegido] = useState<Producto | null>(null);
   const [cantidad, setCantidad] = useState("1");
-  const [precio, setPrecio] = useState("");
   const [resaltado, setResaltado] = useState(0);
   const cantidadRef = useRef<HTMLInputElement>(null);
 
@@ -35,7 +36,6 @@ export function BarraIngreso({ comercioId, productos, inputRef }: Props) {
   function elegir(p: Producto) {
     setElegido(p);
     setTexto(p.nombre);
-    setPrecio(String(p.precioVenta));
     cantidadRef.current?.focus();
     cantidadRef.current?.select();
   }
@@ -44,7 +44,6 @@ export function BarraIngreso({ comercioId, productos, inputRef }: Props) {
     setTexto("");
     setElegido(null);
     setCantidad("1");
-    setPrecio("");
     setResaltado(0);
     inputRef.current?.focus();
   }
@@ -64,7 +63,7 @@ export function BarraIngreso({ comercioId, productos, inputRef }: Props) {
       productoId: producto.id,
       nombre: producto.nombre,
       cantidad: unidades,
-      precioUnitario: Number(precio) > 0 ? Number(precio) : producto.precioVenta,
+      precioUnitario: producto.precioVenta,
       categoria: producto.categoria,
     });
     limpiar();
@@ -139,20 +138,13 @@ export function BarraIngreso({ comercioId, productos, inputRef }: Props) {
           />
         </label>
 
-        <label className="flex flex-1 items-center sm:w-36 sm:flex-none">
-          <span className="pl-3 text-sm text-texto-suave">$</span>
-          <input
-            id="precio"
-            type="number"
-            min={0}
-            inputMode="numeric"
-            value={precio}
-            onChange={(e) => setPrecio(e.target.value)}
-            placeholder="Precio"
-            aria-label="Precio por unidad"
-            className={`${campo} w-full min-w-0 text-right`}
-          />
-        </label>
+        {/* Solo se muestra: el precio de lista del producto elegido */}
+        <div className="flex flex-1 items-center justify-end gap-1 px-3 sm:w-36 sm:flex-none" title="El precio se cambia en Stock">
+          <span className="sr-only">Precio por unidad:</span>
+          <span id="precio" aria-live="polite" className={`numeros ${elegido ? "font-medium" : "text-texto-suave"}`}>
+            {elegido ? pesos(elegido.precioVenta) : "$ —"}
+          </span>
+        </div>
 
         <button
           type="submit"

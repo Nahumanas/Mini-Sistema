@@ -82,7 +82,7 @@ export const useNube = create<EstadoNube>()((set, get) => ({
       const datos = await traerInicio();
       const cambiaDeModo = useDatos.getState().modo !== "nube";
       useDatos.getState().usarNube(datos);
-      if (cambiaDeModo) useCarrito.setState({ carritos: {} }); // lo que se estaba vendiendo en la demo no sigue
+      if (cambiaDeModo) useCarrito.setState({ carritos: {}, cancelados: {} }); // lo que se estaba vendiendo en la demo no sigue
       set({ estado: "lista", guardada: "" });
       guardarFotoDespues(0);
     } catch (err) {
@@ -92,7 +92,7 @@ export const useNube = create<EstadoNube>()((set, get) => ({
       if (foto) {
         const cambiaDeModo = useDatos.getState().modo !== "nube";
         useDatos.getState().usarNube(foto.datos);
-        if (cambiaDeModo) useCarrito.setState({ carritos: {} });
+        if (cambiaDeModo) useCarrito.setState({ carritos: {}, cancelados: {} });
         useConexionRed.setState({ estado: "sin_conexion", fallas: 2 });
         return set({ estado: "sin_conexion", guardada: foto.guardada, error: "" });
       }
@@ -118,7 +118,7 @@ export const useNube = create<EstadoNube>()((set, get) => ({
     set({ estado: "apagada", error: "" });
     useSuscripcion.setState(SIN_PLAN);
     if (useDatos.getState().modo === "nube") {
-      useCarrito.setState({ carritos: {} });
+      useCarrito.setState({ carritos: {}, cancelados: {} });
       void useDatos.getState().volverALaDemo();
     }
   },

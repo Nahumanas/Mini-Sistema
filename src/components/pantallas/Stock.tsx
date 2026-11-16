@@ -5,7 +5,9 @@ import { ClipboardList, Pencil, Plus, ScanBarcode, Search, Upload, X } from "luc
 import { categoriaParaGuardar, categoriasDe } from "@/lib/categorias";
 import { normalizar, pesos } from "@/lib/formato";
 import type { Producto } from "@/lib/tipos";
-import { useComercioActivo, useEsJefe } from "@/store/comercio";
+import { permisosDe } from "@/lib/navegacion";
+import { precioRaro } from "@/lib/precios";
+import { useComercioActivo, useEmpleadoActual, useEsJefe } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { ImportarProductos } from "../productos/ImportarProductos";
@@ -15,13 +17,21 @@ import { Boton, Campo, Chip, claseInput, Encabezado, Segmentado, Tabla, Tarjeta,
 
 type Filtro = "todos" | "bajo" | "inactivos";
 const VACIO = { codigo: "", nombre: "", categoria: "", precioVenta: "", costo: "", stock: "", stockMinimo: "", diasDuracion: "" };
-type Edicion = { id: number; nombre: string; categoria: string; codigo: string; precioVenta: string; stock: string; stockAntes: number; stockMinimo: string };
+type Edicion = { id: number; nombre: string; categoria: string; codigo: string; precioVenta: string; precioAntes: number; stock: string; stockAntes: number; stockMinimo: string };
+/** Un empleado con "Cambiar precios": solo el precio de venta. */
+type CambioPrecio = { id: number; nombre: string; precioVenta: string; precioAntes: number };
 
 // Los productos del comercio con su stock. El jefe edita precios, stock y crea productos;
-// el empleado solo mira (y avisa si algo no coincide).
+// el empleado mira (y avisa si algo no coincide), y si el jefe le dio "Cambiar precios", cambia solo el precio.
+// El precio se cambia SOLO acá: en la Caja se cobra siempre el de la lista.
 export function Stock() {
   const comercio = useComercioActivo();
   const esJefe = useEsJefe();
+  const empleado = useEmpleadoActual();
+  const puedePrecios = !esJefe && permisosDe(comercio, empleado).includes("precios");
+  const [cambiandoPrecio, setCambiandoPrecio] = useState<CambioPrecio | null>(null);
+  // Si el precio nuevo es raro (menos de la mitad o más del doble), se pide tocar Guardar otra vez: ataja el error de tipeo
+  const [confirmarPrecio, setConfirmarPrecio] = useState(false);
   const { productos: todos, actualizarProducto, crearProducto, asignarCodigo } = useDatos();
   const avisar = useInterfaz((s) => s.avisar);
   const [buscar, setBuscar] = useState("");
@@ -46,6 +56,7 @@ export function Stock() {
     if (!editando) return;
     const nombre = editando.nombre.trim().replace(/\s+/g, " ");
     if (!nombre) return avisar("El producto necesita un nombre.", "error");
+    if (!confirmarPrecio && precioRaro(editando.precioAntes, Number(editando.precioVenta))) return setConfirmarPrecio(true);
     try {
       await asignarCodigo(editando.id, editando.codigo);
       // El stock va solo si el jefe lo cambió, junto con el que veía: así no pisa lo que vendió otra compu mientras tanto.
@@ -62,7 +73,24 @@ export function Stock() {
       return avisar((err as Error).message, "error");
     }
     setEditando(null);
+    setConfirmarPrecio(false);
     avisar("Cambios guardados.");
+  }
+
+  async function guardarPrecio(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (!cambiandoPrecio) return;
+    const precio = Number(cambiandoPrecio.precioVenta);
+    if (!(precio > 0)) return avisar("Escribí el precio nuevo.", "error");
+    if (!confirmarPrecio && precioRaro(cambiandoPrecio.precioAntes, precio)) return setConfirmarPrecio(true);
+    try {
+      await actualizarProducto(cambiandoPrecio.id, { precioVenta: precio });
+    } catch (err) {
+      return avisar((err as Error).message, "error");
+    }
+    avisar(`Precio de ${cambiandoPrecio.nombre}: ${pesos(precio)}.`);
+    setCambiandoPrecio(null);
+    setConfirmarPrecio(false);
   }
 
   async function crear(e: React.FormEvent) {
@@ -160,7 +188,7 @@ export function Stock() {
             ...(esJefe ? [{ texto: "Costo", derecha: true, ocultarCelular: true }] : []),
             { texto: "Stock", derecha: true },
             { texto: "Mínimo", derecha: true, ocultarCelular: true },
-            ...(esJefe ? [{ texto: "" }] : []),
+            ...(esJefe || puedePrecios ? [{ texto: "" }] : []),
           ]}
         >
           {visibles.map((p: Producto) => (
@@ -181,7 +209,7 @@ export function Stock() {
                 <td className="whitespace-nowrap px-2 py-2.5 text-right">
                   <button
                     onClick={() =>
-                      setEditando({ id: p.id, nombre: p.nombre, categoria: p.categoria, codigo: p.codigo, precioVenta: String(p.precioVenta), stock: String(p.stock), stockAntes: p.stock, stockMinimo: String(p.stockMinimo) })
+                      setEditando({ id: p.id, nombre: p.nombre, categoria: p.categoria, codigo: p.codigo, precioVenta: String(p.precioVenta), precioAntes: p.precioVenta, stock: String(p.stock), stockAntes: p.stock, stockMinimo: String(p.stockMinimo) })
                     }
                     className="rounded-md p-1.5 text-texto-suave hover:bg-superficie-suave hover:text-texto"
                     aria-label={`Editar ${p.nombre}`}
@@ -192,6 +220,20 @@ export function Stock() {
                   <button onClick={() => actualizarProducto(p.id, { activo: !p.activo }).catch((err: Error) => avisar(err.message, "error"))} className="ml-1 rounded-md px-2 py-1 text-xs text-texto-suave hover:bg-superficie-suave hover:text-texto">
                     {p.activo ? "Dar de baja" : "Reactivar"}
                   </button>
+                </td>
+              )}
+              {puedePrecios && (
+                <td className="whitespace-nowrap px-2 py-2.5 text-right">
+                  {p.activo && (
+                    <button
+                      onClick={() => setCambiandoPrecio({ id: p.id, nombre: p.nombre, precioVenta: String(p.precioVenta), precioAntes: p.precioVenta })}
+                      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-texto-suave hover:bg-superficie-suave hover:text-texto"
+                      aria-label={`Cambiar el precio de ${p.nombre}`}
+                    >
+                      <Pencil className="size-4" />
+                      <span className="hidden sm:inline">Precio</span>
+                    </button>
+                  )}
                 </td>
               )}
             </tr>
@@ -205,11 +247,14 @@ export function Stock() {
         <Dialogo
           titulo="Editar producto"
           descripcion="Los cambios se ven enseguida en la caja y en las promos."
-          alCerrar={() => setEditando(null)}
+          alCerrar={() => {
+            setEditando(null);
+            setConfirmarPrecio(false);
+          }}
           pie={
             <>
-              <Boton variante="fantasma" onClick={() => setEditando(null)}>Cancelar</Boton>
-              <Boton type="submit" form="editar-producto" variante="primario">Guardar cambios</Boton>
+              <Boton variante="fantasma" onClick={() => { setEditando(null); setConfirmarPrecio(false); }}>Cancelar</Boton>
+              <Boton type="submit" form="editar-producto" variante="primario">{confirmarPrecio ? "Sí, guardar" : "Guardar cambios"}</Boton>
             </>
           }
         >
@@ -223,8 +268,9 @@ export function Stock() {
               <input id="editar-codigo" value={editando.codigo} onChange={(e) => setEditando({ ...editando, codigo: e.target.value })} placeholder="sin código" autoComplete="off" className={`${claseInput} numeros`} />
             </Campo>
             <Campo etiqueta="Precio de venta ($)">
-              <input id="editar-precio" type="number" min={0} value={editando.precioVenta} onChange={(e) => setEditando({ ...editando, precioVenta: e.target.value })} required className={`${claseInput} numeros`} />
+              <input id="editar-precio" type="number" min={0} value={editando.precioVenta} onChange={(e) => { setEditando({ ...editando, precioVenta: e.target.value }); setConfirmarPrecio(false); }} required className={`${claseInput} numeros`} />
             </Campo>
+            {confirmarPrecio && <AvisoPrecioRaro antes={editando.precioAntes} className="sm:col-span-2" />}
             <Campo etiqueta="Stock">
               <input id="editar-stock" type="number" value={editando.stock} onChange={(e) => setEditando({ ...editando, stock: e.target.value })} className={`${claseInput} numeros`} />
             </Campo>
@@ -234,7 +280,37 @@ export function Stock() {
           </form>
         </Dialogo>
       )}
+
+      {cambiandoPrecio && (
+        <Dialogo
+          titulo={`Precio de ${cambiandoPrecio.nombre}`}
+          descripcion="El precio nuevo se cobra enseguida en la Caja."
+          alCerrar={() => { setCambiandoPrecio(null); setConfirmarPrecio(false); }}
+          pie={
+            <>
+              <Boton variante="fantasma" onClick={() => { setCambiandoPrecio(null); setConfirmarPrecio(false); }}>Cancelar</Boton>
+              <Boton type="submit" form="cambiar-precio" variante="primario">{confirmarPrecio ? "Sí, guardar" : "Guardar precio"}</Boton>
+            </>
+          }
+        >
+          <form id="cambiar-precio" onSubmit={guardarPrecio} className="flex flex-col gap-4 pb-1">
+            <p className="numeros text-sm text-texto-suave">Precio de ahora: {pesos(cambiandoPrecio.precioAntes)}</p>
+            <Campo etiqueta="Precio nuevo ($)">
+              <input id="precio-nuevo" type="number" min={0} inputMode="numeric" autoFocus value={cambiandoPrecio.precioVenta} onChange={(e) => { setCambiandoPrecio({ ...cambiandoPrecio, precioVenta: e.target.value }); setConfirmarPrecio(false); }} required className={`${claseInput} numeros`} />
+            </Campo>
+            {confirmarPrecio && <AvisoPrecioRaro antes={cambiandoPrecio.precioAntes} />}
+          </form>
+        </Dialogo>
+      )}
     </div>
+  );
+}
+
+function AvisoPrecioRaro({ antes, className = "" }: { antes: number; className?: string }) {
+  return (
+    <p role="alert" className={`numeros rounded-md border border-amber-400/50 bg-amber-400/10 p-3 text-sm ${className}`}>
+      Ojo: el precio nuevo es muy distinto del de ahora ({pesos(antes)}). ¿Lo escribiste bien? Si está bien, tocá «Sí, guardar».
+    </p>
   );
 }
 

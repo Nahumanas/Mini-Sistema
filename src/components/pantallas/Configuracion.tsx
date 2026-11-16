@@ -60,7 +60,7 @@ export function Configuracion() {
                   icono={RotateCcw}
                   onClick={() => {
                     reiniciar();
-                    useCarrito.setState({ carritos: {} });
+                    useCarrito.setState({ carritos: {}, cancelados: {} });
                     setConfirmando(false);
                     avisar("Listo: volviste a los datos de prueba del principio.");
                   }}
