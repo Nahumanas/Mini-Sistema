@@ -99,7 +99,7 @@ export function MisComercios() {
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <Encabezado
         titulo="Mis comercios"
-        descripcion="Cada sucursal es gratis. Los datos de cada una quedan separados."
+        descripcion="Los datos de cada comercio quedan separados."
         acciones={!creando && <Boton variante="primario" icono={Plus} onClick={() => setCreando(true)}>Agregar un comercio</Boton>}
       />
 

@@ -45,7 +45,7 @@ export function Condiciones() {
             e incluyen el mantenimiento.
           </p>
           <p>El primer mes es gratis, para que tengas tiempo de adaptarte al sistema.</p>
-          <p>Cada negocio o rubro adicional del mismo dueño suma un costo por mes. Si tu comercio necesita una personalización, se cotiza aparte.</p>
+          <p>Cada comercio o sucursal adicional del mismo dueño suma un costo por mes. Si tu comercio necesita una personalización, se cotiza aparte.</p>
         </Seccion>
 
         <Seccion titulo="Aumentos">

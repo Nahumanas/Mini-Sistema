@@ -221,7 +221,7 @@ function Problema() {
 
 const CARACTERISTICAS: { icono: LucideIcon; gesto: Gesto; titulo: string; texto: string; pronto?: boolean }[] = [
   { icono: RefreshCw, gesto: "girar", titulo: "Relevos sin cerrar caja", texto: "Cambiá de turno sin frenar el negocio. Controlá qué empleado operó y si hubo faltantes en ese tramo." },
-  { icono: Store, gesto: "saltar", titulo: "Varios comercios, un solo panel", texto: "Si tenés más de un local, controlá todos desde tu celular en un solo panel. Las sucursales no se cobran aparte." },
+  { icono: Store, gesto: "saltar", titulo: "Varios comercios, un solo panel", texto: "Si tenés más de un local, controlá todos desde tu celular en un solo panel." },
   {
     icono: Send,
     gesto: "volar",
@@ -282,7 +282,7 @@ function Caracteristicas() {
 
 // ---------- 4. Planes ----------
 
-const INCLUYE = ["Caja con lector de código de barras", "Stock, compras, gastos y vencimientos", "Reportes de ganancias y Excel", "Empleados con permisos y relevos", "Sucursales sin costo extra"];
+const INCLUYE = ["Caja con lector de código de barras", "Stock, compras, gastos y vencimientos", "Reportes de ganancias y Excel", "Empleados con permisos y relevos", "Todos tus comercios en una sola cuenta"];
 
 function Planes() {
   return (

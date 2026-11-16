@@ -603,7 +603,7 @@ function PrimerComercio() {
     >
       <div>
         <h1 className="text-xl font-semibold tracking-tight">¡Bienvenido a Mantenete!</h1>
-        <p className="mt-1 text-sm text-texto-suave">Para empezar, cargá tu comercio. Si tenés más sucursales, las agregás después en Mis comercios (son gratis).</p>
+        <p className="mt-1 text-sm text-texto-suave">Para empezar, cargá tu comercio. Si tenés más sucursales, las agregás después en Mis comercios.</p>
       </div>
       <CamposComercio nuevo={nuevo} cambiar={setNuevo} prefijo="primer" />
       {error && <p className="text-sm text-peligro">{error}</p>}
