@@ -9,6 +9,7 @@ from ..base import como_usuario, en_viajes
 from ..cifrado import Llave
 from ..formato import a_camel
 from ..llaves import llave_requerida
+from ..permisos import es_jefe, exigir, solo_jefe
 from ..sobres import Cofre, por_nombre
 from .comercios import nombre_comparable
 from .comun import LEER_CLAVES, LEER_COMERCIO, existe
@@ -95,6 +96,7 @@ def listar(comercio_id: int, usuario: Usuario = Depends(usuario_actual), llave: 
 @router.post("/comercios/{comercio_id}/productos", status_code=201)
 def crear(comercio_id: int, datos: NuevoProducto, usuario: Usuario = Depends(usuario_actual),
           llave: Llave = Depends(llave_requerida)):
+    solo_jefe(llave)  # dar de alta productos es del jefe (el empleado los ve en Stock y los vende en la Caja)
     codigo, nombre = datos.codigo.strip(), _limpio(datos.nombre)
     try:
         with como_usuario(usuario, llave, "alta") as con:
@@ -120,6 +122,10 @@ def actualizar(producto_id: int, cambios: CambiosProducto, usuario: Usuario = De
                llave: Llave = Depends(llave_requerida)):
     # null solo vale para "Dura X días" (sacarle el vencimiento); en lo demás se ignora.
     valores = {k: v for k, v in cambios.model_dump(exclude_unset=True).items() if v is not None or k == "diasDuracion"}
+    # Un empleado solo puede cambiar el precio de venta, y solo si el jefe le dio "Cambiar precios" (se mira abajo,
+    # con el comercio del producto). Lo demás (nombre, código, stock, costo, dar de baja) es del jefe.
+    if not es_jefe(llave) and set(valores) - {"precioVenta"}:
+        solo_jefe(llave)
     stock_antes = valores.pop("stockAntes", None)
     if "nombre" in valores:
         valores["nombre"] = _limpio(valores["nombre"])
@@ -134,6 +140,7 @@ def actualizar(producto_id: int, cambios: CambiosProducto, usuario: Usuario = De
             )
             if actual is None:
                 raise HTTPException(404, "No existe ese producto.")
+            exigir(con, llave, actual["comercio_id"], "precios")  # al jefe no le consulta nada
             if "stock" in valores and stock_antes is not None and Decimal(str(stock_antes)) != actual["stock"]:
                 raise HTTPException(409, f"Mientras editabas, otra compu vendió o cargó {actual['nombre']}: ahora hay "
                                          f"{actual['stock']:g}. Revisá el stock y guardá de nuevo.")
@@ -161,6 +168,7 @@ def importar(comercio_id: int, datos: Importacion, usuario: Usuario = Depends(us
              llave: Llave = Depends(llave_requerida)):
     """La lista de productos del Excel: si el producto ya existe se actualiza, si no se crea. Todo o nada.
     Se busca por el código; si la fila no tiene código, por el nombre (sin mayúsculas ni tildes)."""
+    solo_jefe(llave)
     nuevos = actualizados = 0
     productos = []
     with como_usuario(usuario, llave, "importar") as con:

@@ -5,7 +5,8 @@ import type { MedioDePago } from "./formato";
 
 export type Rubro = "kiosco" | "ferreteria" | "ropa" | "almacen" | "panaderia" | "gimnasio" | "otro";
 
-export type Permiso = "panel_del_dia" | "stock" | "compras" | "gastos" | "vencimientos" | "socios" | "cuotas" | "clases";
+// "precios" no es una pantalla: deja cambiar el precio de venta desde Stock (va colgado de Stock en Mis comercios)
+export type Permiso = "panel_del_dia" | "stock" | "precios" | "compras" | "gastos" | "vencimientos" | "socios" | "cuotas" | "clases";
 
 export type Comercio = {
   id: number;

@@ -30,6 +30,7 @@ type Props = {
 export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar, conMercadoPago }: Props) {
   const items = useItemsDe(comercioId);
   const vaciar = useCarrito((s) => s.vaciar);
+  const cancelar = useCarrito((s) => s.cancelar);
   const registrarVenta = useDatos((s) => s.registrarVenta);
   const comercio = useDatos((s) => s.comercios.find((c) => c.id === comercioId));
   const sesion = useSesion((s) => s.sesion);
@@ -202,7 +203,7 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar, conMer
           <button
             type="button"
             onClick={() => {
-              vaciar(comercioId);
+              cancelar(comercioId); // se puede deshacer hasta que se agregue otro producto
               setPagaCon("");
             }}
             disabled={vacio}
