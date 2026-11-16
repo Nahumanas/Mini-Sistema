@@ -2,6 +2,7 @@ import unicodedata
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
+from psycopg import errors
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
@@ -55,6 +56,9 @@ _COLUMNAS = {"nombre": "nombre", "rubro": "rubro", "direccion": "direccion", "us
 PERMISOS_INICIALES = {"gimnasio": ["panel_del_dia", "stock", "socios", "cuotas", "clases"]}
 PERMISOS_COMUNES = ["panel_del_dia", "stock", "compras"]
 
+# Se cobra por cantidad de comercios: la base frena el comercio de más (migración 20261117000000_tope_de_comercios.sql)
+TOPE_COMERCIOS = "Ya usaste todos los comercios de tu plan. Para sumar otro comercio, hablá con Mantenete."
+
 
 @router.get("/comercios")
 def listar(usuario: Usuario = Depends(usuario_actual)):
@@ -76,12 +80,17 @@ def crear(datos: NuevoComercio, usuario: Usuario = Depends(usuario_actual), llav
             raise HTTPException(423, VOLVER_A_PONER)
         if dueno["cifrado"] and llave.dueno is None:
             raise HTTPException(403, "Solo el jefe puede crear comercios.")
-        fila = con.execute(
-            """insert into public.comercios (dueno_id, nombre, rubro, direccion, usa_ticket, permisos_empleado)
-               values (privado.mi_dueno_id(), %s, %s, %s, %s, %s) returning *""",
-            (datos.nombre.strip(), datos.rubro, datos.direccion.strip(), datos.usaTicket,
-             PERMISOS_INICIALES.get(datos.rubro, PERMISOS_COMUNES)),
-        ).fetchone()
+        try:
+            fila = con.execute(
+                """insert into public.comercios (dueno_id, nombre, rubro, direccion, usa_ticket, permisos_empleado)
+                   values (privado.mi_dueno_id(), %s, %s, %s, %s, %s) returning *""",
+                (datos.nombre.strip(), datos.rubro, datos.direccion.strip(), datos.usaTicket,
+                 PERMISOS_INICIALES.get(datos.rubro, PERMISOS_COMUNES)),
+            ).fetchone()
+        except errors.RaiseException as error:
+            if (error.diag.message_primary or "") == "TOPE_COMERCIOS":
+                raise HTTPException(409, TOPE_COMERCIOS) from None
+            raise
         if dueno["cifrado"]:
             crear_clave_comercio(con, llave.dueno, fila["id"])
     return a_camel(fila)

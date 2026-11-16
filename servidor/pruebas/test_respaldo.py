@@ -18,7 +18,7 @@ from respaldo import paquete
 from respaldo.paquete import CopiaInservible
 from respaldo.probar_descifrado import abrir_dueno
 
-from .conftest import BASE, PIN_DE_PRUEBA, _psql, token_para
+from .conftest import BASE, PIN_DE_PRUEBA, _psql, dar_comercios, token_para
 
 RESPALDO = Path(__file__).resolve().parents[1] / "respaldo"
 
@@ -29,6 +29,7 @@ def _dueno_con_frase(email: str) -> tuple[dict, str]:
 
     uid = str(uuid.uuid4())
     _psql("-d", BASE, "-c", f"insert into auth.users (id, email, invited_at) values ('{uid}', '{email}', now())")
+    dar_comercios(uid, 20)
     encabezados = {"Authorization": f"Bearer {token_para(uid, email)}"}
     cliente = TestClient(app)
     assert cliente.put("/yo/pin", json={"nuevo": PIN_DE_PRUEBA}, headers=encabezados).status_code == 200

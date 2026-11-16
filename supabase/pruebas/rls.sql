@@ -132,6 +132,28 @@ do $$ begin
   end;
 end $$;
 
+-- ---------- Tope de comercios: Ana tiene 1 pago (lo que trae el plan) y ya lo usó ----------
+-- Desde el navegador (con su sesión, sin pasar por la API) tampoco puede sumar otro.
+do $$ begin
+  begin
+    insert into public.comercios (dueno_id, nombre, rubro) values ((select privado.mi_dueno_id()), 'Sucursal de Ana', 'kiosco');
+    raise exception 'FALLA: Ana creó un segundo comercio sin tenerlo pago';
+  exception when raise_exception then
+    if sqlerrm <> 'TOPE_COMERCIOS' then raise; end if;
+  end;
+  -- Y no puede subirse el tope ella misma
+  begin
+    update privado.clientes set comercios_pagos = 50;
+    raise exception 'FALLA: Ana pudo cambiar sus comercios pagos';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform privado.admin_comercios_pagos((select privado.mi_dueno_id()), 50);
+    raise exception 'FALLA: Ana pudo usar la función del administrador';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
 -- ---------- Ahora entra Beto ----------
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', false) \gset ignorar_
 insert into public.comercios (dueno_id, nombre, rubro) values ((select id from public.duenos), 'Ferretería de Beto', 'ferreteria');

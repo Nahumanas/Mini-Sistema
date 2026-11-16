@@ -74,18 +74,31 @@ def token_para(usuario_id: str, email: str, llave=LLAVE, vence_en: int = 3600, *
 PIN_DE_PRUEBA = "4826"
 
 
-def crear_usuario(email: str, invitado: bool = True, cifrado: bool = True) -> dict:
+def crear_usuario(email: str, invitado: bool = True, cifrado: bool = True, comercios_pagos: int | None = 20) -> dict:
     """Como cuando Nahuel invita un Gmail (o alguien se cuela sin invitación).
 
     Con cifrado (lo normal desde la parte 3), el dueño ya eligió su PIN (PIN_DE_PRUEBA), activó el cifrado
-    y entró como jefe: los encabezados llevan su llave de sesión (X-Llave), como los manda la página."""
+    y entró como jefe: los encabezados llevan su llave de sesión (X-Llave), como los manda la página.
+
+    comercios_pagos: cuántos comercios puede crear (el tope de la migración 20261117000000). Las pruebas
+    arrancan con muchos para que el tope no se meta en lo que prueban; None = sin ficha en privado.clientes
+    (como un cliente recién invitado: tope 1)."""
     uid = str(uuid.uuid4())
     sql = f"insert into auth.users (id, email, invited_at) values ('{uid}', '{email}', {'now()' if invitado else 'null'})"
     _psql("-d", BASE, "-c", sql)
+    if invitado and comercios_pagos is not None:
+        dar_comercios(uid, comercios_pagos)
     encabezados = {"Authorization": f"Bearer {token_para(uid, email)}"}
     if invitado and cifrado:
         encabezados["X-Llave"] = activar_cifrado(encabezados)
     return encabezados
+
+
+def dar_comercios(usuario_id: str, cantidad: int) -> None:
+    """Le deja crear hasta `cantidad` comercios (como si Nahuel se lo subiera en /admin). Su plan queda en "prueba"."""
+    _psql("-d", BASE, "-c",
+          f"insert into privado.clientes (dueno_id, comercios_pagos) select id, {int(cantidad)} from public.duenos "
+          f"where usuario_id = '{usuario_id}' on conflict (dueno_id) do update set comercios_pagos = excluded.comercios_pagos")
 
 
 def cargar_empleado(cliente, jefe: dict, comercio_id: int, nombre: str = "Martina") -> int:
