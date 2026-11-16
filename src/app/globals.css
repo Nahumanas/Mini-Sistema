@@ -148,6 +148,65 @@ input[type="number"] {
   }
 }
 
+/* ---------- Arqueo que cierra (components/landing/ArqueoQueCierra.tsx) ----------
+   "quieto": se ve completo (sin JavaScript o con reducir movimiento).
+   "listo": escondido, esperando que la persona llegue con el scroll.
+   "corriendo": cada fila aparece 0,25 s después de la anterior (--paso) y al final sale el sello. */
+.arqueo-listo .arqueo-paso,
+.arqueo-listo .arqueo-sello {
+  opacity: 0;
+}
+.arqueo-corriendo .arqueo-paso {
+  animation: entrada-suave 0.4s cubic-bezier(0.22, 1, 0.36, 1) calc(var(--paso) * 0.25s) backwards;
+}
+/* El sello aparece cuando el contado ya llegó (0,45 s + 0,9 s de conteo) con un pequeño "pop" */
+@keyframes arqueo-sello {
+  0% { opacity: 0; transform: scale(0.9); }
+  60% { opacity: 1; transform: scale(1.04); }
+  100% { opacity: 1; transform: none; }
+}
+.arqueo-corriendo .arqueo-sello {
+  animation: arqueo-sello 0.45s ease-out 1.5s backwards;
+}
+
+/* ---------- Íconos que reaccionan (tarjetas de la landing) ----------
+   Solo al pasar el mouse por la tarjeta (.group), solo en aparatos con mouse (hover: hover)
+   y nunca con "reducir movimiento". En el celular no pasa nada: no hay mouse que pase. */
+@keyframes icono-girar { to { transform: rotate(360deg); } }
+@keyframes icono-volar {
+  0% { transform: none; opacity: 1; }
+  45% { transform: translate(14px, -14px); opacity: 0; }
+  46% { transform: translate(-14px, 14px); opacity: 0; }
+  100% { transform: none; opacity: 1; }
+}
+@keyframes icono-saltar {
+  0%, 100% { transform: none; }
+  40% { transform: translateY(-5px); }
+  70% { transform: translateY(1px); }
+}
+@keyframes icono-avanzar {
+  0%, 100% { transform: none; }
+  50% { transform: translateX(4px); }
+}
+@keyframes icono-sacudir {
+  0%, 100% { transform: none; }
+  25% { transform: rotate(-12deg); }
+  50% { transform: rotate(10deg); }
+  75% { transform: rotate(-6deg); }
+}
+@keyframes icono-mecer {
+  0%, 100% { transform: none; }
+  50% { transform: rotate(25deg); }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .group:hover .icono-girar { animation: icono-girar 0.6s ease-in-out; }
+  .group:hover .icono-volar { animation: icono-volar 0.6s ease-in-out; }
+  .group:hover .icono-saltar { animation: icono-saltar 0.45s ease-out; }
+  .group:hover .icono-avanzar { animation: icono-avanzar 0.4s ease-in-out 2; }
+  .group:hover .icono-sacudir { animation: icono-sacudir 0.45s ease-in-out; }
+  .group:hover .icono-mecer { animation: icono-mecer 0.6s ease-in-out; }
+}
+
 /* ---------- Caja animada de la portada (components/landing/CajaAnimada.tsx) ----------
    Todo dura 2,5 s y corre una sola vez. Cada parte usa la misma duración, así los
    porcentajes son el mismo "reloj": 16% = 0,4 s · 32% = 0,8 s · 40% = 1 s · 80% = 2 s.
@@ -254,6 +313,8 @@ input[type="number"] {
 @media (prefers-reduced-motion: reduce) {
   .entrada-suave,
   .revelar,
+  .arqueo-paso,
+  .arqueo-sello,
   .brillo-boton::after,
   .pulso-suave,
   .caja-salto,
