@@ -25,18 +25,42 @@ export function TablaCarrito({ comercioId, productos, cuenta }: { comercioId: nu
   }
 
   const boton =
-    "flex size-8 items-center justify-center rounded-md border border-borde text-texto-suave hover:bg-superficie-suave hover:text-texto disabled:cursor-not-allowed disabled:opacity-40";
+    "flex size-11 shrink-0 items-center justify-center rounded-md border border-borde text-texto-suave hover:bg-superficie-suave hover:text-texto disabled:cursor-not-allowed disabled:opacity-40";
+
+  // − cantidad +  (cada botón de 44 px: se tocan con el dedo con el cliente adelante)
+  const controles = (item: (typeof items)[number], stock: number) => (
+    <div className="flex items-center justify-center gap-2">
+      <button
+        className={boton}
+        onClick={() => cambiarCantidad(comercioId, item.productoId, item.cantidad - 1)}
+        disabled={item.cantidad <= 1}
+        aria-label={`Uno menos de ${item.nombre}`}
+      >
+        <Minus className="size-4" />
+      </button>
+      <span className="w-8 text-center font-medium">{item.cantidad}</span>
+      <button
+        className={boton}
+        onClick={() => cambiarCantidad(comercioId, item.productoId, item.cantidad + 1)}
+        disabled={item.cantidad >= stock}
+        aria-label={`Uno más de ${item.nombre}`}
+        title={item.cantidad >= stock ? `No hay más en stock (hay ${stock})` : undefined}
+      >
+        <Plus className="size-4" />
+      </button>
+    </div>
+  );
 
   return (
     <div className="relative overflow-x-auto rounded-lg border border-borde bg-superficie">
       <table className="numeros w-full text-left">
         <thead>
           <tr className="border-b border-borde text-xs uppercase tracking-wider text-texto-suave">
-            <th className="px-4 py-2.5 font-medium">Producto</th>
-            <th className="px-2 py-2.5 text-center font-medium sm:px-4">Cantidad</th>
+            <th className="px-3 py-2.5 font-medium sm:px-4">Producto</th>
+            <th className="hidden px-4 py-2.5 text-center font-medium sm:table-cell">Cantidad</th>
             <th className="hidden px-4 py-2.5 text-right font-medium sm:table-cell">Precio</th>
             <th className="px-2 py-2.5 text-right font-medium sm:px-4">Subtotal</th>
-            <th className="w-10 px-1 py-2.5 sm:w-12 sm:px-2">
+            <th className="hidden w-14 px-1.5 py-2.5 sm:table-cell">
               <span className="sr-only">Quitar</span>
             </th>
           </tr>
@@ -47,45 +71,37 @@ export function TablaCarrito({ comercioId, productos, cuenta }: { comercioId: nu
             const linea = cuenta.lineas[indice];
             return (
               <tr key={item.productoId} className="border-b border-borde last:border-b-0 hover:bg-superficie-suave/60">
-                <td className="px-4 py-3">
+                <td className="px-3 py-3 sm:px-4">
                   {item.nombre}
                   {linea?.promos.length > 0 && <span className="block text-sm text-positivo">{linea.promos.join(" + ")}</span>}
                   {/* En el celular no entra la columna Precio: va abajo del nombre */}
                   <span className="block text-sm text-texto-suave sm:hidden">{pesos(item.precioUnitario)} c/u</span>
-                </td>
-                <td className="px-2 py-3 sm:px-4">
-                  <div className="flex items-center justify-center gap-1 sm:gap-2">
+                  {/* En el celular no entran las columnas Cantidad y Quitar con botones de 44 px: van abajo del nombre */}
+                  <div className="mt-2 flex items-center gap-1 sm:hidden">
+                    {controles(item, stock)}
                     <button
-                      className={boton}
-                      onClick={() => cambiarCantidad(comercioId, item.productoId, item.cantidad - 1)}
-                      disabled={item.cantidad <= 1}
-                      aria-label={`Uno menos de ${item.nombre}`}
+                      onClick={() => quitar(comercioId, item.productoId)}
+                      className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-sm text-texto-suave hover:text-peligro"
+                      aria-label={`Quitar ${item.nombre}`}
                     >
-                      <Minus className="size-3.5" />
-                    </button>
-                    <span className="w-6 text-center font-medium sm:w-8">{item.cantidad}</span>
-                    <button
-                      className={boton}
-                      onClick={() => cambiarCantidad(comercioId, item.productoId, item.cantidad + 1)}
-                      disabled={item.cantidad >= stock}
-                      aria-label={`Uno más de ${item.nombre}`}
-                      title={item.cantidad >= stock ? `No hay más en stock (hay ${stock})` : undefined}
-                    >
-                      <Plus className="size-3.5" />
+                      <X className="size-4" /> Quitar
                     </button>
                   </div>
                 </td>
+                <td className="hidden px-4 py-2 sm:table-cell">
+                  {controles(item, stock)}
+                </td>
                 <td className="hidden px-4 py-3 text-right text-texto-suave sm:table-cell">{pesos(item.precioUnitario)}</td>
-                <td className="whitespace-nowrap px-2 py-3 text-right font-semibold sm:px-4">
+                <td className="whitespace-nowrap py-3 pl-1 pr-3 text-right align-top font-semibold sm:px-4 sm:align-middle">
                   {pesos(linea?.total ?? item.cantidad * item.precioUnitario)}
                   {linea?.descuento > 0 && (
                     <span className="block text-sm font-normal text-texto-suave line-through">{pesos(item.cantidad * item.precioUnitario)}</span>
                   )}
                 </td>
-                <td className="px-1 py-3 sm:px-2">
+                <td className="hidden px-1.5 py-2 sm:table-cell">
                   <button
                     onClick={() => quitar(comercioId, item.productoId)}
-                    className="flex size-8 items-center justify-center rounded-md text-texto-suave hover:bg-superficie-suave hover:text-peligro"
+                    className="flex size-11 items-center justify-center rounded-md text-texto-suave hover:bg-superficie-suave hover:text-peligro"
                     aria-label={`Quitar ${item.nombre}`}
                   >
                     <X className="size-4" />
@@ -97,7 +113,7 @@ export function TablaCarrito({ comercioId, productos, cuenta }: { comercioId: nu
         </tbody>
         <tfoot>
           <tr className="border-t border-borde text-sm text-texto-suave">
-            <td colSpan={5} className="px-4 py-2.5">
+            <td colSpan={5} className="px-3 py-2.5 sm:px-4">
               {items.length} {items.length === 1 ? "producto" : "productos"} · {unidades}{" "}
               {unidades === 1 ? "unidad" : "unidades"}
             </td>

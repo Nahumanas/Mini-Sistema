@@ -109,7 +109,7 @@ export function PointOfSale() {
             onClick={() => setRelevando(true)}
             disabled={sinInternet}
             title={sinInternet ? "Necesita internet" : undefined}
-            className="inline-flex items-center gap-1.5 rounded-md border border-borde bg-superficie px-3 py-1.5 text-sm hover:bg-superficie-suave disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-borde bg-superficie px-3.5 text-[15px] hover:bg-superficie-suave disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Repeat className="size-3.5" />
             Relevo de turno
@@ -118,7 +118,7 @@ export function PointOfSale() {
             onClick={() => setCerrando(true)}
             disabled={sinInternet}
             title={sinInternet ? "Necesita internet" : undefined}
-            className="inline-flex items-center gap-1.5 rounded-md border border-borde bg-superficie px-3 py-1.5 text-sm hover:bg-superficie-suave disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-borde bg-superficie px-3.5 text-[15px] hover:bg-superficie-suave disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Lock className="size-3.5" />
             Cerrar caja

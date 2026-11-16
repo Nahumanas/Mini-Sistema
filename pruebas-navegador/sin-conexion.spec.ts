@@ -153,7 +153,7 @@ async function abrirCajaConInternet(page: Page) {
 }
 
 async function venderUnAlfajor(page: Page) {
-  const buscador = page.getByPlaceholder("Escanear producto o escribir el nombre…");
+  const buscador = page.getByPlaceholder("Escanear o escribir el nombre…");
   await buscador.fill("779001"); // como el lector de barras: el código y Enter
   await buscador.press("Enter");
   await expect(page.getByRole("cell", { name: "Alfajor", exact: true })).toBeVisible();
