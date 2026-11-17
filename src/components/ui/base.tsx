@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { ArrowDown, ArrowDownRight, ArrowUpRight } from "lucide-react";
 
 // Las piezas que se repiten en todas las pantallas. Si se cambia una acá, cambia en todo el sistema.
 
@@ -144,16 +144,36 @@ export function Segmentado<T extends string>({ opciones, valor, alCambiar, etiqu
   );
 }
 
+/** Una columna de la tabla. Con `ordenar`, el título se puede tocar para ordenar la tabla por esa columna (de mayor a menor). */
+export type Columna = { texto: string; derecha?: boolean; ocultarCelular?: boolean; ordenar?: { activa: boolean; alTocar: () => void } };
+
 /** Una tabla con borde de 1 px. Si no entra en el celular, se desliza de costado (solo la tabla). */
-export function Tabla({ columnas, children, pie }: { columnas: { texto: string; derecha?: boolean; ocultarCelular?: boolean }[]; children: ReactNode; pie?: ReactNode }) {
+export function Tabla({ columnas, children, pie }: { columnas: Columna[]; children: ReactNode; pie?: ReactNode }) {
   return (
     <div className="relative overflow-x-auto rounded-lg border border-borde bg-superficie">
       <table className="numeros w-full text-left text-[15px]">
         <thead>
           <tr className="border-b border-borde text-xs uppercase tracking-wider text-texto-suave">
             {columnas.map((c, i) => (
-              <th key={i} className={`whitespace-nowrap px-4 py-2.5 font-medium ${c.derecha ? "text-right" : ""} ${c.ocultarCelular ? "hidden sm:table-cell" : ""}`}>
-                {c.texto}
+              <th
+                key={i}
+                aria-sort={c.ordenar?.activa ? "descending" : undefined}
+                className={`whitespace-nowrap font-medium ${c.ordenar ? "p-0" : "px-4 py-2.5"} ${c.derecha ? "text-right" : ""} ${c.ocultarCelular ? "hidden sm:table-cell" : ""}`}
+              >
+                {c.ordenar ? (
+                  // Todo el título es el botón (no solo la flechita): más fácil de tocar
+                  <button
+                    type="button"
+                    onClick={c.ordenar.alTocar}
+                    title={c.ordenar.activa ? `Ordenado por ${c.texto.toLowerCase()}, de mayor a menor` : `Ordenar por ${c.texto.toLowerCase()}`}
+                    className={`inline-flex w-full items-center gap-1 px-4 py-2.5 uppercase tracking-wider hover:text-texto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${c.derecha ? "justify-end" : ""} ${c.ordenar.activa ? "text-texto" : ""}`}
+                  >
+                    {c.texto}
+                    <ArrowDown aria-hidden className={`size-3.5 ${c.ordenar.activa ? "" : "opacity-0"}`} strokeWidth={2.25} />
+                  </button>
+                ) : (
+                  c.texto
+                )}
               </th>
             ))}
           </tr>
