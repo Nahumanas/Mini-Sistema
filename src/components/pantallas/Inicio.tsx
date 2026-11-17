@@ -111,7 +111,7 @@ function Insignias({ comercio, corto = false }: { comercio: Comercio; corto?: bo
         </>
       )}
       {bajo > 0 && (
-        <button onClick={() => irA("/stock")}>
+        <button onClick={() => irA("/stock?filtro=bajo")}>
           <Chip tono="amarillo">{bajo} {corto ? "" : bajo === 1 ? "producto " : "productos "}con stock bajo</Chip>
         </button>
       )}
@@ -149,7 +149,7 @@ function TarjetaEstado({ comercio }: { comercio: Comercio }) {
   }
   return (
     <Kpi titulo="Para reponer" valor={String(bajo)} detalle={bajo ? (bajo === 1 ? "producto con stock bajo" : "productos con stock bajo") : "todo con stock"}>
-      {vencidas > 0 ? insignias : undefined}
+      {conAvisos ? insignias : undefined}
     </Kpi>
   );
 }

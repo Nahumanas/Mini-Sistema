@@ -1,17 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Download, FileText, ShoppingCart } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, Download, FileText, Plus, ShoppingCart } from "lucide-react";
 import { cambio } from "@/lib/calculos";
 import { ddmm, hoy, nombreMes, sumarDias } from "@/lib/fechas";
 import { pesos } from "@/lib/formato";
 import { plural } from "@/lib/gimnasio";
 import { datosDelReporte, lunesDe, mesesConDatos, rangoFechas, rangoMes, rangoSemana, semanasConDatos, type TipoPeriodo } from "@/lib/reporte";
-import { useComercioActivo } from "@/store/comercio";
+import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { Boton, claseInput, Encabezado, Kpi, Segmentado, Tabla, Tarjeta, Vacio } from "../ui/base";
 import { GraficoArea } from "../ui/Graficos";
+
+/** Por qué columna se ordena el ranking. Siempre de mayor a menor: de menor a mayor ya está en «Lo que menos vende». */
+type Orden = "unidades" | "total" | "ganancia";
 
 // Las preguntas del dueño: ¿cuánto vendí? ¿cuánto gané de verdad? ¿qué se vende más? ¿qué tengo que comprar?
 // Se puede mirar un mes, una semana o las fechas que quiera, de un comercio o de todos juntos.
@@ -26,11 +30,26 @@ export function Reportes() {
   const [hasta, setHasta] = useState(hoy());
   const [todos, setTodos] = useState(false);
   const [bajando, setBajando] = useState(false);
+  // Arranca por lo cobrado (como siempre). Unidades sirve para reponer; ganancia, para saber qué deja plata.
+  const [orden, setOrden] = useState<Orden>("total");
+  const router = useRouter();
+  const elegir = useSesion((s) => s.elegir);
 
   const ids = todos ? base.comercios.map((c) => c.id) : [comercio.id];
   const r = tipo === "mes" ? rangoMes(mes) : tipo === "semana" ? rangoSemana(lunes) : rangoFechas(desde, hasta);
   const d = datosDelReporte(base, ids, r);
   const nombreAlcance = todos ? "todos tus comercios" : comercio.nombre;
+  // Se ordena TODA la lista y después se cortan los 10 primeros: así "por unidades" muestra los 10 que más salieron,
+  // no los 10 que más cobraron reordenados.
+  const ranking = [...d.ranking].sort((a, b) => b[orden] - a[orden]).slice(0, 10);
+  const columnaOrden = (texto: string, clave: Orden, ocultarCelular = false) => ({ texto, derecha: true, ocultarCelular, ordenar: { activa: orden === clave, alTocar: () => setOrden(clave) } });
+
+  // "+ Pedir": lleva a Compras con el producto y la cantidad sugerida ya cargados (se puede cambiar antes de agregar).
+  // Si se está mirando "Todos juntos", primero se pasa al comercio de ese producto: la compra es de ese comercio.
+  function pedir(productoId: number, comercioId: number, cantidad: number) {
+    if (comercioId !== comercio.id) elegir(comercioId);
+    router.push(`/compras?producto=${productoId}&cantidad=${cantidad}`);
+  }
 
   async function bajarExcel() {
     setBajando(true);
@@ -144,13 +163,14 @@ export function Reportes() {
           <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
             <section className="flex min-w-0 flex-col gap-3">
               <h2 className="font-medium">Ranking de productos</h2>
-              <Tabla columnas={[{ texto: "Producto" }, { texto: "Unidades", derecha: true }, { texto: "Cobrado", derecha: true }, { texto: "Ganancia", derecha: true, ocultarCelular: true }]}>
-                {d.ranking.slice(0, 10).map((p) => (
+              <Tabla columnas={[{ texto: "Producto" }, columnaOrden("Unidades", "unidades"), columnaOrden("Cobrado", "total"), columnaOrden("Ganancia", "ganancia", true)]}>
+                {ranking.map((p) => (
                   <tr key={p.productoId}>
                     <td className="px-4 py-2.5">{p.nombre}</td>
                     <td className="px-4 py-2.5 text-right">{p.unidades}</td>
-                    <td className="px-4 py-2.5 text-right">{pesos(p.total)}</td>
-                    <td className="hidden px-4 py-2.5 text-right text-positivo sm:table-cell">{pesos(p.ganancia)}</td>
+                    {/* nowrap: que "$ 1.455.200" no se parta en dos renglones */}
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right">{pesos(p.total)}</td>
+                    <td className="hidden whitespace-nowrap px-4 py-2.5 text-right text-positivo sm:table-cell">{pesos(p.ganancia)}</td>
                   </tr>
                 ))}
               </Tabla>
@@ -170,7 +190,12 @@ export function Reportes() {
                             {todos ? ` · ${base.comercios.find((c) => c.id === p.comercioId)?.nombre}` : ""}
                           </span>
                         </span>
-                        <span className="numeros shrink-0 font-medium">+{p.comprar}</span>
+                        <span className="flex shrink-0 items-center gap-3">
+                          <span className="numeros font-medium">+{p.comprar}</span>
+                          <Boton icono={Plus} onClick={() => pedir(p.id, p.comercioId, p.comprar)} className="px-2.5 py-1.5 text-sm" aria-label={`Pedir ${p.comprar} de ${p.nombre}`}>
+                            Pedir
+                          </Boton>
+                        </span>
                       </li>
                     ))}
                   </ul>

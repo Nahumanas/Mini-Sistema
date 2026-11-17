@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Package, Plus, Save, Truck, X } from "lucide-react";
 import { ddmm, hora } from "@/lib/fechas";
 import { pesos } from "@/lib/formato";
@@ -11,6 +12,13 @@ import { useIntentar } from "@/store/interfaz";
 import { Boton, Campo, claseInput, Encabezado, Tabla, Tarjeta, Vacio } from "../ui/base";
 
 type Item = Compra["items"][number];
+
+/** El pedido que viene de "+ Pedir" en Reportes, si hay: /compras?producto=12&cantidad=26 */
+function leerPedido(q: URLSearchParams): { productoId: number; cantidad: number } | null {
+  const productoId = Number(q.get("producto"));
+  const cantidad = Math.floor(Number(q.get("cantidad")));
+  return productoId > 0 ? { productoId, cantidad: cantidad > 0 ? cantidad : 1 } : null;
+}
 
 // Cargar lo que llegó del proveedor: suma al stock y actualiza el costo de cada producto.
 export function Compras() {
@@ -30,6 +38,24 @@ export function Compras() {
   const [costo, setCosto] = useState("");
   const [items, setItems] = useState<Item[]>([]);
   const total = items.reduce((s, i) => s + i.cantidad * i.costoUnitario, 0);
+
+  // Si se llegó desde "+ Pedir" de Reportes (/compras?producto=12&cantidad=26): el producto y la cantidad sugerida
+  // quedan cargados en el formulario, con su último costo. No se agrega solo: se revisa y se toca Agregar.
+  const parametros = useSearchParams();
+  const [pedido, setPedido] = useState(() => leerPedido(parametros));
+  const pedidoListo = pedido ? productos.find((x) => x.id === pedido.productoId) : undefined;
+  if (pedido && pedidoListo) {
+    // Se ajusta acá y no en un useEffect: en la nube los productos pueden llegar un poco después,
+    // y así se carga apenas están, sin un dibujo de más
+    setPedido(null);
+    setProductoId(pedidoListo.id);
+    setCantidad(String(pedido.cantidad));
+    setCosto(String(pedidoListo.costo));
+  }
+  useEffect(() => {
+    // Se limpia la dirección: si se recarga la página, no vuelve a cargar el mismo pedido
+    if (window.location.search) window.history.replaceState(null, "", window.location.pathname);
+  }, []);
 
   function agregar() {
     const p = productos.find((x) => x.id === productoId);

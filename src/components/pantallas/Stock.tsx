@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ClipboardList, Pencil, Plus, ScanBarcode, Search, Upload, X } from "lucide-react";
 import { categoriaParaGuardar, categoriasDe } from "@/lib/categorias";
 import { normalizar, pesos } from "@/lib/formato";
@@ -35,11 +36,18 @@ export function Stock() {
   const { productos: todos, actualizarProducto, crearProducto, asignarCodigo } = useDatos();
   const avisar = useInterfaz((s) => s.avisar);
   const [buscar, setBuscar] = useState("");
-  const [filtro, setFiltro] = useState<Filtro>("todos");
+  // Desde el aviso "con stock bajo" de Inicio se llega a /stock?filtro=bajo: la lista ya abre filtrada.
+  const parametros = useSearchParams();
+  const [filtro, setFiltro] = useState<Filtro>(() => (parametros.get("filtro") === "bajo" ? "bajo" : "todos"));
   const [editando, setEditando] = useState<Edicion | null>(null);
   const [nuevo, setNuevo] = useState<typeof VACIO | null>(null);
   const [cargandoCodigos, setCargandoCodigos] = useState(false);
   const [importando, setImportando] = useState(false);
+
+  useEffect(() => {
+    // Se limpia la dirección: el filtro se sigue cambiando con los botones de siempre
+    if (window.location.search) window.history.replaceState(null, "", window.location.pathname);
+  }, []);
 
   const productos = useMemo(() => todos.filter((p) => p.comercioId === comercio.id), [todos, comercio.id]);
   // Las categorías que ya usa este comercio (para el desplegable): salen de los productos, no hay tabla aparte
@@ -203,7 +211,20 @@ export function Stock() {
               </td>
               <td className="px-4 py-2.5 text-right">{pesos(p.precioVenta)}</td>
               {esJefe && <td className="hidden px-4 py-2.5 text-right text-texto-suave sm:table-cell">{pesos(p.costo)}</td>}
-              <td className="px-4 py-2.5 text-right">{p.activo && p.stock <= p.stockMinimo ? <Chip tono={p.stock <= 0 ? "rojo" : "amarillo"}>{p.stock}</Chip> : p.stock}</td>
+              <td className="px-4 py-2.5 text-right">
+                {p.activo && p.stock <= p.stockMinimo ? (
+                  // Tocar la insignia deja solo los de stock bajo (en esa lista ya no hace falta: es texto)
+                  filtro === "bajo" ? (
+                    <Chip tono={p.stock <= 0 ? "rojo" : "amarillo"}>{p.stock}</Chip>
+                  ) : (
+                    <button type="button" onClick={() => setFiltro("bajo")} title="Ver solo los productos con stock bajo" className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                      <Chip tono={p.stock <= 0 ? "rojo" : "amarillo"}>{p.stock}</Chip>
+                    </button>
+                  )
+                ) : (
+                  p.stock
+                )}
+              </td>
               <td className="hidden px-4 py-2.5 text-right text-texto-suave sm:table-cell">{p.stockMinimo}</td>
               {esJefe && (
                 <td className="whitespace-nowrap px-2 py-2.5 text-right">
