@@ -14,7 +14,7 @@ def _venta(producto_id: int, medio: str = "efectivo", cantidad: float = 1) -> di
 
 
 def test_inicio_trae_todo_lo_del_dueno_y_nada_de_otro(cliente):
-    ana = crear_usuario("ana.inicio@gmail.com")
+    ana = crear_usuario("ana.inicio@gmail.com", comercios_pagos=None)  # sin ficha de cliente: "plan": None
     beto = crear_usuario("beto.inicio@gmail.com")
     comercio, alfajor = _kiosco(cliente, ana)
     cid = comercio["id"]

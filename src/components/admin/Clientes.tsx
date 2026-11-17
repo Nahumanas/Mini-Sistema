@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { KeyRound, Lock, LockOpen, Pencil, Plus, Search, SlidersHorizontal, Trash2, Users } from "lucide-react";
+import { KeyRound, Lock, LockOpen, Minus, Pencil, Plus, Search, SlidersHorizontal, Store, Trash2, Users } from "lucide-react";
 import { apiAdmin, type ClienteAdmin } from "@/lib/api";
 import { estadoDe, PLANES } from "@/lib/clientes";
 import { ddmm } from "@/lib/fechas";
@@ -119,6 +119,7 @@ function FilaCliente({ cliente: c, enviando, alEditar, alConfirmar }: {
         <p className="truncate font-medium">{c.nombre || c.nombreDueno || "Sin nombre"}</p>
         <p className="truncate text-sm text-texto-suave">{c.email}</p>
         {c.permisosPorEmpleado && <span className="mt-1 inline-block"><Chip tono="verde">Personalización: qué ve cada empleado</Chip></span>}
+        <ComerciosPagos cliente={c} enviando={enviando} />
         {/* En el celular, plan y vencimiento van acá abajo (las columnas se esconden) */}
         <p className="mt-0.5 text-xs text-texto-suave sm:hidden">
           {c.plan ? PLANES[c.plan].texto : "Sin plan"}{c.vence ? ` · vence ${ddmm(c.vence, true)}` : ""}
@@ -145,6 +146,34 @@ function FilaCliente({ cliente: c, enviando, alEditar, alConfirmar }: {
     </tr>
   );
 }
+/** Cuántos comercios usa y cuántos tiene pagos, con − y + para cambiarlo (cada extra se cobra +$6.500/mes).
+ * Al llegar al tope, la base no lo deja crear otro y le dice que hable con Mantenete. Bajarlo no borra comercios. */
+function ComerciosPagos({ cliente: c, enviando }: { cliente: ClienteAdmin; enviando: boolean }) {
+  const hacer = useAdmin((s) => s.hacer);
+  const nombre = c.nombre || c.email;
+  const cambiar = (cantidad: number) =>
+    void hacer(
+      () => apiAdmin.comerciosPagos(c.duenoId, cantidad),
+      `Listo: ${nombre} tiene ${cantidad} ${cantidad === 1 ? "comercio pago" : "comercios pagos"}.`,
+    );
+  const pasado = c.comercios > c.comerciosPagos;
+  return (
+    <div className="mt-1 flex items-center gap-1 text-sm text-texto-suave">
+      <Store className="size-4 shrink-0" aria-hidden />
+      <span className={pasado ? "font-medium text-peligro" : ""}
+        title={pasado ? "Tiene más comercios que los pagos: no puede crear otro hasta que se lo subas" : undefined}>
+        {c.comercios} de {c.comerciosPagos} {c.comerciosPagos === 1 ? "comercio pago" : "comercios pagos"}
+      </span>
+      <Boton variante="fantasma" icono={Minus} disabled={enviando || c.comerciosPagos <= 1}
+        title="Un comercio pago menos (no borra ninguno: solo no puede sumar más)" aria-label={`Un comercio pago menos para ${c.email}`}
+        onClick={() => cambiar(c.comerciosPagos - 1)} className="!p-1" />
+      <Boton variante="fantasma" icono={Plus} disabled={enviando || c.comerciosPagos >= 50}
+        title="Un comercio pago más (+$6.500 por mes): ya puede crearlo" aria-label={`Un comercio pago más para ${c.email}`}
+        onClick={() => cambiar(c.comerciosPagos + 1)} className="!p-1" />
+    </div>
+  );
+}
+
 /** Los botones de una fila. En el celular van abajo del nombre (la columna de la derecha se esconde). */
 function AccionesCliente({ cliente: c, enviando, alEditar, alConfirmar, clase }: {
   cliente: ClienteAdmin;

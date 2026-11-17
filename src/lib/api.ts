@@ -215,6 +215,8 @@ export type ClienteAdmin = {
   creado: string;
   esAdmin: boolean;
   permisosPorEmpleado: boolean;
+  /** Cuántos comercios tiene pagos (el plan trae 1; cada extra +$6.500/mes). Al llegar, no puede crear otro. */
+  comerciosPagos: number;
 };
 export type DatosCliente = { email: string; nombre: string; plan: PlanCliente; vence: string | null };
 
@@ -387,6 +389,9 @@ export const apiAdmin = {
   // La personalización "Qué ve cada empleado" (se cobra aparte): prendida, el jefe elige en Mis comercios qué ve cada uno
   permisosPorEmpleado: (duenoId: number, activa: boolean) =>
     pedir<{ ok: true; activa: boolean }>(`/admin/clientes/${duenoId}/permisos-por-empleado`, "PUT", { activa }),
+  // El tope de comercios: el jefe no puede crear más de los que tiene pagos (la base lo frena)
+  comerciosPagos: (duenoId: number, cantidad: number) =>
+    pedir<{ ok: true; cantidad: number }>(`/admin/clientes/${duenoId}/comercios-pagos`, "PUT", { cantidad }),
   // Una invitación que nunca se usó (por ejemplo, un mail mal escrito) se borra directo. Un cliente que ya trabajó,
   // solo si está suspendido y con su mail escrito para confirmar: se borran TODOS sus datos (la base lo revisa).
   borrarCliente: (duenoId: number, confirmarEmail = "") =>

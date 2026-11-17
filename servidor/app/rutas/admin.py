@@ -136,6 +136,18 @@ def permisos_por_empleado(dueno_id: int, datos: Personalizacion, admin: Usuario 
     return {"ok": True, "activa": datos.activa}
 
 
+class ComerciosPagos(BaseModel):
+    cantidad: int = Field(ge=1, le=50)
+
+
+@router.put("/clientes/{dueno_id}/comercios-pagos")
+def comercios_pagos(dueno_id: int, datos: ComerciosPagos, admin: Usuario = Depends(administrador)):
+    """Cuántos comercios tiene pagos ese cliente (el plan trae 1; cada extra suma +$6.500/mes). Al llegar al tope,
+    la base no lo deja crear otro (le dice que hable con Mantenete). Bajarlo no borra nada: solo no suma más."""
+    _llamar(admin, "select privado.admin_comercios_pagos(%s, %s)", (dueno_id, datos.cantidad))
+    return {"ok": True, "cantidad": datos.cantidad}
+
+
 @router.post("/clientes/{dueno_id}/resetear-pin")
 def resetear_pin(dueno_id: int, admin: Usuario = Depends(administrador)):
     """Borra el PIN de jefe: la próxima vez que entre, elige uno nuevo."""

@@ -43,12 +43,13 @@ def test_solo_el_administrador_entra(cliente):
 
 def test_plan_suspender_y_reactivar(cliente):
     admin = _admin("nahuel-admin-2@gmail.com")
-    ana = crear_usuario("ana-cliente@gmail.com")
+    ana = crear_usuario("ana-cliente@gmail.com", comercios_pagos=None)
     comercio, alfajor = _kiosco(cliente, ana)
 
-    # Sin plan cargado aparece igual, activo
+    # Sin plan cargado aparece igual, activo (y con 1 comercio pago, lo que trae el plan)
     fila = _cliente_de(cliente, admin, "ana-cliente@gmail.com")
     assert fila["plan"] is None and fila["suspendido"] is False and fila["comercios"] == 1 and fila["cifrado"] is True
+    assert fila["comerciosPagos"] == 1
 
     r = cliente.put("/admin/clientes/plan", headers=admin,
                     json={"email": "Ana-Cliente@gmail.com ", "nombre": "Kiosco Ana", "plan": "trimestral", "vence": "2027-02-04"})
@@ -90,6 +91,8 @@ def test_plan_suspender_y_reactivar(cliente):
 
     # --- Reactivar: todo vuelve a andar
     assert cliente.put(f"/admin/clientes/{dueno_id}/suspension", json={"suspendido": False}, headers=admin).status_code == 200
+    # (para el segundo comercio tiene que tenerlo pago: Nahuel se lo sube en /admin)
+    assert cliente.put(f"/admin/clientes/{dueno_id}/comercios-pagos", json={"cantidad": 2}, headers=admin).status_code == 200
     assert cliente.post("/comercios", json={"nombre": "Otro", "rubro": "kiosco"}, headers=ana).status_code == 201
     assert cliente.get("/inicio", headers=empleado).status_code == 200
 
