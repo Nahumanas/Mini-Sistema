@@ -136,6 +136,14 @@ def permisos_por_empleado(dueno_id: int, datos: Personalizacion, admin: Usuario 
     return {"ok": True, "activa": datos.activa}
 
 
+@router.put("/clientes/{dueno_id}/facturacion")
+def facturacion(dueno_id: int, datos: Personalizacion, admin: Usuario = Depends(administrador)):
+    """La factura electrónica de ARCA (etapa 1: solo homologación). Prendida, el jefe carga los datos fiscales de sus
+    comercios en Configuración y puede facturar ventas. Apagarla no borra ninguna factura."""
+    _llamar(admin, "select privado.admin_facturacion(%s, %s)", (dueno_id, datos.activa))
+    return {"ok": True, "activa": datos.activa}
+
+
 class ComerciosPagos(BaseModel):
     cantidad: int = Field(ge=1, le=50)
 

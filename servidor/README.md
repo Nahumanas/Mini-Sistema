@@ -117,6 +117,38 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 - Pruebas: `pruebas/test_mercadopago.py` con un Mercado Pago de mentira (nunca se llama al real).
 - Pendiente (parte 2): avisos de Mercado Pago (webhooks), devoluciones y el posnet Point.
 
+## Factura electrónica de ARCA (etapa 1: SOLO modo prueba de ARCA)
+
+- Factura C a consumidor final y nota de crédito C, directo con ARCA (WSAA para entrar, WSFE para facturar): `app/arca.py`.
+  Solo conoce las direcciones de **homologación**: lo que sale no tiene valor fiscal.
+- Es un agregado del plan: Nahuel lo prende por cliente en /admin → Clientes (ícono del recibo). El jefe carga los datos
+  fiscales en Configuración → Factura electrónica, prueba la conexión y factura una venta ya cobrada.
+- **Nunca dos veces la misma venta** (`app/facturacion.py`): la factura pasa a `enviando` (con su número) ANTES de salir.
+  Si ARCA no contesta, queda así; al reintentar, primero se pregunta el último número autorizado y, si ya salió, se trae
+  con `FECompConsultar` y se controla que sea la nuestra (mismo total y comprador). Una sola `enviando` por comercio.
+- El número se pide al mandarla (último autorizado + 1), no al cobrar. Toda la plata con `Decimal` y 2 decimales.
+- El ticket de ARCA dura 12 horas y ARCA **no da otro** mientras el anterior siga vigente: se guarda en memoria y en la
+  base (`privado.arca_tickets`, cifrado con un secreto que sale de `PIMIENTA_CIFRADO`), así un reinicio de Render no lo pierde.
+- Anular una venta facturada (Cajas anteriores) emite la nota de crédito que la anula. Si ARCA no contesta, se reintenta
+  desde Configuración.
+- El navegador puede **leer** las facturas pero no escribirlas: solo la API, con las funciones `privado.factura_*`.
+- Pruebas: `pruebas/test_facturas.py` con un ARCA de mentira (corta antes y después de autorizar, rechaza, etc.).
+- Etapa 2: facturar sola al cobrar, reintentos de fondo, PDF con QR, notas de crédito parciales, descarga en ZIP.
+
+**El certificado de homologación** (una sola vez, lo hace Nahuel con su clave fiscal nivel 3):
+
+1. En una compu (en Windows, con Git Bash), crear la clave privada y el pedido de certificado. La clave privada
+   **no se sube nunca a ARCA ni a GitHub**:
+   ```bash
+   openssl genrsa -out mantenete-homo.key 2048
+   openssl req -new -key mantenete-homo.key -subj "/C=AR/O=Mantenete/CN=mantenete-homo/serialNumber=CUIT 20XXXXXXXXX" -out mantenete-homo.csr
+   ```
+2. En ARCA: Administrador de Relaciones de Clave Fiscal → adherir **WSASS - Autoservicio de Acceso a WebServices de Homologación**.
+3. En WSASS: *Nuevo certificado* → pegar el contenido del `.csr` → copiar el certificado que devuelve a `mantenete-homo.crt`.
+4. En WSASS: *Crear autorización a servicio* → ese certificado → servicio **wsfe** (para el mismo CUIT).
+5. En Render: `ARCA_CERTIFICADO` = el contenido del `.crt` y `ARCA_CLAVE_PRIVADA` = el contenido del `.key`.
+6. En Configuración → Factura electrónica: el CUIT tiene que ser el mismo del certificado; cualquier punto de venta sirve en pruebas.
+
 ## Qué hace
 
 | Pedido | Para qué |
@@ -141,7 +173,9 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 | `POST /comercios/{id}/ventas`, `GET /comercios/{id}/ventas?desde=&hasta=` | Cobrar (baja stock y tandas, numera sin repetir) y ver ventas |
 | `GET/PUT/DELETE /comercios/{id}/mercadopago` | Ver si la cuenta de Mercado Pago está conectada; conectarla (solo jefe, con Access Token y dirección) o desconectarla |
 | `POST /comercios/{id}/mercadopago/cobros`, `GET .../cobros/{cobro}`, `POST .../cobros/{cobro}/cancelar`, `POST /comercios/{id}/mercadopago/revisar` | Cobrar con QR, preguntar si pagó (guarda la venta), cancelar y revisar los que quedaron esperando |
-| `POST /cajas/{id}/anular-venta`, `POST /cajas/{id}/recontar` | Ajustes de una caja cerrada: anular una venta (vuelve al stock; si era una cuota, el socio vuelve a como estaba) o corregir el efectivo contado |
+| `POST /cajas/{id}/anular-venta`, `POST /cajas/{id}/recontar` | Ajustes de una caja cerrada: anular una venta (vuelve al stock; si era una cuota, el socio vuelve a como estaba; si tenía factura, sale la nota de crédito) o corregir el efectivo contado |
+| `GET/PUT /comercios/{id}/facturacion`, `POST …/facturacion/probar` | Factura electrónica (solo jefe): datos fiscales del comercio y probar la conexión con ARCA |
+| `GET /comercios/{id}/facturas`, `POST /ventas/{id}/facturar`, `POST /facturas/{id}/reintentar` | Facturas y notas de crédito; facturar una venta (Factura C a consumidor final); reintentar una que ARCA no contestó |
 | `POST /comercios/{id}/proveedores`, `POST /comercios/{id}/compras` | Compras: suma al stock, cambia el costo y crea las tandas de lo que vence, todo o nada |
 | `POST /comercios/{id}/gastos`, `DELETE /gastos/{id}` | Gastos del comercio |
 | `POST /comercios/{id}/lotes`, `POST .../lotes/retirar-vencidos`, `POST /lotes/{id}/sacar` | Vencimientos: cargar una tanda, retirar lo vencido (pérdida) y corregir una tanda |
@@ -175,6 +209,8 @@ Con la API corriendo, la lista completa está en `/docs`.
 | `CORREO_REMITENTE` | El mail que figura como remitente. Con Brevo tiene que estar verificado en *Senders* | No |
 | `CORREO_NOMBRE` | El nombre del remitente (por defecto `Mantenete`) | No |
 | `SMTP_HOST`, `SMTP_PUERTO`, `SMTP_USUARIO`, `SMTP_CLAVE` | Avisos por mail (opción 2): SMTP común, por ejemplo `smtp.gmail.com`, `587`, tu Gmail y una *contraseña de aplicación*. **No anda en Render gratis** (bloquea los puertos de mail). `SMTP_CLAVE` es secreta | `SMTP_CLAVE` sí |
+| `ARCA_CERTIFICADO` | Factura electrónica (etapa 1, pruebas): el certificado de homologación de ARCA (`.crt`, texto que empieza con `-----BEGIN CERTIFICATE`). Ver "Factura electrónica de ARCA" | No |
+| `ARCA_CLAVE_PRIVADA` | La clave privada de ese certificado (`.key`). Sin las dos, facturar contesta 503 | **Sí** |
 | `URL_SISTEMA` | Opcional: a dónde lleva el mail de invitación (por defecto `https://mantenete-app.vercel.app`) | No |
 
 Y en **Vercel**, para que la página use la API: `NEXT_PUBLIC_API_URL` = la dirección de la API (no es secreta).

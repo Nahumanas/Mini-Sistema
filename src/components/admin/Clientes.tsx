@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { KeyRound, Lock, LockOpen, Minus, Pencil, Plus, Search, SlidersHorizontal, Store, Trash2, Users } from "lucide-react";
+import { KeyRound, Lock, LockOpen, Minus, Pencil, Plus, Receipt, Search, SlidersHorizontal, Store, Trash2, Users } from "lucide-react";
 import { apiAdmin, type ClienteAdmin } from "@/lib/api";
 import { estadoDe, PLANES } from "@/lib/clientes";
 import { ddmm } from "@/lib/fechas";
@@ -119,6 +119,7 @@ function FilaCliente({ cliente: c, enviando, alEditar, alConfirmar }: {
         <p className="truncate font-medium">{c.nombre || c.nombreDueno || "Sin nombre"}</p>
         <p className="truncate text-sm text-texto-suave">{c.email}</p>
         {c.permisosPorEmpleado && <span className="mt-1 inline-block"><Chip tono="verde">Personalización: qué ve cada empleado</Chip></span>}
+        {c.facturacion && <span className="mt-1 ml-1 inline-block"><Chip tono="amarillo">Factura ARCA (prueba)</Chip></span>}
         <ComerciosPagos cliente={c} enviando={enviando} />
         {/* En el celular, plan y vencimiento van acá abajo (las columnas se esconden) */}
         <p className="mt-0.5 text-xs text-texto-suave sm:hidden">
@@ -227,6 +228,24 @@ function AccionesCliente({ cliente: c, enviando, alEditar, alConfirmar, clase }:
           )
         }
         className={`!px-2 !py-1.5 ${c.permisosPorEmpleado ? "bg-positivo/15 !text-positivo" : ""}`}
+      />
+      {/* Factura electrónica de ARCA (etapa 1: solo el modo prueba de ARCA) */}
+      <Boton
+        variante="fantasma"
+        icono={Receipt}
+        disabled={enviando}
+        aria-pressed={c.facturacion}
+        title={c.facturacion ? "Apagar la factura electrónica de ARCA (no se borra ninguna factura)" : "Activar la factura electrónica de ARCA (modo prueba)"}
+        aria-label={`${c.facturacion ? "Apagar" : "Activar"} la factura electrónica para ${c.email}`}
+        onClick={() =>
+          void hacer(
+            () => apiAdmin.facturacion(c.duenoId, !c.facturacion),
+            c.facturacion
+              ? `Listo: ${nombre} ya no factura con ARCA (sus facturas quedan guardadas).`
+              : `Listo: ${nombre} ya puede cargar sus datos fiscales y facturar en modo prueba (Configuración).`,
+          )
+        }
+        className={`!px-2 !py-1.5 ${c.facturacion ? "bg-positivo/15 !text-positivo" : ""}`}
       />
       <Boton variante="fantasma" icono={Pencil} disabled={enviando} title="Editar plan y vencimiento" aria-label={`Editar plan de ${c.email}`}
         onClick={alEditar} className="!px-2 !py-1.5" />

@@ -22,7 +22,8 @@ NO_ABRE = (
 CUENTA = """privado.soy_admin() as admin,
             coalesce((select suspendido from privado.mi_cuenta()), false) as suspendido,
             (select plan from privado.mi_cuenta()) as plan, (select vence from privado.mi_cuenta()) as vence,
-            privado.tengo_permisos_por_empleado() as permisos_por_empleado"""
+            privado.tengo_permisos_por_empleado() as permisos_por_empleado,
+            privado.tengo_facturacion() as facturacion"""
 
 FICHA = """select d.id, d.pin_sal, d.pin_huella, c.sal_pin, c.clave_pin, c.sal_frase, c.clave_frase, c.aceptado_en
            from public.duenos d left join public.cifrado_duenos c on c.dueno_id = d.id"""

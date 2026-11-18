@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { CambiosProducto, DatosDeInicio } from "@/lib/api";
+import type { CambiosProducto, DatosDeInicio, Factura } from "@/lib/api";
 import { crearDatosDemo, DUENO, type BaseDemo } from "@/lib/datos-demo";
 import { sacarDeTandas } from "@/lib/calculos";
 import { ahora, hoy } from "@/lib/fechas";
@@ -33,7 +33,8 @@ export type Acciones = {
   abrirCaja: (comercioId: number, responsable: string, montoInicial: number) => Promise<void>;
   cerrarCaja: (comercioId: number, efectivoContado: number, nota: string) => Promise<void>;
   registrarRelevo: (comercioId: number, entra: string, efectivoContado: number, nota: string, turno?: string | null) => Promise<Relevo>;
-  anularVenta: (cajaId: number, ventaId: number, hechoPor: string, motivo: string) => Promise<void>;
+  /** Con factura electrónica: devuelve la nota de crédito que emitió la API (en la demo, nada). */
+  anularVenta: (cajaId: number, ventaId: number, hechoPor: string, motivo: string) => Promise<Factura | null | void>;
   recontarEfectivo: (cajaId: number, efectivo: number, hechoPor: string, motivo: string) => Promise<void>;
   registrarCompra: (comercioId: number, proveedorId: number, items: Compra["items"], cargadaPor: string) => Promise<void>;
   agregarProveedor: (comercioId: number, nombre: string, telefono: string) => Promise<number>;

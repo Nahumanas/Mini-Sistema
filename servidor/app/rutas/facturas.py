@@ -1,0 +1,270 @@
+"""Factura electrónica de ARCA, etapa 1 (SOLO homologación): datos fiscales, facturar una venta y la nota de crédito.
+
+Todo lo de facturar es del jefe (con su PIN): una factura es un documento legal del comercio ante ARCA.
+La facturación es un agregado del plan que Nahuel prende desde /admin.
+"""
+
+import json
+from decimal import Decimal
+
+from fastapi import APIRouter, Depends, HTTPException
+from psycopg import Connection, errors
+from pydantic import BaseModel, Field, field_validator
+
+from .. import arca, facturacion
+from ..autenticacion import Usuario, usuario_actual
+from ..base import como_usuario
+from ..cifrado import Llave
+from ..formato import a_camel
+from ..llaves import llave_requerida
+from ..permisos import solo_jefe
+from ..sobres import Cofre
+from .comun import comercio_mio
+
+router = APIRouter(tags=["Facturas (ARCA)"])
+
+# Desde este monto hay que identificar al comprador (RG 5700 de ARCA, desde junio de 2025). Llega en la etapa 2.
+TOPE_SIN_IDENTIFICAR = Decimal("10000000")
+
+SIN_DATOS = "Primero cargá los datos fiscales del comercio en Configuración → Factura electrónica."
+SIN_CERTIFICADO = "El servidor todavía no tiene el certificado de ARCA cargado. Avisale a Nahuel."
+
+
+def _tengo_facturacion(con: Connection) -> None:
+    if not con.execute("select privado.tengo_facturacion() as si").fetchone()["si"]:
+        raise HTTPException(403, facturacion.SIN_FACTURACION)
+
+
+def _datos(con: Connection, comercio_id: int) -> dict | None:
+    return con.execute("select * from public.datos_fiscales where comercio_id = %s", (comercio_id,)).fetchone()
+
+
+def _abrir_items(cofre: Cofre, items: list[dict]) -> list[dict]:
+    return [a_camel({"producto_id": i["producto_id"], "cantidad": i["cantidad"], **{k: v for k, v in cofre.abrir("facturas_items", i).items()
+                                                                                    if k in ("nombre", "precio_unitario")}})
+            for i in items]
+
+
+def _publica(fila: dict, items: list[dict] | None = None) -> dict:
+    """La factura como la usa la página (sin la respuesta completa de ARCA, que es solo para revisar)."""
+    datos = {k: v for k, v in fila.items() if k != "respuesta_arca"}
+    salida = a_camel(datos)
+    if items is not None:
+        salida["items"] = items
+    return salida
+
+
+def _con_items(con: Connection, cofre: Cofre, facturas: list[dict]) -> list[dict]:
+    if not facturas:
+        return []
+    items = con.execute("select * from public.facturas_items where factura_id = any(%s) order by id",
+                        ([f["id"] for f in facturas],)).fetchall()
+    por_factura: dict[int, list[dict]] = {}
+    for i in items:
+        por_factura.setdefault(i["factura_id"], []).append(i)
+    return [_publica(f, _abrir_items(cofre, por_factura.get(f["id"], []))) for f in facturas]
+
+
+def _servidor_listo() -> bool:
+    return arca.certificado_listo()
+
+
+# ---------------------------------------------------------------- datos fiscales
+
+class DatosFiscales(BaseModel):
+    cuit: str = Field(min_length=11, max_length=13)
+    razonSocial: str = Field(min_length=1, max_length=200)
+    domicilio: str = Field(default="", max_length=300)
+    inicioActividades: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    ingresosBrutos: str = Field(default="", max_length=30)
+    puntoVenta: int = Field(ge=1, le=99999)
+
+    @field_validator("cuit")
+    @classmethod
+    def _cuit(cls, valor: str) -> str:
+        numeros = valor.replace("-", "").replace(" ", "")
+        if not arca.cuit_valido(numeros):
+            raise ValueError("El CUIT no es válido (revisá los 11 números).")
+        return numeros
+
+
+@router.get("/comercios/{comercio_id}/facturacion")
+def ver(comercio_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
+    """Si la cuenta tiene la facturación, los datos fiscales del comercio y si el servidor ya tiene el certificado."""
+    with como_usuario(usuario) as con:
+        comercio_mio(con, comercio_id)
+        activa = con.execute("select privado.tengo_facturacion() as si").fetchone()["si"]
+        datos = _datos(con, comercio_id)
+    return {"activa": activa, "ambiente": arca.AMBIENTE, "servidorListo": _servidor_listo(), "datos": a_camel(datos)}
+
+
+@router.put("/comercios/{comercio_id}/facturacion")
+def guardar_datos(comercio_id: int, datos: DatosFiscales, usuario: Usuario = Depends(usuario_actual),
+                  llave: Llave = Depends(llave_requerida)):
+    solo_jefe(llave)
+    with como_usuario(usuario, llave) as con:
+        comercio_mio(con, comercio_id)
+        _tengo_facturacion(con)
+        fila = con.execute(
+            """insert into public.datos_fiscales (comercio_id, cuit, razon_social, domicilio, inicio_actividades,
+                                                  ingresos_brutos, punto_venta)
+               values (%s, %s, %s, %s, %s, %s, %s)
+               on conflict (comercio_id) do update set cuit = excluded.cuit, razon_social = excluded.razon_social,
+                 domicilio = excluded.domicilio, inicio_actividades = excluded.inicio_actividades,
+                 ingresos_brutos = excluded.ingresos_brutos, punto_venta = excluded.punto_venta, actualizado = now()
+               returning *""",
+            (comercio_id, datos.cuit, datos.razonSocial.strip(), datos.domicilio.strip(), datos.inicioActividades,
+             datos.ingresosBrutos.strip(), datos.puntoVenta),
+        ).fetchone()
+    return a_camel(fila)
+
+
+@router.post("/comercios/{comercio_id}/facturacion/probar")
+def probar(comercio_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
+    """Prueba la conexión con ARCA: que ande, que el certificado entre y el último número de cada tipo."""
+    solo_jefe(llave)
+    with como_usuario(usuario) as con:
+        comercio_mio(con, comercio_id)
+        _tengo_facturacion(con)
+        datos = _datos(con, comercio_id)
+    if datos is None:
+        raise HTTPException(409, SIN_DATOS)
+    if not _servidor_listo():
+        raise HTTPException(503, SIN_CERTIFICADO)
+    try:
+        anda = arca.servicio_anda()
+        acceso = facturacion.ticket(usuario, llave)
+        ultimos = {
+            "facturaC": arca.ultimo_autorizado(acceso, datos["cuit"], datos["punto_venta"], arca.FACTURA_C),
+            "notaCreditoC": arca.ultimo_autorizado(acceso, datos["cuit"], datos["punto_venta"], arca.NOTA_CREDITO_C),
+        }
+    except arca.ErrorDeArca as error:
+        raise HTTPException(502, f"No se pudo conectar con ARCA: {error}") from None
+    return {"ok": True, "arcaAnda": anda, "ultimos": ultimos, "cuitCertificado": arca.cuit_del_certificado(),
+            "certificadoVence": a_camel({"v": arca.vence_certificado()})["v"]}
+
+
+# ---------------------------------------------------------------- facturas
+
+@router.get("/comercios/{comercio_id}/facturas")
+def listar(comercio_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
+    """Las facturas y notas de crédito del comercio (las últimas 500), con lo que se vendió en cada una."""
+    with como_usuario(usuario) as con:
+        cofre = Cofre(con, llave)
+        cofre.comercio(comercio_id)
+        filas = con.execute("select * from public.facturas where comercio_id = %s order by id desc limit 500",
+                            (comercio_id,)).fetchall()
+        return _con_items(con, cofre, filas)
+
+
+def _concepto(detalle: list[dict]) -> int:
+    """1 productos, 2 servicios (las cuotas del gimnasio), 3 los dos."""
+    cuotas = any(d["producto_id"] is None for d in detalle)
+    productos = any(d["producto_id"] is not None for d in detalle)
+    return 3 if cuotas and productos else 2 if cuotas else 1
+
+
+def nueva_factura(con: Connection, cofre: Cofre, venta: dict, datos: dict, hecha_por: str) -> dict:
+    """La Factura C (pendiente) de una venta ya abierta, con lo que se vendió. Todavía no sale a ARCA."""
+    total = arca.plata(venta["total"])
+    if total <= 0:
+        raise HTTPException(422, "Una venta sin importe no se factura.")
+    if total >= TOPE_SIN_IDENTIFICAR:
+        raise HTTPException(422, "Desde $10.000.000 hay que identificar al comprador (DNI o CUIT). "
+                                 "Eso llega en la próxima etapa de la facturación.")
+    detalle = con.execute("select * from public.ventas_detalle where venta_id = %s order by id", (venta["id"],)).fetchall()
+    items = []
+    for d in detalle:
+        abierto = cofre.abrir("ventas_detalle", d)
+        items.append({"producto_id": d["producto_id"], "cantidad": str(d["cantidad"]), "sobre": cofre.cerrar(
+            "facturas_items", venta["comercio_id"], {"nombre": abierto["nombre"], "precio_unitario": abierto["precio_unitario"]})})
+    factura = {
+        "comercio_id": venta["comercio_id"], "venta_id": venta["id"], "tipo": "factura_c", "cbte_tipo": arca.FACTURA_C,
+        "cuit_emisor": datos["cuit"], "punto_venta": datos["punto_venta"], "concepto": _concepto(detalle),
+        "imp_total": str(total), "imp_neto": str(total), "descuento": str(arca.plata(venta["descuento"] or 0)),
+        "hecha_por": hecha_por,
+    }
+    return con.execute("select * from privado.factura_nueva(%s::jsonb, %s::jsonb)",
+                       (json.dumps(factura), json.dumps(items))).fetchone()
+
+
+def nueva_nota_credito(con: Connection, factura: dict, hecha_por: str) -> dict:
+    """La nota de crédito C (pendiente) que anula TODA una factura autorizada. Lleva los mismos renglones
+    (los sobres se copian tal cual: son del mismo comercio y de la misma tabla)."""
+    items = con.execute("select producto_id, cantidad::text as cantidad, sobre from public.facturas_items where factura_id = %s order by id",
+                        (factura["id"],)).fetchall()
+    nota = {
+        "comercio_id": factura["comercio_id"], "venta_id": factura["venta_id"], "tipo": "nota_credito_c",
+        "cbte_tipo": arca.NOTA_CREDITO_C, "asociada_id": factura["id"], "cuit_emisor": factura["cuit_emisor"],
+        "punto_venta": factura["punto_venta"], "concepto": factura["concepto"], "doc_tipo": factura["doc_tipo"],
+        "doc_nro": factura["doc_nro"], "condicion_iva_receptor": factura["condicion_iva_receptor"],
+        "imp_total": str(factura["imp_total"]), "imp_neto": str(factura["imp_neto"]),
+        "imp_trib": str(factura["imp_trib"]), "descuento": str(factura["descuento"]), "hecha_por": hecha_por,
+    }
+    return con.execute("select * from privado.factura_nueva(%s::jsonb, %s::jsonb)",
+                       (json.dumps(nota), json.dumps([dict(i) for i in items]))).fetchone()
+
+
+def devolver(usuario: Usuario, llave: Llave, factura_id: int) -> dict:
+    with como_usuario(usuario) as con:
+        cofre = Cofre(con, llave)
+        fila = con.execute("select * from public.facturas where id = %s", (factura_id,)).fetchone()
+        cofre.comercio(fila["comercio_id"])
+        return _con_items(con, cofre, [fila])[0]
+
+
+class Facturar(BaseModel):
+    hechaPor: str = Field(default="Jefe", max_length=100)
+
+
+@router.post("/ventas/{venta_id}/facturar")
+def facturar(venta_id: int, datos: Facturar | None = None, usuario: Usuario = Depends(usuario_actual),
+             llave: Llave = Depends(llave_requerida)):
+    """Factura C a consumidor final de una venta ya cobrada, y se manda a ARCA en el momento.
+    Si ya tenía una factura sin terminar (ARCA no contestó), la vuelve a intentar sin duplicarla."""
+    solo_jefe(llave)
+    if not _servidor_listo():
+        raise HTTPException(503, SIN_CERTIFICADO)
+    hecha_por = (datos.hechaPor if datos else "Jefe").strip() or "Jefe"
+    try:
+        with como_usuario(usuario, llave, "factura") as con:
+            cofre = Cofre(con, llave)
+            venta = con.execute("select * from public.ventas where id = %s for update", (venta_id,)).fetchone()
+            if venta is None:
+                raise HTTPException(404, "No existe esa venta.")
+            cofre.comercio(venta["comercio_id"])
+            _tengo_facturacion(con)
+            if venta["anulada"] is not None:
+                raise HTTPException(409, "Esa venta está anulada: no se factura.")
+            fiscales = _datos(con, venta["comercio_id"])
+            if fiscales is None:
+                raise HTTPException(409, SIN_DATOS)
+            ya = con.execute(
+                "select * from public.facturas where venta_id = %s and tipo = 'factura_c' and estado <> 'rechazada'", (venta_id,)
+            ).fetchone()
+            if ya is not None and ya["estado"] == "autorizada":
+                raise HTTPException(409, "Esa venta ya está facturada.")
+            factura = ya or nueva_factura(con, cofre, cofre.abrir("ventas", venta), fiscales, hecha_por)
+    except errors.InsufficientPrivilege as error:
+        raise facturacion.sin_permiso(error) from None
+    facturacion.emitir(usuario, llave, factura["id"])
+    return devolver(usuario, llave, factura["id"])
+
+
+@router.post("/facturas/{factura_id}/reintentar")
+def reintentar(factura_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
+    """Vuelve a mandar una factura que quedó pendiente o "enviando" (primero pregunta si ARCA ya la autorizó)."""
+    solo_jefe(llave)
+    if not _servidor_listo():
+        raise HTTPException(503, SIN_CERTIFICADO)
+    with como_usuario(usuario) as con:
+        Cofre(con, llave)
+        fila = con.execute("select comercio_id, estado from public.facturas where id = %s", (factura_id,)).fetchone()
+        if fila is None:
+            raise HTTPException(404, "No existe esa factura.")
+        comercio_mio(con, fila["comercio_id"])
+    if fila["estado"] in ("autorizada", "rechazada"):
+        raise HTTPException(409, "Esa factura ya tiene respuesta de ARCA." if fila["estado"] == "autorizada"
+                            else "ARCA la rechazó: corregí el problema y facturá la venta de nuevo.")
+    facturacion.emitir(usuario, llave, factura_id)
+    return devolver(usuario, llave, factura_id)

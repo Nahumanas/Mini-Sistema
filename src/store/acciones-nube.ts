@@ -225,6 +225,7 @@ export function accionesNube(set: Set, get: Get): AccionesNube {
         cuotas: r.cuota ? s.cuotas.map((c) => (c.id === r.cuota?.id ? { ...c, anulada: r.cuota.anulada } : c)) : s.cuotas,
         socios: r.socio ? conCambio(s.socios, r.socio) : s.socios,
       }));
+      return r.notaCredito;
     },
 
     recontarEfectivo: async (cajaId, efectivo, hechoPor, motivo) => {
