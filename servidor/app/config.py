@@ -57,3 +57,10 @@ SMTP_CLAVE = os.environ.get("SMTP_CLAVE", "").strip()
 # Quién figura como remitente (no son secretos)
 CORREO_REMITENTE = os.environ.get("CORREO_REMITENTE", "").strip()
 CORREO_NOMBRE = os.environ.get("CORREO_NOMBRE", "Mantenete").strip()
+
+# Factura electrónica de ARCA (etapa 1: SOLO homologación, el ambiente de pruebas de ARCA). Ver arca.py.
+# El certificado de pruebas que Nahuel saca en ARCA (WSASS) y su clave privada, en formato PEM (el texto que
+# empieza con "-----BEGIN"). La clave privada es SECRETA: va solo en Render y nunca en GitHub (el repo es público).
+# Si Render guarda los saltos de línea como "\n", igual se aceptan. Sin las dos, facturar contesta 503.
+ARCA_CERTIFICADO = os.environ.get("ARCA_CERTIFICADO", "").strip()
+ARCA_CLAVE_PRIVADA = os.environ.get("ARCA_CLAVE_PRIVADA", "").strip()

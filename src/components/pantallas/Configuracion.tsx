@@ -10,6 +10,7 @@ import { Boton, Campo, claseInput, Encabezado, Tarjeta } from "../ui/base";
 import { AvisosMail } from "./AvisosMail";
 import { AvisosTelegram } from "./AvisosTelegram";
 import { CuentaMercadoPago } from "./CuentaMercadoPago";
+import { FacturaElectronica } from "./FacturaElectronica";
 import { ProbarAparatos } from "./ProbarAparatos";
 
 // Ajustes del jefe: apariencia, probar la pistola y la ticketera, PIN, avisos al celular y volver a empezar con los datos de prueba.
@@ -46,6 +47,8 @@ export function Configuracion() {
       <AvisosMail />
 
       <CuentaMercadoPago />
+
+      <FacturaElectronica />
 
       {/* En la nube no hay datos de prueba para reiniciar: son los datos de verdad */}
       {!enNube && (

@@ -5,6 +5,8 @@ import { Ban, Calculator, History, Lock, LockOpen, Repeat } from "lucide-react";
 import { arqueoAjustado, atendieron, type EventoCaja, lineaDeTiempo } from "@/lib/caja";
 import { ddmm, diaDeLaSemana, hora } from "@/lib/fechas";
 import { MEDIOS_DE_PAGO, pesos } from "@/lib/formato";
+import type { Factura } from "@/lib/api";
+import { numeroFactura } from "@/lib/factura";
 import type { Caja } from "@/lib/tipos";
 import { useComercioActivo, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
@@ -212,12 +214,16 @@ function NuevoAjuste({ caja }: { caja: Caja }) {
     if (tipo === "recontar" && efectivo === "") return setError("Escribí el efectivo que contaste de nuevo.");
     setEnviando(true);
     try {
-      if (tipo === "anular") await anularVenta(caja.id, Number(ventaId), quien, motivo);
+      let nota: Factura | null | void = null;
+      if (tipo === "anular") nota = await anularVenta(caja.id, Number(ventaId), quien, motivo);
       else await recontarEfectivo(caja.id, Number(efectivo), quien, motivo);
       setVentaId("");
       setEfectivo("");
       setMotivo("");
-      avisar("Ajuste guardado. Quedó anotado en la caja.");
+      // Si la venta tenía factura de ARCA, también salió (o quedó para reintentar) la nota de crédito que la anula
+      if (nota?.estado === "autorizada") avisar(`Ajuste guardado. ARCA autorizó la ${numeroFactura(nota)}.`);
+      else if (nota) avisar(`Ajuste guardado, pero la nota de crédito no salió todavía: ${nota.errorMensaje || "reintentala desde Configuración → Factura electrónica"}.`, "error");
+      else avisar("Ajuste guardado. Quedó anotado en la caja.");
     } catch (err) {
       setError((err as Error).message);
     } finally {

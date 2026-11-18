@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from psycopg import errors
 from pydantic import BaseModel, Field
 
-from .. import avisos
+from .. import avisos, facturacion
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario, en_viajes
 from ..cifrado import Llave
@@ -20,6 +20,7 @@ from .comun import (
     existe,
     insertar_ajuste,
 )
+from . import facturas
 from .ventas import con_items
 
 router = APIRouter(tags=["Caja"])
@@ -223,6 +224,7 @@ def anular_venta(caja_id: int, datos: AnularVenta, usuario: Usuario = Depends(us
         ).fetchone()
         if venta is None or venta["anulada"] is not None:
             raise HTTPException(409, "Esa venta no está en la caja o ya se anuló.")
+        nota = _nota_de_credito_si_hace_falta(con, venta["id"], datos.hechoPor.strip())
         venta = cofre.abrir("ventas", con.execute(
             "update public.ventas set anulada = now() where id = %s returning *", (venta["id"],)
         ).fetchone())
@@ -249,13 +251,50 @@ def anular_venta(caja_id: int, datos: AnularVenta, usuario: Usuario = Depends(us
                 (cuota["clases_cargadas"], cuota["vence_nuevo"], cuota["vence_antes"], cuota["socio_id"]),
             ).fetchone()
 
-        return {
+        resultado = {
             "ajuste": a_camel(ajuste),
             "venta": con_items(con, cofre, [venta])[0],
             "productos": [a_camel(p) for p in cofre.abrir_todas("productos", productos)],
             "cuota": a_camel(cofre.abrir("cuotas", cuota)),
             "socio": a_camel(cofre.abrir("socios", socio)),
+            "notaCredito": None,
         }
+    if nota is not None:
+        # La venta ya quedó anulada. La nota de crédito sale ahora; si ARCA no contesta, queda pendiente
+        # (o "enviando") y se reintenta desde Facturas, sin que se pueda emitir dos veces.
+        try:
+            facturacion.emitir(usuario, llave, nota["id"])
+        except HTTPException:
+            pass
+        resultado["notaCredito"] = facturas.devolver(usuario, llave, nota["id"])
+    return resultado
+
+
+def _nota_de_credito_si_hace_falta(con, venta_id: int, hecha_por: str) -> dict | None:
+    """Si la venta tenía factura: autorizada → se crea la nota de crédito que la anula (sale después de guardar);
+    sin salir todavía → se descarta; saliendo para ARCA → hay que esperar (409)."""
+    factura = con.execute(
+        # La venta ya está trabada (for update): facturar la misma venta espera a que esto termine
+        "select * from public.facturas where venta_id = %s and tipo = 'factura_c' and estado <> 'rechazada'", (venta_id,)
+    ).fetchone()
+    if factura is None:
+        return None
+    if factura["estado"] == "enviando":
+        raise HTTPException(409, "La factura de esta venta se está mandando a ARCA (o ARCA no contestó). "
+                                 "Reintentala desde Facturas y después anulá la venta.")
+    tiene = con.execute("select privado.tengo_facturacion() as si").fetchone()["si"]
+    if factura["estado"] == "pendiente":
+        if tiene:
+            con.execute("select privado.factura_descartar(%s)", (factura["id"],))
+        return None
+    # autorizada
+    if not tiene:
+        raise HTTPException(409, "Esta venta tiene factura y la facturación está apagada en tu cuenta: "
+                                 "no se puede hacer la nota de crédito. Hablá con Mantenete.")
+    ya = con.execute(
+        "select * from public.facturas where asociada_id = %s and estado <> 'rechazada'", (factura["id"],)
+    ).fetchone()
+    return ya or facturas.nueva_nota_credito(con, factura, hecha_por)
 
 
 @router.post("/cajas/{caja_id}/recontar", status_code=201)

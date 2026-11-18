@@ -196,7 +196,8 @@ export type LlaveNueva = { llave: string; vence: string };
 
 /** El plan del dueño y si está suspendido (solo lectura). admin: es Nahuel (ve la pantalla de administrador). */
 /** permisosPorEmpleado: la personalización "Qué ve cada empleado" (la prende Nahuel desde /admin para el que la pide). */
-export type EstadoDeCuenta = { admin: boolean; suspendido: boolean; plan: PlanCliente | null; vence: string | null; permisosPorEmpleado: boolean };
+/** facturacion: la factura electrónica de ARCA (etapa 1, solo pruebas de ARCA), que Nahuel prende desde /admin. */
+export type EstadoDeCuenta = { admin: boolean; suspendido: boolean; plan: PlanCliente | null; vence: string | null; permisosPorEmpleado: boolean; facturacion: boolean };
 
 /** Pantalla de administrador (solo Nahuel): los planes que se cobran y cada cliente. */
 export type PlanCliente = "prueba" | "mensual" | "trimestral" | "semestral";
@@ -217,6 +218,8 @@ export type ClienteAdmin = {
   permisosPorEmpleado: boolean;
   /** Cuántos comercios tiene pagos (el plan trae 1; cada extra +$6.500/mes). Al llegar, no puede crear otro. */
   comerciosPagos: number;
+  /** La factura electrónica de ARCA (etapa 1: solo homologación). */
+  facturacion: boolean;
 };
 export type DatosCliente = { email: string; nombre: string; plan: PlanCliente; vence: string | null };
 
@@ -225,6 +228,41 @@ export type TipoAviso = "apertura" | "cierre" | "relevo" | "stock_bajo";
 export type EstadoTelegram = { listo: boolean; conectado: boolean; nombre: string; avisos: TipoAviso[] };
 /** Avisos por mail: stock = stock bajo, caja = resumen al cerrar. email null = el de la cuenta (emailCuenta). */
 export type EstadoAvisosMail = { listo: boolean; stock: boolean; caja: boolean; email: string | null; emailCuenta: string };
+
+/** Factura electrónica de ARCA (etapa 1, solo homologación = pruebas de ARCA, sin valor fiscal). */
+export type DatosFiscales = {
+  cuit: string;
+  razonSocial: string;
+  domicilio: string;
+  inicioActividades: string; // AAAA-MM-DD
+  ingresosBrutos: string;
+  puntoVenta: number;
+};
+export type EstadoFacturacion = { activa: boolean; ambiente: "homologacion"; servidorListo: boolean; datos: (DatosFiscales & { comercioId: number }) | null };
+export type EstadoFactura = "pendiente" | "enviando" | "autorizada" | "rechazada";
+export type Factura = {
+  id: number;
+  comercioId: number;
+  ventaId: number;
+  tipo: "factura_c" | "nota_credito_c";
+  cbteTipo: number;
+  asociadaId: number | null;
+  ambiente: "homologacion";
+  cuitEmisor: string;
+  puntoVenta: number;
+  numero: number | null;
+  fecha: string | null;
+  impTotal: number;
+  estado: EstadoFactura;
+  cae: string | null;
+  vencimientoCae: string | null;
+  errorMensaje: string;
+  observaciones: string;
+  intentos: number;
+  creada: string;
+  items: { productoId: number | null; cantidad: number; nombre: string; precioUnitario: number }[];
+};
+export type PruebaArca = { ok: true; arcaAnda: boolean; ultimos: { facturaC: number; notaCreditoC: number }; cuitCertificado: string; certificadoVence: string };
 
 /** La cuenta de Mercado Pago de un comercio (etapa 8): con ella la Caja cobra con QR. */
 export type EstadoMercadoPago = { conectada: boolean; nombre: string; conectadaEl: string | null };
@@ -320,8 +358,19 @@ export const api = {
   verCobro: (comercioId: number, id: number) => pedir<CobroMercadoPago>(`/comercios/${comercioId}/mercadopago/cobros/${id}`),
   cancelarCobro: (comercioId: number, id: number) => pedir<CobroMercadoPago>(`/comercios/${comercioId}/mercadopago/cobros/${id}/cancelar`, "POST"),
   revisarCobros: (comercioId: number) => pedir<{ cobros: CobroMercadoPago[]; esperando: number }>(`/comercios/${comercioId}/mercadopago/revisar`, "POST"),
+  // Si la venta tenía factura de ARCA, la API emite la nota de crédito que la anula (notaCredito)
   anularVenta: (cajaId: number, datos: { ventaId: number; hechoPor: string; motivo: string }) =>
-    pedir<{ ajuste: AjusteCaja; venta: Venta; productos: Producto[]; cuota: Cuota | null; socio: Socio | null }>(`/cajas/${cajaId}/anular-venta`, "POST", datos),
+    pedir<{ ajuste: AjusteCaja; venta: Venta; productos: Producto[]; cuota: Cuota | null; socio: Socio | null; notaCredito: Factura | null }>(
+      `/cajas/${cajaId}/anular-venta`, "POST", datos),
+
+  // Factura electrónica de ARCA (etapa 1, solo pruebas): datos fiscales, facturar una venta y reintentar
+  facturacion: (comercioId: number) => pedir<EstadoFacturacion>(`/comercios/${comercioId}/facturacion`),
+  guardarDatosFiscales: (comercioId: number, datos: DatosFiscales) =>
+    pedir<DatosFiscales & { comercioId: number }>(`/comercios/${comercioId}/facturacion`, "PUT", datos),
+  probarArca: (comercioId: number) => pedir<PruebaArca>(`/comercios/${comercioId}/facturacion/probar`, "POST"),
+  facturas: (comercioId: number) => pedir<Factura[]>(`/comercios/${comercioId}/facturas`),
+  facturar: (ventaId: number) => pedir<Factura>(`/ventas/${ventaId}/facturar`, "POST", {}),
+  reintentarFactura: (facturaId: number) => pedir<Factura>(`/facturas/${facturaId}/reintentar`, "POST", {}),
   recontar: (cajaId: number, datos: { efectivo: number; hechoPor: string; motivo: string }) => pedir<AjusteCaja>(`/cajas/${cajaId}/recontar`, "POST", datos),
 
   agregarProveedor: (comercioId: number, nombre: string, telefono: string) => pedir<Proveedor>(`/comercios/${comercioId}/proveedores`, "POST", { nombre, telefono }),
@@ -389,6 +438,9 @@ export const apiAdmin = {
   // La personalización "Qué ve cada empleado" (se cobra aparte): prendida, el jefe elige en Mis comercios qué ve cada uno
   permisosPorEmpleado: (duenoId: number, activa: boolean) =>
     pedir<{ ok: true; activa: boolean }>(`/admin/clientes/${duenoId}/permisos-por-empleado`, "PUT", { activa }),
+  // La factura electrónica de ARCA (etapa 1: solo homologación)
+  facturacion: (duenoId: number, activa: boolean) =>
+    pedir<{ ok: true; activa: boolean }>(`/admin/clientes/${duenoId}/facturacion`, "PUT", { activa }),
   // El tope de comercios: el jefe no puede crear más de los que tiene pagos (la base lo frena)
   comerciosPagos: (duenoId: number, cantidad: number) =>
     pedir<{ ok: true; cantidad: number }>(`/admin/clientes/${duenoId}/comercios-pagos`, "PUT", { cantidad }),
