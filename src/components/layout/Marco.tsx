@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
-import { CloudOff, Lock, RefreshCw } from "lucide-react";
-import { buscarSeccion, esDelRubro, estaEnLaNube, puedeVer } from "@/lib/navegacion";
+import { CloudOff, Lock, ReceiptText, RefreshCw } from "lucide-react";
+import { buscarSeccion, esDelRubro, estaEnLaNube, puedeVer, tieneLoQuePide } from "@/lib/navegacion";
 import { MINUTOS_SIN_USO_JEFE, sesionVencida, useComercioActivo, useEmpleadoActual, useSesion } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
@@ -97,6 +97,7 @@ function ConPermiso({ children }: { children: ReactNode }) {
   const empleado = useEmpleadoActual();
   const enNube = useDatos((s) => s.modo === "nube");
   const sinConexion = useNube((s) => s.estado === "sin_conexion");
+  const facturacion = useSuscripcion((s) => s.facturacion);
   const seccion = buscarSeccion(ruta);
   // Sin internet solo está la Caja (las demás pantallas necesitan los datos del servidor)
   if (sinConexion && ruta !== "/caja") {
@@ -112,6 +113,14 @@ function ConPermiso({ children }: { children: ReactNode }) {
       <div className="mx-auto mt-10 flex max-w-md flex-col items-center gap-3 text-center text-texto-suave">
         <CloudOff className="size-6" strokeWidth={1.5} />
         <p>{seccion.titulo} todavía no está en la nube: llega en la próxima actualización. Mientras tanto la podés probar en la demo.</p>
+      </div>
+    );
+  }
+  if (seccion && !tieneLoQuePide(seccion, enNube, facturacion)) {
+    return (
+      <div className="mx-auto mt-10 flex max-w-md flex-col items-center gap-3 text-center text-texto-suave">
+        <ReceiptText className="size-6" strokeWidth={1.5} />
+        <p>La factura electrónica no está activada en tu cuenta. Si la querés, pedísela a Mantenete.</p>
       </div>
     );
   }

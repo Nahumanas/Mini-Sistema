@@ -12,6 +12,7 @@ import {
   type LucideIcon,
   Package,
   Receipt,
+  ReceiptText,
   Settings,
   Users,
   Store,
@@ -28,8 +29,9 @@ import type { Comercio, Empleado, Permiso, Rubro } from "./tipos";
 // - permiso: el empleado la ve solo si el jefe se lo dio en Mis comercios (a todos o a él solo).
 // - rubro: aparece solo en los comercios de ese rubro (por ejemplo Socios, solo en gimnasios).
 // - noEn: no aparece en esos rubros (por ejemplo Vencimientos, que un gimnasio no usa).
+// - conFacturacion: solo con la cuenta en la nube y la factura electrónica prendida en /admin (Facturas).
 // Así cada rubro tiene su propio menú, como en la versión de Streamlit.
-export type Seccion = { titulo: string; ruta: string; icono: LucideIcon; soloJefe?: boolean; permiso?: Permiso; rubro?: Rubro; noEn?: Rubro[] };
+export type Seccion = { titulo: string; ruta: string; icono: LucideIcon; soloJefe?: boolean; permiso?: Permiso; rubro?: Rubro; noEn?: Rubro[]; conFacturacion?: boolean };
 export type Grupo = { titulo: string | null; secciones: Seccion[] };
 
 export const MENU: Grupo[] = [
@@ -58,6 +60,7 @@ export const MENU: Grupo[] = [
     secciones: [
       { titulo: "Panel del día", ruta: "/panel-del-dia", icono: BarChart3, permiso: "panel_del_dia" },
       { titulo: "Cajas anteriores", ruta: "/cajas", icono: History, soloJefe: true },
+      { titulo: "Facturas", ruta: "/facturas", icono: ReceiptText, soloJefe: true, conFacturacion: true },
       { titulo: "Stock", ruta: "/stock", icono: ClipboardList, permiso: "stock" },
       { titulo: "Reportes", ruta: "/reportes", icono: FileText, soloJefe: true },
     ],
@@ -92,6 +95,7 @@ export const RUTAS_EN_LA_NUBE = [
   "/planes",
   "/panel-del-dia",
   "/cajas",
+  "/facturas",
   "/stock",
   "/reportes",
   "/descuentos",
@@ -99,6 +103,11 @@ export const RUTAS_EN_LA_NUBE = [
   "/excel",
   "/configuracion",
 ];
+
+/** ¿Tiene lo que pide la pantalla? (Facturas: la cuenta en la nube y la factura electrónica prendida) */
+export function tieneLoQuePide(seccion: Seccion, enNube: boolean, facturacion: boolean) {
+  return !seccion.conFacturacion || (enNube && facturacion);
+}
 
 export function estaEnLaNube(seccion: Seccion) {
   return RUTAS_EN_LA_NUBE.includes(seccion.ruta);

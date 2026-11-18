@@ -65,8 +65,9 @@ export async function pedir<T>(ruta: string, metodo: Metodo = "GET", cuerpo?: un
       body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
       signal: tiempo ? AbortSignal.timeout(tiempo) : undefined,
     });
-  } catch {
-    red.falla();
+  } catch (err) {
+    const venció = err instanceof DOMException && err.name === "TimeoutError";
+    red.falla(`${metodo} ${ruta.split("?")[0]} ${venció ? `tardó más de ${Math.round((tiempo ?? 0) / 1000)} s` : "no llegó al servidor"}`);
     throw new ErrorDeApi("No se pudo conectar con el servidor. Revisá internet y probá de nuevo.", 0);
   }
   red.exito(salio);
