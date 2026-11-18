@@ -7,6 +7,8 @@ para probar que una venta nunca queda facturada dos veces.
 
 import base64
 import re
+import threading
+import time
 import uuid
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime, timedelta
@@ -22,6 +24,7 @@ from app import arca, config, facturacion
 
 from .conftest import BASE, _psql, cargar_empleado, crear_usuario
 from .test_admin import _admin, _cliente_de
+from .test_concurrencia import a_la_vez, api  # noqa: F401 (api: la API corriendo de verdad, para pedidos a la vez)
 from .test_parte_3 import _sql
 
 CUIT = "20123456786"  # dígito verificador correcto
@@ -64,6 +67,8 @@ class ArcaFalso:
         self.cortar_antes = 0    # cuántos FECAESolicitar se cortan SIN llegar a ARCA
         self.cortar_despues = 0  # cuántos se autorizan pero la respuesta se pierde
         self.rechazar: str | None = None
+        self.demora = 0.0  # segundos que tarda en contestar (para que dos pedidos a la vez se crucen de verdad)
+        self._atomico = threading.Lock()  # el ARCA real controla y guarda cada comprobante de a uno
 
     def __call__(self, url, accion, sobre):
         raiz = ET.fromstring(sobre)
@@ -104,6 +109,7 @@ class ArcaFalso:
 
     def FECompUltimoAutorizado(self, raiz):
         pv, tipo = int(_txt(raiz, "PtoVta")), int(_txt(raiz, "CbteTipo"))
+        time.sleep(self.demora)
         return self._sobre("FECompUltimoAutorizado",
                            f"<PtoVta>{pv}</PtoVta><CbteTipo>{tipo}</CbteTipo><CbteNro>{self._ultimo(pv, tipo)}</CbteNro>")
 
@@ -119,6 +125,11 @@ class ArcaFalso:
             f"<EmisionTipo>CAE</EmisionTipo><FchVto>{c['FchVto']}</FchVto></ResultGet>"))
 
     def FECAESolicitar(self, raiz):
+        time.sleep(self.demora)
+        with self._atomico:
+            return self._solicitar(raiz)
+
+    def _solicitar(self, raiz):
         if self.cortar_antes:
             self.cortar_antes -= 1
             raise arca.ArcaSinRespuesta("ARCA no contestó a tiempo.")
@@ -300,13 +311,77 @@ def test_si_se_corta_antes_de_llegar_se_manda_de_nuevo_con_el_mismo_numero(clien
     assert len(afip.comprobantes) == 1
 
 
-def test_una_factura_trabada_frena_a_las_otras_del_comercio(cliente, afip):
+def test_una_factura_trabada_frena_a_las_otras_del_punto_de_venta(cliente, afip):
     ana, cid, producto, pv = _kiosco_con_facturacion(cliente, "ana.fila@gmail.com")
     afip.cortar_antes = 1
     trabada = cliente.post(f"/ventas/{_vender(cliente, ana, cid, producto)['id']}/facturar", headers=ana).json()
     assert trabada["estado"] == "enviando"
     r = cliente.post(f"/ventas/{_vender(cliente, ana, cid, producto)['id']}/facturar", headers=ana)
-    assert r.status_code == 409 and "otra factura" in r.json()["detail"]
+    assert r.status_code == 409 and "otra factura" in r.json()["detail"] and "saliendo" in r.json()["detail"]
+    segunda = _sql(f"select id from public.facturas where comercio_id = {cid} and estado = 'pendiente'")
+    # Pasado el tiempo "en vuelo", el aviso dice qué hacer: reintentar la trabada
+    _sql(f"update public.facturas set enviada = now() - interval '5 minutes' where id = {trabada['id']}")
+    r = cliente.post(f"/facturas/{segunda}/reintentar", headers=ana)
+    assert r.status_code == 409 and "sin respuesta de ARCA" in r.json()["detail"]
+    assert cliente.post(f"/facturas/{trabada['id']}/reintentar", headers=ana).json()["numero"] == 1
+    assert cliente.post(f"/facturas/{segunda}/reintentar", headers=ana).json()["numero"] == 2
+
+
+def test_la_que_no_consigue_turno_queda_pendiente_y_se_reintenta(cliente, afip, monkeypatch):
+    """Si la anterior del mismo punto de venta tarda demasiado, esta no espera para siempre: queda pendiente."""
+    ana, cid, producto, pv = _kiosco_con_facturacion(cliente, "ana.turno@gmail.com")
+    monkeypatch.setattr(facturacion, "ESPERA_TURNO", 0.2)
+    turno = facturacion._turno(f"homologacion|{CUIT}|{pv}")
+    turno.acquire()  # como si otra factura de este punto de venta estuviera saliendo
+    try:
+        r = cliente.post(f"/ventas/{_vender(cliente, ana, cid, producto)['id']}/facturar", headers=ana)
+    finally:
+        turno.release()
+    assert r.status_code == 409 and "saliendo" in r.json()["detail"]
+    assert [m for m, _ in afip.pedidos if m != "FEDummy"] == []  # ni le preguntó a ARCA
+    pendiente = _sql(f"select id from public.facturas where comercio_id = {cid} and estado = 'pendiente'")
+    assert cliente.post(f"/facturas/{pendiente}/reintentar", headers=ana).json()["estado"] == "autorizada"
+
+
+def test_50_facturas_a_la_vez_salen_sin_repetir_ni_saltear_numeros(cliente, api, afip):  # noqa: F811
+    """Dos sucursales del mismo dueño, con el MISMO CUIT y punto de venta, facturan 50 ventas en el mismo
+    instante contra el ARCA de mentira (que tarda un poco, para que los pedidos se crucen de verdad).
+    ARCA numera "último + 1" por punto de venta: sin turno, varias leerían el mismo último y pedirían el mismo
+    número. Con el turno salen de a una: 1 a 50, seguidas, cada una con su CAE, y ARCA no rechaza ninguna."""
+    import httpx
+
+    afip.demora = 0.01
+    email = "ana.cincuenta@gmail.com"
+    ana = crear_usuario(email)
+    _prender(cliente, email)
+    c = httpx.Client(base_url=api, headers=ana, timeout=60)
+    pv = next(_puntos_de_venta)
+    ventas = []
+    for nombre in ("Kiosco de Ana", "Kiosco de Ana (sucursal)"):
+        cid = c.post("/comercios", json={"nombre": nombre, "rubro": "kiosco"}).json()["id"]
+        assert c.put(f"/comercios/{cid}/facturacion", json={**DATOS, "puntoVenta": pv}).status_code == 200
+        producto = c.post(f"/comercios/{cid}/productos", json={"nombre": "Alfajor", "precioVenta": 1500, "stock": 100}).json()
+        assert c.post(f"/comercios/{cid}/caja/abrir", json={"responsable": "Ana", "montoInicial": 0}).status_code == 201
+        for _ in range(25):
+            r = c.post(f"/comercios/{cid}/ventas", json={"items": [{"productoId": producto["id"], "cantidad": 1}],
+                                                         "medioPago": "efectivo", "vendidoPor": "Ana"})
+            assert r.status_code == 201, r.text
+            ventas.append(r.json()["id"])
+
+    respuestas = a_la_vez([lambda v=v: c.post(f"/ventas/{v}/facturar") for v in ventas])
+
+    assert [r.status_code for r in respuestas] == [200] * 50, [r.text for r in respuestas if r.status_code != 200]
+    facturas = [r.json() for r in respuestas]
+    assert all(f["estado"] == "autorizada" and f["cae"] for f in facturas)
+    assert sorted(f["numero"] for f in facturas) == list(range(1, 51))  # sin repetir ni saltear
+    assert len({f["cae"] for f in facturas}) == 50
+    # ARCA recibió exactamente 50 pedidos de CAE, todos con el número que seguía (ninguno rechazado por 10016)
+    assert [m for m, _ in afip.pedidos].count("FECAESolicitar") == 50
+    assert sorted(n for (p, t, n) in afip.comprobantes if p == pv and t == 11) == list(range(1, 51))
+    # Y en orden de número, la fecha nunca va para atrás (ARCA no acepta una anterior a la última autorizada)
+    fechas = [f["fecha"] for f in sorted(facturas, key=lambda f: f["numero"])]
+    assert fechas == sorted(fechas)
+    assert _sql(f"select count(*) from public.facturas where punto_venta = {pv} and estado = 'enviando'") == "0"
 
 
 def test_si_arca_la_rechaza_queda_el_motivo_y_se_puede_facturar_de_nuevo(cliente, afip):
