@@ -9,6 +9,8 @@ import { useConexionRed } from "@/store/conexion";
 import { useNube, useSinInternet } from "@/store/nube";
 
 const ventas = (n: number) => (n === 1 ? "1 venta" : `${n} ventas`);
+const horaCorta = (ms: number) =>
+  new Date(ms).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "America/Argentina/Buenos_Aires" });
 
 const TONOS = {
   ambar: "border-amber-400/50 bg-amber-400/10 text-amber-800 dark:text-amber-200",
@@ -24,7 +26,7 @@ export function BannerSinConexion() {
   const sinInternet = useSinInternet();
   const conFoto = useNube((s) => s.estado === "sin_conexion");
   const guardada = useNube((s) => s.guardada);
-  const { pendientes, mandando, faltaLlave, paraRevisar, deOtraCuenta } = useConexionRed();
+  const { pendientes, mandando, faltaLlave, paraRevisar, deOtraCuenta, motivo, desde } = useConexionRed();
   const esJefe = useEsJefe();
   const [alDia, setAlDia] = useState(false);
   const habiaCola = useRef(false);
@@ -54,6 +56,12 @@ export function BannerSinConexion() {
         <span>
           <b>Modo sin conexión activado.</b> Las ventas se guardan en esta compu{pendientes > 0 && ` (${ventas(pendientes)} sin mandar)`} y se
           mandan solas cuando vuelva internet. Solo efectivo.{cuando && ` Precios y stock de las ${cuando}.`}
+          {/* Por qué se activó: si fue una falsa alarma (por ejemplo un corte de un instante del WiFi), queda a la vista */}
+          {motivo && (
+            <span className="mt-0.5 block text-xs opacity-80">
+              Por qué: {motivo}{desde > 0 && ` · desde las ${horaCorta(desde)}`}.
+            </span>
+          )}
         </span>
       </>
     );

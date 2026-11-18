@@ -7,7 +7,7 @@ import { baseLocal } from "@/lib/sin-conexion/almacen";
 import { contar, encolar, espera, listasParaMandar, marcarRechazada, rechazadas, reintentar, reprogramar, siguienteProvisorio } from "@/lib/sin-conexion/cola";
 import { sincronizar } from "@/lib/sin-conexion/sincronizar";
 import type { Caja, Venta } from "@/lib/tipos";
-import { useConexionRed, vigilarConexion } from "@/store/conexion";
+import { registroDeCortes, useConexionRed, vigilarConexion } from "@/store/conexion";
 import { useCuenta } from "@/store/cuenta";
 import { useDatos } from "@/store/datos";
 import { item } from "./ayuda";
@@ -254,12 +254,41 @@ describe("el sincronizador", () => {
 
 describe("¿hay internet?", () => {
   it("pasa a sin conexión recién con 2 fallas seguidas y vuelve con 1 acierto", () => {
-    red().anotarFalla();
+    red().anotarFalla("prueba");
     expect(red().estado).toBe("en_linea"); // una falla sola puede ser un pedido lento
-    red().anotarFalla();
+    red().anotarFalla("prueba");
     expect(red().estado).toBe("sin_conexion");
     red().anotarExito();
     expect(red()).toMatchObject({ estado: "en_linea", fallas: 0 });
+  });
+
+  it("anota por qué y cuándo pasó a sin conexión, y cuándo volvió (para explicar una falsa alarma)", () => {
+    localStorage.removeItem("mantenete-cortes");
+    red().anotarFalla("GET /ventas no llegó al servidor");
+    red().anotarFalla("POST /ventas tardó más de 15 s");
+    expect(red().motivo).toBe("2 pedidos seguidos no llegaron (el último: POST /ventas tardó más de 15 s)");
+    expect(red().desde).toBeGreaterThan(0);
+    red().anotarFalla("otra más"); // ya estaba sin conexión: no se anota otro corte
+    expect(registroDeCortes()).toHaveLength(1);
+    expect(registroDeCortes()[0].hasta).toBeUndefined();
+
+    red().anotarExito();
+    expect(red()).toMatchObject({ estado: "en_linea", motivo: "", desde: 0 });
+    const [corte] = registroDeCortes();
+    expect(corte.motivo).toContain("2 pedidos seguidos");
+    expect(corte.hasta).toBeGreaterThanOrEqual(corte.desde);
+  });
+
+  it("guarda solo los últimos 20 cortes", () => {
+    localStorage.removeItem("mantenete-cortes");
+    for (let i = 1; i <= 25; i++) {
+      red().pasarASinConexion(`corte ${i}`);
+      red().anotarExito();
+    }
+    const cortes = registroDeCortes();
+    expect(cortes).toHaveLength(20);
+    expect(cortes[0].motivo).toBe("corte 6");
+    expect(cortes.at(-1)?.motivo).toBe("corte 25");
   });
 
   it("una respuesta que llega tarde (el pedido salió antes del corte) no saca del modo sin conexión", () => {

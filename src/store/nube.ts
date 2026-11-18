@@ -93,7 +93,7 @@ export const useNube = create<EstadoNube>()((set, get) => ({
         const cambiaDeModo = useDatos.getState().modo !== "nube";
         useDatos.getState().usarNube(foto.datos);
         if (cambiaDeModo) useCarrito.setState({ carritos: {}, cancelados: {} });
-        useConexionRed.setState({ estado: "sin_conexion", fallas: 2 });
+        useConexionRed.getState().pasarASinConexion("al abrir no se pudieron traer los datos: se sigue con la foto guardada");
         return set({ estado: "sin_conexion", guardada: foto.guardada, error: "" });
       }
       set({ estado: "error", error: (err as Error).message });

@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileCheck2, PlugZap, Receipt, RotateCw, Save } from "lucide-react";
-import { api, type DatosFiscales, type EstadoFacturacion, type Factura, type PruebaArca } from "@/lib/api";
-import { numeroFactura } from "@/lib/factura";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowRight, PlugZap, Receipt, Save } from "lucide-react";
+import { api, type DatosFiscales, type EstadoFacturacion, type PruebaArca } from "@/lib/api";
 import { ddmm } from "@/lib/fechas";
 import { useComercioActivo, useEsJefe } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
@@ -13,17 +13,8 @@ import { Boton, Campo, Chip, claseInput, Tarjeta } from "../ui/base";
 
 // Factura electrónica de ARCA, etapa 1: SOLO el ambiente de pruebas de ARCA (homologación). Las facturas que salen
 // de acá no tienen valor fiscal. Es un agregado del plan que Nahuel prende desde /admin; lo usa solo el jefe.
-
-// En una factura van los centavos (pesos() de formato.ts los redondea)
-const CON_CENTAVOS = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const plata = (valor: number) => `$ ${CON_CENTAVOS.format(valor)}`;
-
-const ESTADOS = {
-  autorizada: { tono: "verde", texto: "Autorizada" },
-  enviando: { tono: "amarillo", texto: "Sin respuesta de ARCA" },
-  pendiente: { tono: "amarillo", texto: "Sin mandar" },
-  rechazada: { tono: "rojo", texto: "Rechazada" },
-} as const;
+// Acá (Configuración) solo se cargan los datos fiscales y se prueba la conexión: facturar y ver las facturas
+// está en su propia pantalla, Facturas (pantallas/Facturas.tsx).
 
 export function FacturaElectronica() {
   const enNube = useDatos((s) => s.modo === "nube");
@@ -38,33 +29,19 @@ export function FacturaElectronica() {
   );
 }
 
-async function traer(comercioId: number): Promise<[EstadoFacturacion, Factura[]]> {
-  const estado = await api.facturacion(comercioId);
-  return [estado, estado.datos ? await api.facturas(comercioId) : []];
-}
-
 function ConFacturacion({ comercioId }: { comercioId: number }) {
   const [estado, setEstado] = useState<EstadoFacturacion | null>(null);
-  const [facturas, setFacturas] = useState<Factura[]>([]);
   const [error, setError] = useState("");
   const [editando, setEditando] = useState(false);
 
   const recargar = useCallback(() => {
-    traer(comercioId).then(
-      ([e, f]) => {
-        setEstado(e);
-        setFacturas(f);
-      },
-      (err: Error) => setError(err.message),
-    );
+    api.facturacion(comercioId).then(setEstado, (err: Error) => setError(err.message));
   }, [comercioId]);
 
   useEffect(recargar, [recargar]);
 
   if (error) return <p className="text-peligro">{error}</p>;
   if (!estado) return <p className="text-texto-suave">Cargando…</p>;
-
-  const cambiar = (f: Factura) => setFacturas((lista) => [f, ...lista.filter((x) => x.id !== f.id)].sort((a, b) => b.id - a.id));
 
   return (
     <div className="flex flex-col gap-5">
@@ -92,8 +69,11 @@ function ConFacturacion({ comercioId }: { comercioId: number }) {
         />
       )}
 
-      {estado.datos && estado.servidorListo && <FacturarVenta comercioId={comercioId} facturas={facturas} alFacturar={cambiar} />}
-      {estado.datos && <ListaFacturas facturas={facturas} alCambiar={cambiar} listo={estado.servidorListo} />}
+      {estado.datos && (
+        <Link href="/facturas" className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-texto underline-offset-2 hover:text-primary hover:underline">
+          Facturar y ver las facturas en la pantalla Facturas <ArrowRight className="size-4" strokeWidth={1.75} />
+        </Link>
+      )}
     </div>
   );
 }
@@ -108,8 +88,8 @@ function ResumenDatos({ datos, alEditar, comercioId, listo }: { datos: DatosFisc
         <p className="text-[15px]">
           <b>{datos.razonSocial}</b> · CUIT {datos.cuit.replace(/^(\d{2})(\d{8})(\d)$/, "$1-$2-$3")} · Monotributo · Punto de venta {datos.puntoVenta}
         </p>
-        <div className="flex gap-2">
-          <Boton variante="fantasma" onClick={alEditar}>Editar datos</Boton>
+        <div className="flex flex-wrap gap-2">
+          <Boton variante="fantasma" className="whitespace-nowrap" onClick={alEditar}>Editar datos</Boton>
           <Boton
             icono={PlugZap}
             disabled={!listo || probando}
@@ -195,108 +175,5 @@ function FormularioDatos({ comercioId, inicial, alGuardar, alCancelar }: { comer
         </Boton>
       </div>
     </form>
-  );
-}
-
-function FacturarVenta({ comercioId, facturas, alFacturar }: { comercioId: number; facturas: Factura[]; alFacturar: (f: Factura) => void }) {
-  const ventas = useDatos((s) => s.ventas);
-  const avisar = useInterfaz((s) => s.avisar);
-  const [ventaId, setVentaId] = useState("");
-  const [enviando, setEnviando] = useState(false);
-  // Las ventas válidas de este comercio que todavía no tienen una factura autorizada (las más nuevas primero)
-  const facturables = useMemo(() => {
-    const yaFacturadas = new Set(facturas.filter((f) => f.tipo === "factura_c" && f.estado === "autorizada").map((f) => f.ventaId));
-    return ventas
-      .filter((v) => v.comercioId === comercioId && !v.anulada && !v.provisorio && v.total > 0 && !yaFacturadas.has(v.id))
-      .sort((a, b) => b.fecha.localeCompare(a.fecha))
-      .slice(0, 50);
-  }, [ventas, facturas, comercioId]);
-
-  return (
-    <form
-      className="flex flex-col gap-2"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        if (!ventaId) return;
-        setEnviando(true);
-        try {
-          const f = await api.facturar(Number(ventaId));
-          alFacturar(f);
-          setVentaId("");
-          if (f.estado === "autorizada") avisar(`Listo: ${numeroFactura(f)} autorizada por ARCA.`);
-          else avisar(f.errorMensaje || "ARCA no la autorizó.", "error");
-        } catch (err) {
-          avisar((err as Error).message, "error");
-        } finally {
-          setEnviando(false);
-        }
-      }}
-    >
-      <span className="text-sm font-medium">Facturar una venta</span>
-      <div className="flex flex-wrap gap-2">
-        <select id="fe-venta" value={ventaId} onChange={(e) => setVentaId(e.target.value)} className={`${claseInput} min-w-0 flex-1`} disabled={!facturables.length}>
-          <option value="">{facturables.length ? "Elegí la venta" : "No hay ventas para facturar"}</option>
-          {facturables.map((v) => (
-            <option key={v.id} value={v.id}>
-              N° {v.numero} · {ddmm(v.fecha)} {v.fecha.slice(11, 16)} · {plata(v.total)}
-            </option>
-          ))}
-        </select>
-        <Boton type="submit" variante="primario" icono={FileCheck2} disabled={!ventaId || enviando}>
-          {enviando ? "Mandando a ARCA…" : "Facturar"}
-        </Boton>
-      </div>
-    </form>
-  );
-}
-
-function ListaFacturas({ facturas, alCambiar, listo }: { facturas: Factura[]; alCambiar: (f: Factura) => void; listo: boolean }) {
-  const ventas = useDatos((s) => s.ventas);
-  const avisar = useInterfaz((s) => s.avisar);
-  const [reintentando, setReintentando] = useState<number | null>(null);
-  if (!facturas.length) return <p className="text-sm text-texto-suave">Todavía no hay facturas de este comercio.</p>;
-  return (
-    <ul className="flex flex-col divide-y divide-borde rounded-lg border border-borde">
-      {facturas.map((f) => {
-        const venta = ventas.find((v) => v.id === f.ventaId);
-        const estado = ESTADOS[f.estado];
-        return (
-          <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
-            <div className="min-w-0">
-              <p className="flex flex-wrap items-center gap-2 font-medium">
-                {numeroFactura(f)} <Chip tono={estado.tono}>{estado.texto}</Chip>
-              </p>
-              <p className="numeros text-sm text-texto-suave">
-                {plata(f.impTotal)}
-                {venta && ` · venta N° ${venta.numero}`}
-                {f.fecha && ` · ${ddmm(f.fecha, true)}`}
-                {f.cae && ` · CAE ${f.cae} (vence ${ddmm(f.vencimientoCae ?? "", true)})`}
-              </p>
-              {f.errorMensaje && f.estado !== "autorizada" && <p className="text-sm text-peligro">{f.errorMensaje}</p>}
-            </div>
-            {(f.estado === "pendiente" || f.estado === "enviando") && listo && (
-              <Boton
-                icono={RotateCw}
-                disabled={reintentando === f.id}
-                onClick={async () => {
-                  setReintentando(f.id);
-                  try {
-                    const nueva = await api.reintentarFactura(f.id);
-                    alCambiar(nueva);
-                    if (nueva.estado === "autorizada") avisar(`Listo: ${numeroFactura(nueva)} autorizada por ARCA.`);
-                  } catch (err) {
-                    avisar((err as Error).message, "error");
-                  } finally {
-                    setReintentando(null);
-                  }
-                }}
-              >
-                Reintentar
-              </Boton>
-            )}
-          </li>
-        );
-      })}
-    </ul>
   );
 }
