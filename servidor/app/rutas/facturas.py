@@ -247,7 +247,7 @@ def facturar(venta_id: int, datos: Facturar | None = None, usuario: Usuario = De
             factura = ya or nueva_factura(con, cofre, cofre.abrir("ventas", venta), fiscales, hecha_por)
     except errors.InsufficientPrivilege as error:
         raise facturacion.sin_permiso(error) from None
-    facturacion.emitir(usuario, llave, factura["id"])
+    facturacion.emitir(usuario, llave, factura)
     return devolver(usuario, llave, factura["id"])
 
 
@@ -259,12 +259,13 @@ def reintentar(factura_id: int, usuario: Usuario = Depends(usuario_actual), llav
         raise HTTPException(503, SIN_CERTIFICADO)
     with como_usuario(usuario) as con:
         Cofre(con, llave)
-        fila = con.execute("select comercio_id, estado from public.facturas where id = %s", (factura_id,)).fetchone()
+        fila = con.execute("select id, comercio_id, estado, ambiente, cuit_emisor, punto_venta from public.facturas "
+                           "where id = %s", (factura_id,)).fetchone()
         if fila is None:
             raise HTTPException(404, "No existe esa factura.")
         comercio_mio(con, fila["comercio_id"])
     if fila["estado"] in ("autorizada", "rechazada"):
         raise HTTPException(409, "Esa factura ya tiene respuesta de ARCA." if fila["estado"] == "autorizada"
                             else "ARCA la rechazó: corregí el problema y facturá la venta de nuevo.")
-    facturacion.emitir(usuario, llave, factura_id)
+    facturacion.emitir(usuario, llave, fila)
     return devolver(usuario, llave, factura_id)

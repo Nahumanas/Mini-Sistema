@@ -5,12 +5,22 @@ ARCA la autorizó. Si se vuelve a mandar sin preguntar, la misma venta puede que
 
 Cómo se evita, en tres pasos que se guardan en la base:
   1. La factura pasa a "enviando" ANTES de salir (y se guarda con qué número salió). La base deja una sola
-     "enviando" por comercio a la vez, así dos compus nunca piden el mismo número.
+     "enviando" por punto de venta (CUIT + punto de venta) a la vez, así dos facturas nunca piden el mismo número.
   2. Se le pregunta a ARCA el último número autorizado y se manda con el siguiente.
   3. Con la respuesta: "autorizada" (con su CAE) o "rechazada" (con el motivo).
 Si en el paso 3 no hubo respuesta, queda "enviando". La próxima vez, antes de mandarla de nuevo, se le pregunta
 a ARCA si ese número ya quedó autorizado (FECompUltimoAutorizado) y, si es así, se trae esa factura
 (FECompConsultar) y se controla que sea la nuestra (mismo total y mismo comprador).
+
+El turno por punto de venta (ARCA numera "último autorizado + 1" por CUIT, punto de venta y tipo):
+  - En la base: la fila "enviando" es el candado (índice único facturas_una_enviando_por_punto_de_venta). Se
+    guarda ANTES de llamar a ARCA y queda aunque el servidor se caiga, con el número que salió.
+  - En el servidor: las demás facturas de ese punto de venta esperan su turno (hasta ESPERA_TURNO) en vez de
+    rebotar. Mientras esperan no tienen ninguna conexión ni transacción abierta con la base.
+  No se usa una transacción abierta (ni pg_advisory_xact_lock) durante la llamada a ARCA: tendría tomada una
+  conexión de la base hasta 15 s por factura y, si el servidor se cae, se deshace justo lo que hay que recordar
+  ("salió la N° 7 y no sé si ARCA la autorizó"). La base no puede deshacer lo que ya autorizó ARCA: por eso se
+  anota primero y se pregunta después.
 """
 
 import json
@@ -32,8 +42,13 @@ from .formato import ARGENTINA
 # Si otra compu está mandando esta misma factura hace menos que esto, se espera (ARCA tarda como mucho ESPERA_SEGUNDOS)
 EN_VUELO = timedelta(seconds=arca.ESPERA_SEGUNDOS * 2)
 
+# Cuánto espera una factura a que termine la anterior del mismo punto de venta (ARCA de prueba contesta en ~1 s)
+ESPERA_TURNO = 20
+
 SIN_FACTURACION = "La factura electrónica no está activada en tu cuenta. Si la querés, pedísela a Mantenete."
-OTRA_SALIENDO = "Hay otra factura de este comercio saliendo para ARCA. Probá de nuevo en unos segundos."
+OTRA_SALIENDO = "Hay otra factura de este punto de venta saliendo para ARCA. Probá de nuevo en unos segundos."
+OTRA_TRABADA = ("Hay otra factura de este punto de venta que quedó sin respuesta de ARCA. Reintentala en Facturas "
+                "(Para revisar) y después mandá esta.")
 
 
 def sin_permiso(error: Exception) -> HTTPException:
@@ -101,6 +116,33 @@ def ticket(usuario: Usuario, llave: Llave | None = None) -> arca.Ticket:
         return nuevo
 
 
+# ---------------------------------------------------------------- el turno de cada punto de venta
+
+_turnos: dict[str, threading.Lock] = {}
+_turnos_candado = threading.Lock()
+
+
+def clave_turno(factura: dict) -> str:
+    """El turno es el de la numeración de ARCA: ambiente + CUIT + punto de venta (sea del comercio que sea)."""
+    return f"{factura['ambiente']}|{factura['cuit_emisor']}|{factura['punto_venta']}"
+
+
+def _turno(clave: str) -> threading.Lock:
+    with _turnos_candado:
+        return _turnos.setdefault(clave, threading.Lock())
+
+
+def _quien_tiene_el_turno(con, factura: dict) -> HTTPException:
+    """Ya hay otra "enviando" en ese punto de venta (de otro servidor, o una que quedó sin respuesta de ARCA)."""
+    otra = con.execute(
+        "select enviada from public.facturas where cuit_emisor = %s and punto_venta = %s and ambiente = %s "
+        "and estado = 'enviando' and id <> %s",
+        (factura["cuit_emisor"], factura["punto_venta"], factura["ambiente"], factura["id"]),
+    ).fetchone()
+    trabada = otra is not None and otra["enviada"] is not None and datetime.now(UTC) - otra["enviada"] >= EN_VUELO
+    return HTTPException(409, OTRA_TRABADA if trabada else OTRA_SALIENDO)
+
+
 # ---------------------------------------------------------------- emitir
 
 def hoy_argentina():
@@ -133,9 +175,20 @@ def _es_la_nuestra(factura: dict, consultada: arca.Consultado) -> bool:
             and consultada.doc_nro == factura["doc_nro"] and (factura["fecha"] is None or consultada.fecha == factura["fecha"]))
 
 
-def emitir(usuario: Usuario, llave: Llave | None, factura_id: int) -> dict:
-    """Manda la factura a ARCA (o confirma que ya salió). Devuelve la fila como quedó:
+def emitir(usuario: Usuario, llave: Llave | None, factura: dict) -> dict:
+    """Manda la factura a ARCA (o confirma que ya salió), cuando le toca el turno a su punto de venta.
+    factura: la fila (alcanzan id, ambiente, cuit_emisor y punto_venta). Devuelve la fila como quedó:
     autorizada, rechazada, o "enviando" si ARCA no contestó (se puede reintentar sin miedo)."""
+    turno = _turno(clave_turno(factura))
+    if not turno.acquire(timeout=ESPERA_TURNO):
+        raise HTTPException(409, OTRA_SALIENDO)
+    try:
+        return _emitir(usuario, llave, factura["id"])
+    finally:
+        turno.release()
+
+
+def _emitir(usuario: Usuario, llave: Llave | None, factura_id: int) -> dict:
     # ---- paso 1: tomarla ("enviando") ------------------------------------------------------------
     try:
         with como_usuario(usuario, llave, "factura") as con:
@@ -149,10 +202,13 @@ def emitir(usuario: Usuario, llave: Llave | None, factura_id: int) -> dict:
                 raise HTTPException(409, "Esta factura se está mandando a ARCA. Esperá unos segundos.")
             asociado = _asociado(con, factura)
             numero_anterior = factura["numero"] if factura["estado"] == "enviando" else None
-            factura = _cambiar(con, factura_id, estado="enviando", enviada=datetime.now(UTC), sumar_intento=1,
-                               **({} if numero_anterior else {"numero": None}))
-    except errors.UniqueViolation:
-        raise HTTPException(409, OTRA_SALIENDO) from None
+            try:
+                with con.transaction():  # un "savepoint": si falla, la transacción de afuera sigue sirviendo
+                    factura = _cambiar(con, factura_id, estado="enviando", enviada=datetime.now(UTC), sumar_intento=1,
+                                       **({} if numero_anterior else {"numero": None}))
+            except errors.UniqueViolation:
+                # El turno de este punto de venta lo tiene otra factura "enviando": se avisa cuál es el caso
+                raise _quien_tiene_el_turno(con, factura) from None
     except errors.InsufficientPrivilege as error:
         raise sin_permiso(error) from None
 

@@ -125,7 +125,11 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
   fiscales en Configuración → Factura electrónica, prueba la conexión y factura una venta ya cobrada.
 - **Nunca dos veces la misma venta** (`app/facturacion.py`): la factura pasa a `enviando` (con su número) ANTES de salir.
   Si ARCA no contesta, queda así; al reintentar, primero se pregunta el último número autorizado y, si ya salió, se trae
-  con `FECompConsultar` y se controla que sea la nuestra (mismo total y comprador). Una sola `enviando` por comercio.
+  con `FECompConsultar` y se controla que sea la nuestra (mismo total y comprador).
+- **De a una por punto de venta**: ARCA numera "último autorizado + 1" por CUIT, punto de venta y tipo. La base deja una
+  sola `enviando` por CUIT + punto de venta (aunque sean dos sucursales) y el servidor hace esperar su turno a las demás
+  (hasta `ESPERA_TURNO`, 20 s; después quedan pendientes para reintentar). Mientras esperan no tienen la base tomada.
+  Probado con 50 facturas a la vez de dos sucursales con el mismo punto de venta: salen 1 a 50, sin repetir ni saltear.
 - El número se pide al mandarla (último autorizado + 1), no al cobrar. Toda la plata con `Decimal` y 2 decimales.
 - El ticket de ARCA dura 12 horas y ARCA **no da otro** mientras el anterior siga vigente: se guarda en memoria y en la
   base (`privado.arca_tickets`, cifrado con un secreto que sale de `PIMIENTA_CIFRADO`), así un reinicio de Render no lo pierde.

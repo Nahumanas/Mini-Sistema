@@ -263,7 +263,7 @@ def anular_venta(caja_id: int, datos: AnularVenta, usuario: Usuario = Depends(us
         # La venta ya quedó anulada. La nota de crédito sale ahora; si ARCA no contesta, queda pendiente
         # (o "enviando") y se reintenta desde Facturas, sin que se pueda emitir dos veces.
         try:
-            facturacion.emitir(usuario, llave, nota["id"])
+            facturacion.emitir(usuario, llave, nota)
         except HTTPException:
             pass
         resultado["notaCredito"] = facturas.devolver(usuario, llave, nota["id"])
