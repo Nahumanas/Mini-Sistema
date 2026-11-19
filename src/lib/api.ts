@@ -288,6 +288,33 @@ export type CobroMercadoPago = {
 export type NuevoCobro = Omit<NuevaVenta, "medioPago">;
 
 /** Cada cosa que la página le puede pedir a la API (ver servidor/README.md). */
+/** Lo de UN mes de todos los comercios del jefe, ya abierto (Descargar mis datos). Con actuales, además la foto de hoy
+ * de lo que no tiene fecha (stock, proveedores, empleados, socios, datos fiscales). Ver servidor/app/rutas/exportar.py. */
+export type CopiaDelMes = {
+  mes: string;
+  comercios: Comercio[];
+  cajas: Caja[];
+  relevos: Relevo[];
+  ajustes: AjusteCaja[];
+  ventas: Venta[];
+  compras: Compra[];
+  gastos: Gasto[];
+  retiros: Retiro[];
+  cuotas: CuotaGimnasio[];
+  reservas: Reserva[];
+  facturas: Factura[];
+  productos?: Producto[];
+  proveedores?: Proveedor[];
+  promos?: Promo[];
+  lotes?: Lote[];
+  empleados?: Empleado[];
+  socios?: Socio[];
+  planes?: Plan[];
+  disciplinas?: Disciplina[];
+  clases?: Clase[];
+  datosFiscales?: (DatosFiscales & { comercioId: number; condicionIva?: string })[];
+};
+
 export const api = {
   inicio: () => pedir<DatosDeInicio>("/inicio"),
 
@@ -370,6 +397,8 @@ export const api = {
     pedir<DatosFiscales & { comercioId: number }>(`/comercios/${comercioId}/facturacion`, "PUT", datos),
   probarArca: (comercioId: number) => pedir<PruebaArca>(`/comercios/${comercioId}/facturacion/probar`, "POST"),
   facturas: (comercioId: number) => pedir<Factura[]>(`/comercios/${comercioId}/facturas`),
+  // Descargar mis datos (solo el jefe): de a un mes por pedido, así el servidor nunca abre un año entero de golpe
+  copiaDelMes: (mes: string, actuales: boolean) => pedir<CopiaDelMes>(`/exportar/${mes}${actuales ? "?actuales=true" : ""}`),
   facturar: (ventaId: number) => pedir<Factura>(`/ventas/${ventaId}/facturar`, "POST", {}),
   reintentarFactura: (facturaId: number) => pedir<Factura>(`/facturas/${facturaId}/reintentar`, "POST", {}),
   recontar: (cajaId: number, datos: { efectivo: number; hechoPor: string; motivo: string }) => pedir<AjusteCaja>(`/cajas/${cajaId}/recontar`, "POST", datos),
