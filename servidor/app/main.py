@@ -14,7 +14,7 @@ from psycopg import errors
 from . import config, cuenta_suspendida
 from .base import cerrar_pool, pool
 from .cifrado import FaltaConfigurar
-from .rutas import (admin, avisos_mail, caja, clases, comercios, compras, control, cuenta, facturas, inicio, mercadopago, productos, promos, reservas_web,
+from .rutas import (admin, avisos_mail, caja, clases, comercios, compras, control, cuenta, exportar, facturas, inicio, mercadopago, productos, promos, reservas_web,
                     seguridad, socios,
                     telegram, vencimientos, ventas)
 
@@ -56,5 +56,5 @@ def salud():
 
 
 for modulo in (admin, inicio, cuenta, seguridad, telegram, avisos_mail, comercios, productos, caja, ventas, facturas, mercadopago, compras, vencimientos, promos,
-               socios, clases, reservas_web, control):
+               socios, clases, reservas_web, control, exportar):
     app.include_router(modulo.router)

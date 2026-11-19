@@ -8,6 +8,7 @@ import { MEDIOS_DE_PAGO } from "@/lib/formato";
 import { COLUMNAS_PRODUCTOS } from "@/lib/productos-excel";
 import { useComercioActivo } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
+import { DescargarMisDatos } from "../copia/DescargarMisDatos";
 import { ImportarProductos } from "../productos/ImportarProductos";
 import { Boton, Encabezado } from "../ui/base";
 
@@ -48,8 +49,10 @@ export function Excel() {
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <Encabezado titulo="Importar / exportar Excel" descripcion={`Para ${comercio.nombre}. Los archivos .csv se abren con doble clic en Excel.`} />
 
+      <DescargarMisDatos />
+
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Exportar</h2>
+        <h2 className="text-lg font-semibold">Exportar de a una lista (.csv)</h2>
         <div className="grid gap-4 sm:grid-cols-3">
           {descargas.map((d) => (
             <div key={d.titulo} className="flex flex-col gap-3 rounded-lg border border-borde bg-superficie p-4">
