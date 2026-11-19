@@ -12,6 +12,7 @@ import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { useSinInternet } from "@/store/nube";
 import { CobroConQr } from "./CobroConQr";
+import { FacturaDeLaVenta } from "./FacturaDeLaVenta";
 
 const ICONO_MEDIO = { efectivo: Banknote, debito: WalletCards, credito: CreditCard, transferencia: QrCode, mercadopago: ScanLine };
 
@@ -37,7 +38,7 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar, conMer
   const avisar = useInterfaz((s) => s.avisar);
   const [pagaCon, setPagaCon] = useState("");
   const [conTicket, setConTicket] = useState(false);
-  const [ultima, setUltima] = useState<Venta | null>(null); // para volver a bajar el ticket de la última venta
+  const [ultima, setUltima] = useState<Venta | null>(null); // para volver a bajar el ticket (y la factura) de la última venta
   const [cobrando, setCobrando] = useState(false); // en la nube la venta tarda un momento: no se cobra dos veces
   const [conQr, setConQr] = useState(false); // se está mostrando el QR de Mercado Pago
   const sinInternet = useSinInternet();
@@ -178,6 +179,9 @@ export function PieCobro({ comercioId, cuenta, medio, setMedio, alCobrar, conMer
             )}
           </div>
         )}
+
+        {/* Si el comercio factura cada venta al cobrar: cómo va la factura de la última venta, y su PDF */}
+        {ultima?.factura && comercio && <FacturaDeLaVenta key={ultima.factura.id} comercioId={comercioId} comercio={comercio.nombre} factura={ultima.factura} />}
       </div>
 
       <div className="flex flex-col gap-3 sm:items-end">

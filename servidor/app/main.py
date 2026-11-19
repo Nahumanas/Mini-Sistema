@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from psycopg import errors
 
-from . import config, cuenta_suspendida
+from . import config, cuenta_suspendida, trabajador
 from .base import cerrar_pool, pool
 from .cifrado import FaltaConfigurar
 from .rutas import (admin, avisos_mail, caja, clases, comercios, compras, control, cuenta, exportar, facturas, inicio, mercadopago, productos, promos, reservas_web,
@@ -21,7 +21,10 @@ from .rutas import (admin, avisos_mail, caja, clases, comercios, compras, contro
 
 @asynccontextmanager
 async def ciclo(_app: FastAPI):
+    # El trabajador de fondo que manda las facturas a ARCA (ver trabajador.py)
+    trabajador.arrancar()
     yield
+    trabajador.parar()
     cerrar_pool()
 
 

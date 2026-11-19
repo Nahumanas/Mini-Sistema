@@ -2,18 +2,21 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileCheck2, ReceiptText, RotateCw, Settings } from "lucide-react";
+import { FileCheck2, FileDown, ReceiptText, RotateCw, Settings } from "lucide-react";
 import { api, type EstadoFacturacion, type Factura } from "@/lib/api";
 import { ESTADOS_FACTURA, numeroCorto, numeroFactura, plataConCentavos, relacionFactura, tipoFactura } from "@/lib/factura";
-import { ddmm } from "@/lib/fechas";
+import { descargarFacturaPdf, type EmisorFactura } from "@/lib/factura-pdf";
+import { ahora, ddmm, hora } from "@/lib/fechas";
 import { useComercioActivo } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { Boton, Chip, claseInput, Encabezado, Segmentado, Tabla, Tarjeta, Vacio } from "../ui/base";
 
-// Las facturas de ARCA del comercio: facturar una venta y ver lo que salió (con su CAE, o qué falló para reintentar).
-// Los datos fiscales y la conexión con ARCA se cargan en Configuración. Solo la ve el jefe, con la factura
-// electrónica prendida en /admin (lo controla el menú: lib/navegacion.ts). Etapa 1: solo el ARCA de prueba.
+// Las facturas de ARCA del comercio: facturar una venta y ver lo que salió (con su CAE, o qué falló para reintentar),
+// y bajar el PDF con el QR de ARCA. Con "Facturar cada venta al cobrar" prendido (Configuración), las facturas
+// aparecen solas y el servidor las reintenta solo. Los datos fiscales y la conexión con ARCA se cargan en
+// Configuración. Solo la ve el jefe, con la factura electrónica prendida en /admin (lo controla el menú:
+// lib/navegacion.ts). Por ahora solo el ARCA de prueba.
 
 type Filtro = "todas" | "facturas" | "notas" | "problemas";
 
@@ -59,7 +62,7 @@ function ConComercio({ comercioId, nombre }: { comercioId: number; nombre: strin
       ) : (
         <>
           <FacturarVenta comercioId={comercioId} facturas={facturas} alFacturar={cambiar} />
-          <Lista facturas={facturas} alCambiar={cambiar} nombre={nombre} />
+          <Lista facturas={facturas} alCambiar={cambiar} nombre={nombre} emisor={estado.datos} />
         </>
       )}
     </div>
@@ -88,9 +91,10 @@ function FacturarVenta({ comercioId, facturas, alFacturar }: { comercioId: numbe
   const avisar = useInterfaz((s) => s.avisar);
   const [ventaId, setVentaId] = useState("");
   const [enviando, setEnviando] = useState(false);
-  // Las ventas válidas de este comercio que todavía no tienen una factura autorizada (las más nuevas primero)
+  // Las ventas válidas de este comercio que todavía no tienen factura (las más nuevas primero). Las que tienen una
+  // esperando a ARCA tampoco van: esas ya están en la lista, con su botón Reintentar.
   const facturables = useMemo(() => {
-    const yaFacturadas = new Set(facturas.filter((f) => f.tipo === "factura_c" && f.estado === "autorizada").map((f) => f.ventaId));
+    const yaFacturadas = new Set(facturas.filter((f) => f.tipo === "factura_c" && f.estado !== "rechazada").map((f) => f.ventaId));
     return ventas
       .filter((v) => v.comercioId === comercioId && !v.anulada && !v.provisorio && v.total > 0 && !yaFacturadas.has(v.id))
       .sort((a, b) => b.fecha.localeCompare(a.fecha))
@@ -137,11 +141,15 @@ function FacturarVenta({ comercioId, facturas, alFacturar }: { comercioId: numbe
   );
 }
 
-function Lista({ facturas, alCambiar, nombre }: { facturas: Factura[]; alCambiar: (f: Factura) => void; nombre: string }) {
+function Lista({ facturas, alCambiar, nombre, emisor }: { facturas: Factura[]; alCambiar: (f: Factura) => void; nombre: string; emisor: EmisorFactura }) {
   const ventas = useDatos((s) => s.ventas);
   const avisar = useInterfaz((s) => s.avisar);
   const [filtro, setFiltro] = useState<Filtro>("todas");
   const [reintentando, setReintentando] = useState<number | null>(null);
+  const bajarPdf = (f: Factura) =>
+    descargarFacturaPdf(f, emisor, nombre, facturas.find((x) => x.id === f.asociadaId)).catch((err: Error) =>
+      avisar(err.message || "No se pudo armar el PDF. Probá de nuevo.", "error"),
+    );
 
   if (!facturas.length) return <Vacio icono={ReceiptText}>Todavía no hay facturas de {nombre}.</Vacio>;
 
@@ -205,6 +213,16 @@ function Lista({ facturas, alCambiar, nombre }: { facturas: Factura[]; alCambiar
                 </td>
                 <td className="px-3 py-2.5 sm:px-4">
                   <Chip tono={estado.tono}>{estado.texto}</Chip>
+                  {f.estado === "autorizada" && (
+                    <div className="mt-2">
+                      <Boton icono={FileDown} onClick={() => void bajarPdf(f)}>PDF</Boton>
+                    </div>
+                  )}
+                  {(f.estado === "pendiente" || f.estado === "enviando") && f.proximoIntento && (
+                    <p className="mt-1 text-[13px] text-texto-suave">
+                      {f.proximoIntento > ahora() ? `Sale sola: prueba de nuevo a las ${hora(f.proximoIntento)}` : "Sale sola en un momento"}
+                    </p>
+                  )}
                   {(f.estado === "pendiente" || f.estado === "enviando") && (
                     <div className="mt-2">
                       <Boton

@@ -1,0 +1,36 @@
+# DESPERTADOR DEL CONTROL DE FACTURAS (todas las noches, 22:05 de Argentina).
+#
+# El control de las 22 h (facturas sin CAE o rechazadas del día, y numeración igual a la de ARCA) lo hace el
+# trabajador de fondo de la API (servidor/app/trabajador.py). Pero Render gratis APAGA la API si nadie la usa
+# por 15 minutos, y apagada no controla nada. Este workflow solo la despierta: pide /salud y listo.
+# No manda ningún dato ni usa ningún secreto: la dirección de la API es pública.
+#
+# Lo que tenés que cargar una vez: la variable URL_API (Settings → Secrets and variables → Actions →
+# Variables), con la dirección de la API en Render, por ejemplo https://mantenete-api.onrender.com
+name: Control de facturas
+
+on:
+  schedule:
+    - cron: "5 1 * * *" # 01:05 UTC = 22:05 en Argentina
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  despertar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Despertar la API
+        env:
+          URL_API: ${{ vars.URL_API }}
+        run: |
+          if [ -z "$URL_API" ]; then
+            echo "::warning::Falta la variable URL_API (la dirección de la API en Render): no se despertó nada."
+            exit 0
+          fi
+          # Render tarda hasta ~1 minuto en arrancar una API dormida: se reintenta con calma.
+          curl --fail --silent --show-error --max-time 90 --retry 5 --retry-delay 20 --retry-all-errors \
+            "${URL_API%/}/salud"
+          echo
+          echo "API despierta: el control de las 22 h corre en el próximo minuto."

@@ -22,6 +22,7 @@ from ..cifrado import Llave
 from ..llaves import llave_requerida
 from ..mercadopago import ErrorDeMercadoPago
 from ..sobres import Cofre
+from . import facturas
 from .comun import LEER_CLAVES, LEER_COMERCIO, comercio_mio, existe
 from .telegram import jefe
 from .ventas import _LEER_CAJA, _LEER_PRODUCTOS, _TRABAR_COMERCIO, CobroNuevo, abrir_productos, con_items, guardar, preparar
@@ -265,22 +266,26 @@ def revisar_cobro(usuario: Usuario, llave: Llave, comercio_id: int, cobro_id: in
     # Pagado: se guarda la venta. Se traba el comercio, el cobro y los productos (como una venta común).
     ids = sorted({int(r["producto_id"]) for r in cobro["detalle"]})
     with en_viajes(usuario, llave, "venta") as viaje:  # llave y motivo: para el historial de cambios (baja el stock)
-        comercios, claves, cobros, cajas, filas, fichas = viaje(
+        comercios, claves, cobros, cajas, filas, fichas, fiscales = viaje(
             (_TRABAR_COMERCIO, (comercio_id,)), (LEER_CLAVES, None), (_LEER_COBRO + " for update", (comercio_id, cobro_id)),
             (_LEER_CAJA, (comercio_id,)), (_LEER_PRODUCTOS, (comercio_id, ids)), (avisos.FICHA, None),
+            (facturas.LEER_FISCALES, (comercio_id,)),
         )
         comercio = existe(comercios)
         cobro = cobros[0]
         ya_resuelto = cobro["estado"] != "esperando"  # otra compu guardó la venta mientras tanto
         if not ya_resuelto:
-            venta = _guardar_pagado(viaje, claves, llave, comercio, cobro, cajas, filas, ids, fichas, tareas, usuario.email)
+            venta = _guardar_pagado(viaje, claves, llave, comercio, cobro, cajas, filas, ids, fichas, tareas, usuario.email,
+                                    fiscales)
     if ya_resuelto:  # (afuera: la transacción ya se cerró y soltó las trabas)
         return revisar_cobro(usuario, llave, comercio_id, cobro_id, tareas)
     return _cobro_para_la_pagina({**cobro, "estado": "pagado", "venta_id": venta["id"]}, venta)
 
 
-def _guardar_pagado(viaje, claves, llave, comercio, cobro, cajas, filas, ids, fichas, tareas, email_cuenta: str) -> dict:
-    """Guarda la venta del cobro pagado y marca el cobro, todo junto (el comercio y el cobro ya están trabados)."""
+def _guardar_pagado(viaje, claves, llave, comercio, cobro, cajas, filas, ids, fichas, tareas, email_cuenta: str,
+                    fiscales: list[dict] | None = None) -> dict:
+    """Guarda la venta del cobro pagado y marca el cobro, todo junto (el comercio y el cobro ya están trabados).
+    Si el comercio factura al cobrar, también su factura (en el mismo viaje, ver ventas.guardar)."""
     comercio_id = comercio["id"]
     cofre = Cofre(viaje.con, llave, claves)
     cofre.comercio_ya_leido(comercio_id)
@@ -296,6 +301,7 @@ def _guardar_pagado(viaje, claves, llave, comercio, cobro, cajas, filas, ids, fi
                where id = %(id)s returning *""",
             {"c": comercio_id, "id": cobro["id"]},
         ),),
+        fiscales=fiscales,
     )
 
 
