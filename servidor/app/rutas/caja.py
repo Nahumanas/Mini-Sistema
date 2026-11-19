@@ -263,7 +263,7 @@ def anular_venta(caja_id: int, datos: AnularVenta, usuario: Usuario = Depends(us
         # La venta ya quedó anulada. La nota de crédito sale ahora; si ARCA no contesta, queda pendiente
         # (o "enviando") y se reintenta desde Facturas, sin que se pueda emitir dos veces.
         try:
-            facturacion.emitir(usuario, llave, nota)
+            facturacion.emitir(facturacion.ComoUsuario(usuario, llave), nota)
         except HTTPException:
             pass
         resultado["notaCredito"] = facturas.devolver(usuario, llave, nota["id"])
@@ -279,13 +279,19 @@ def _nota_de_credito_si_hace_falta(con, venta_id: int, hecha_por: str) -> dict |
     ).fetchone()
     if factura is None:
         return None
+    tiene = con.execute("select privado.tengo_facturacion() as si").fetchone()["si"]
+    if tiene:
+        # Trabada hasta el final: si el trabajador de fondo la está tomando justo ahora, se espera a que la marque
+        # "enviando" (y se avisa abajo); si no, el trabajador espera, y la encuentra descartada.
+        factura = con.execute("select * from privado.factura_trabar(%s)", (factura["id"],)).fetchone()
+        if factura is None:
+            return None
     if factura["estado"] == "enviando":
         raise HTTPException(409, "La factura de esta venta se está mandando a ARCA (o ARCA no contestó). "
                                  "Reintentala desde Facturas y después anulá la venta.")
-    tiene = con.execute("select privado.tengo_facturacion() as si").fetchone()["si"]
     if factura["estado"] == "pendiente":
-        if tiene:
-            con.execute("select privado.factura_descartar(%s)", (factura["id"],))
+        if tiene and not con.execute("select privado.factura_descartar(%s) as si", (factura["id"],)).fetchone()["si"]:
+            raise HTTPException(409, "La factura de esta venta justo salió para ARCA. Probá de nuevo en unos segundos.")
         return None
     # autorizada
     if not tiene:

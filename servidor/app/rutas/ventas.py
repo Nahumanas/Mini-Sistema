@@ -9,13 +9,14 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
-from .. import avisos
+from .. import avisos, trabajador
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario, en_viajes
 from ..cifrado import Llave
-from ..formato import a_camel
+from ..formato import ARGENTINA, a_camel
 from ..llaves import llave_requerida
 from ..sobres import CENTAVOS, Cofre
+from . import facturas
 from .comun import HOY_ARGENTINA, LEER_CLAVES, LEER_COMERCIO, existe as _existe, insertar_ajuste
 
 router = APIRouter(tags=["Ventas"])
@@ -172,6 +173,8 @@ def registrar(comercio_id: int, venta: NuevaVenta, tareas: BackgroundTasks, resp
     así dos compus del mismo local nunca sacan el mismo número de venta.
     Si algún producto quedó en su mínimo, al jefe le llega un aviso por Telegram y/o por mail,
     según lo que haya prendido (uno solo por producto hasta que se reponga).
+    Si el comercio factura al cobrar, la Factura C queda "pendiente" en la misma transacción (y en el mismo viaje)
+    y el trabajador de fondo la manda a ARCA enseguida: la venta no espera a ARCA.
 
     Va en DOS viajes a la base (leer todo y guardar todo), porque la base está lejos del servidor.
     Si trae idCliente y esa venta ya estaba guardada, la devuelve (con 200 en vez de 201) sin guardarla de nuevo.
@@ -183,9 +186,9 @@ def registrar(comercio_id: int, venta: NuevaVenta, tareas: BackgroundTasks, resp
     ya_detalle = ((_DETALLE.format(f"in ({_YA_ESTABA.replace('*', 'id')})"), (comercio_id, venta.idCliente)) if venta.idCliente
                   else ("select null where false", None))
     with en_viajes(usuario, llave, "venta") as viaje:
-        comercios, claves, ya_estaba, detalle_ya, cajas, filas, fichas = viaje(
+        comercios, claves, ya_estaba, detalle_ya, cajas, filas, fichas, fiscales = viaje(
             (_TRABAR_COMERCIO, (comercio_id,)), (LEER_CLAVES, None), ya, ya_detalle, (_LEER_CAJA, (comercio_id,)),
-            (_LEER_PRODUCTOS, (comercio_id, ids)), (avisos.FICHA, None),
+            (_LEER_PRODUCTOS, (comercio_id, ids)), (avisos.FICHA, None), (facturas.LEER_FISCALES, (comercio_id,)),
         )
         comercio = _existe(comercios)
         cofre = Cofre(viaje.con, llave, claves)
@@ -198,7 +201,8 @@ def registrar(comercio_id: int, venta: NuevaVenta, tareas: BackgroundTasks, resp
         productos = abrir_productos(cofre, filas, ids)
         preparada = preparar(cofre, comercio_id, productos, venta)
         return guardar(viaje, cofre, comercio, cajas[0]["id"], productos, preparada.renglones, preparada.sobre,
-                       venta.medioPago, venta.vendidoPor, fichas, tareas, usuario.email, id_cliente=venta.idCliente)
+                       venta.medioPago, venta.vendidoPor, fichas, tareas, usuario.email, id_cliente=venta.idCliente,
+                       fiscales=fiscales)
 
 
 def abrir_productos(cofre: Cofre, filas: list[dict], ids: list[int]) -> dict[int, dict]:
@@ -236,18 +240,30 @@ def preparar(cofre: Cofre, comercio_id: int, productos: dict[int, dict], venta: 
 
 def guardar(viaje, cofre: Cofre, comercio: dict, caja_id: int, productos: dict[int, dict], renglones: list[dict],
             sobre: str, medio_pago: str, vendido_por: str, fichas: list[dict], tareas: BackgroundTasks,
-            email_cuenta: str, ademas: tuple = (), id_cliente: UUID | None = None) -> dict:
+            email_cuenta: str, ademas: tuple = (), id_cliente: UUID | None = None, fiscales: list[dict] | None = None) -> dict:
     """Guarda la venta (ya preparada) en un viaje y cierra la transacción. El comercio y los productos tienen
-    que estar trabados. "ademas": consultas que van en el mismo viaje, después de la venta (todo o nada)."""
+    que estar trabados. "ademas": consultas que van en el mismo viaje, después de la venta (todo o nada).
+    fiscales: los datos fiscales (facturas.LEER_FISCALES); si factura al cobrar, la factura va en el mismo viaje."""
     comercio_id = comercio["id"]
     ficha = fichas[0] if fichas else None
     chat = avisos.chat_de(ficha, "stock_bajo")
     mail = avisos.mail_de(ficha, "stock_bajo", email_cuenta)
-    guardado, *_ = viaje((_GUARDAR, {
+    # Lo que se vendió, abierto (para contestarle a la página y, si factura al cobrar, para los renglones de la factura)
+    abiertos = [{**cofre.abrir("ventas_detalle", {"comercio_id": comercio_id, "sobre": r["sobre"]}),
+                 "producto_id": r["producto_id"], "cantidad": r["cantidad"]} for r in renglones]
+    con_factura = ()
+    if facturas.factura_al_cobrar(fiscales):
+        cuentas = cofre.abrir("ventas", {"comercio_id": comercio_id, "sobre": sobre})
+        con_factura = (facturas.consulta_al_cobrar(cofre, comercio_id, None, cuentas["total"], cuentas["descuento"], abiertos,
+                                                   vendido_por, datetime.now(ARGENTINA).date()),)
+    guardado, *resto = viaje((_GUARDAR, {
         "comercio": comercio_id, "caja": caja_id, "medio": medio_pago, "por": vendido_por.strip(),
         "sobre": sobre, "detalle": json.dumps(renglones), "avisar": chat is not None or mail is not None,
         **_EN_LINEA, "id_cliente": id_cliente,
-    }), *ademas, terminar=True)
+    }), *ademas, *con_factura, terminar=True)
+    factura = resto[-1][0] if con_factura and resto[-1] else None
+    if factura is not None:
+        trabajador.despertar()  # la venta ya quedó guardada (COMMIT): la factura sale ahora, sin que nadie espere
 
     fila = next(_de_json(g["fila"]) for g in guardado if g["que"] == "venta")
     abierta = cofre.abrir("ventas", fila)
@@ -256,15 +272,15 @@ def guardar(viaje, cofre: Cofre, comercio: dict, caja_id: int, productos: dict[i
               if g["que"] == "producto" and g["fila"]["avisado_stock_bajo"] and not productos[g["fila"]["id"]]["avisado_stock_bajo"]]
     avisos.stock_bajo_despues(tareas, cofre, comercio, recien, chat, mail)
 
-    items = []
-    for r in renglones:
-        d = cofre.abrir("ventas_detalle", {"comercio_id": comercio_id, "sobre": r["sobre"]})
-        items.append(a_camel({
-            "producto_id": r["producto_id"], "nombre": d["nombre"], "categoria": d["categoria"],
-            "cantidad": Decimal(str(r["cantidad"])).quantize(MILESIMAS), "precio_unitario": d["precio_unitario"],
-            "costo_unitario": d["costo_unitario"],
-        }))
-    return {**a_camel(abierta), "items": items}
+    items = [a_camel({
+        "producto_id": d["producto_id"], "nombre": d["nombre"], "categoria": d["categoria"],
+        "cantidad": Decimal(str(d["cantidad"])).quantize(MILESIMAS), "precio_unitario": d["precio_unitario"],
+        "costo_unitario": d["costo_unitario"],
+    }) for d in abiertos]
+    venta = {**a_camel(abierta), "items": items}
+    if factura is not None:  # (sin factura, la venta queda igual a como la lee la pantalla de ventas)
+        venta["factura"] = facturas.para_la_venta(factura)
+    return venta
 
 
 MILESIMAS = Decimal("0.001")  # las cantidades son numeric(14,3)
@@ -342,10 +358,11 @@ def sincronizar(comercio_id: int, lote: LoteSinConexion, usuario: Usuario = Depe
     with como_usuario(usuario, llave, "venta") as con:
         cofre = Cofre(con, llave)
         cofre.comercio(comercio_id, bloquear=True)  # de a una por comercio, como registrar()
+        fiscales = con.execute(facturas.LEER_FISCALES, (comercio_id,)).fetchall()
         for v in sorted(lote.ventas, key=lambda v: _utc(v.cobradaEn)):
             try:
                 with con.transaction():  # adentro de otra transacción, esto es un SAVEPOINT
-                    resultados.append(_guardar_sin_conexion(con, cofre, comercio_id, v))
+                    resultados.append(_guardar_sin_conexion(con, cofre, comercio_id, v, fiscales))
                     tocados.update(i.productoId for i in v.items)
             except HTTPException as error:
                 resultados.append({"idCliente": str(v.idCliente), "estado": "rechazada", "motivo": error.detail})
@@ -354,6 +371,8 @@ def sincronizar(comercio_id: int, lote: LoteSinConexion, usuario: Usuario = Depe
             "select * from public.productos where comercio_id = %s and id = any(%s) order by id",
             (comercio_id, sorted(tocados)),
         ).fetchall()) if tocados else []
+    if any(r.get("factura") for r in resultados):
+        trabajador.despertar()  # las facturas de las ventas que llegaron salen ahora (ya se guardaron)
     return {"resultados": resultados, "productos": [a_camel(p) for p in productos]}
 
 
@@ -361,7 +380,7 @@ def _utc(momento: datetime) -> datetime:
     return momento.replace(tzinfo=UTC) if momento.tzinfo is None else momento.astimezone(UTC)
 
 
-def _guardar_sin_conexion(con, cofre: Cofre, comercio_id: int, v: VentaSinConexion) -> dict:
+def _guardar_sin_conexion(con, cofre: Cofre, comercio_id: int, v: VentaSinConexion, fiscales: list[dict] | None = None) -> dict:
     # 1) ¿Ya llegó antes? (con el comercio trabado, nadie más la puede estar guardando ahora)
     ya = con.execute(_YA_ESTABA, (comercio_id, v.idCliente)).fetchone()
     if ya:
@@ -425,5 +444,15 @@ def _guardar_sin_conexion(con, cofre: Cofre, comercio_id: int, v: VentaSinConexi
         insertar_ajuste(con, cofre, {"id": caja["id"], "comercio_id": comercio_id}, v.vendidoPor, "venta_tardia",
                         venta["id"], venta["total"], "Venta sin conexión que llegó después de cerrar la caja")
 
+    # 7) Si el comercio factura al cobrar: su factura, en el mismo punto de guardado que la venta (todo o nada),
+    #    con la fecha del día en que se cobró (no la de hoy)
+    factura = None
+    if facturas.factura_al_cobrar(fiscales):
+        detalle = [{**cofre.abrir("ventas_detalle", {"comercio_id": comercio_id, "sobre": r["sobre"]}),
+                    "producto_id": r["producto_id"], "cantidad": r["cantidad"]} for r in renglones]
+        factura = con.execute(*facturas.consulta_al_cobrar(
+            cofre, comercio_id, venta["id"], venta["total"], venta["descuento"], detalle, v.vendidoPor,
+            cuando.astimezone(ARGENTINA).date())).fetchone()
+
     return {"idCliente": str(v.idCliente), "estado": "guardada", "stockNegativo": negativos,
-            "venta": con_items(con, cofre, [venta])[0]}
+            "venta": con_items(con, cofre, [venta])[0], "factura": facturas.para_la_venta(factura)}

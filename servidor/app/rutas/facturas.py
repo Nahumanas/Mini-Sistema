@@ -1,11 +1,17 @@
-"""Factura electrónica de ARCA, etapa 1 (SOLO homologación): datos fiscales, facturar una venta y la nota de crédito.
+"""Factura electrónica de ARCA (SOLO homologación): datos fiscales, facturar una venta y la nota de crédito.
 
-Todo lo de facturar es del jefe (con su PIN): una factura es un documento legal del comercio ante ARCA.
-La facturación es un agregado del plan que Nahuel prende desde /admin.
+Todo lo de configurar y facturar a mano es del jefe (con su PIN): una factura es un documento legal del comercio
+ante ARCA. La facturación es un agregado del plan que Nahuel prende desde /admin.
+
+Etapa 2: si el jefe prende "Facturar cada venta al cobrar", cada venta (de quien la cobre) guarda su factura
+"pendiente" en la misma transacción que la venta (consulta_al_cobrar), y el trabajador de fondo la manda a ARCA
+(trabajador.py). Ver una factura (para el PDF o para la Caja) lo puede cualquiera que atienda el comercio.
 """
 
 import json
 from decimal import Decimal
+
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from psycopg import Connection, errors
@@ -23,7 +29,7 @@ from .comun import comercio_mio
 
 router = APIRouter(tags=["Facturas (ARCA)"])
 
-# Desde este monto hay que identificar al comprador (RG 5700 de ARCA, desde junio de 2025). Llega en la etapa 2.
+# Desde este monto hay que identificar al comprador (RG 5700 de ARCA, desde junio de 2025). Llega más adelante.
 TOPE_SIN_IDENTIFICAR = Decimal("10000000")
 
 SIN_DATOS = "Primero cargá los datos fiscales del comercio en Configuración → Factura electrónica."
@@ -133,7 +139,7 @@ def probar(comercio_id: int, usuario: Usuario = Depends(usuario_actual), llave: 
         raise HTTPException(503, SIN_CERTIFICADO)
     try:
         anda = arca.servicio_anda()
-        acceso = facturacion.ticket(usuario, llave)
+        acceso = facturacion.ticket(facturacion.ComoUsuario(usuario, llave))
         ultimos = {
             "facturaC": arca.ultimo_autorizado(acceso, datos["cuit"], datos["punto_venta"], arca.FACTURA_C),
             "notaCreditoC": arca.ultimo_autorizado(acceso, datos["cuit"], datos["punto_venta"], arca.NOTA_CREDITO_C),
@@ -155,6 +161,66 @@ def listar(comercio_id: int, usuario: Usuario = Depends(usuario_actual), llave: 
         filas = con.execute("select * from public.facturas where comercio_id = %s order by id desc limit 500",
                             (comercio_id,)).fetchall()
         return _con_items(con, cofre, filas)
+
+
+@router.get("/facturas/{factura_id}")
+def ver_factura(factura_id: int, usuario: Usuario = Depends(usuario_actual), llave: Llave = Depends(llave_requerida)):
+    """Una factura con lo que se vendió: la Caja la mira hasta que ARCA contesta, y con ella se arma el PDF."""
+    return devolver(usuario, llave, factura_id)
+
+
+class AlCobrar(BaseModel):
+    activa: bool
+
+
+@router.put("/comercios/{comercio_id}/facturacion/al-cobrar")
+def facturar_al_cobrar(comercio_id: int, datos: AlCobrar, usuario: Usuario = Depends(usuario_actual),
+                       llave: Llave = Depends(llave_requerida)):
+    """Prende o apaga "Facturar cada venta al cobrar" en el comercio (solo el jefe). Prendida, cada venta sale con
+    su Factura C a consumidor final, sin que la Caja espere a ARCA."""
+    solo_jefe(llave)
+    try:
+        with como_usuario(usuario, llave) as con:
+            comercio_mio(con, comercio_id)
+            _tengo_facturacion(con)
+            if _datos(con, comercio_id) is None:
+                raise HTTPException(409, SIN_DATOS)
+            con.execute("select privado.facturar_al_cobrar(%s, %s)", (comercio_id, datos.activa))
+    except errors.InsufficientPrivilege as error:
+        raise facturacion.sin_permiso(error) from None
+    return {"ok": True, "activa": datos.activa}
+
+
+# ---------------------------------------------------------------- facturar al cobrar (etapa 2)
+
+# Los datos fiscales del comercio como JSON, para leerlos en el mismo viaje que la venta. Como JSON, si la
+# migración de la etapa 2 todavía no se aplicó (falta la columna facturar_al_cobrar), la venta sale igual, sin
+# factura, en vez de fallar.
+LEER_FISCALES = "select to_jsonb(d) as d from public.datos_fiscales d where comercio_id = %s"
+_AL_COBRAR = "select * from privado.factura_al_cobrar(%s, %s, %s::jsonb, %s::jsonb)"
+
+
+def factura_al_cobrar(fiscales: list[dict] | None) -> bool:
+    """¿El comercio factura cada venta al cobrar? (fiscales: lo que devolvió LEER_FISCALES)"""
+    return bool(fiscales) and fiscales[0]["d"].get("facturar_al_cobrar") is True
+
+
+def consulta_al_cobrar(cofre: Cofre, comercio_id: int, venta_id: int | None, total, descuento, renglones: list[dict],
+                       hecha_por: str, fecha_venta: date) -> tuple[str, tuple]:
+    """La consulta que guarda la Factura C pendiente de una venta, para mandarla en la MISMA transacción que la venta.
+    renglones: [{producto_id, cantidad, nombre, precio_unitario}] (lo que se vendió, ya abierto).
+    venta_id None: la venta recién guardada en ese mismo viaje (la última del comercio, que está trabado).
+    La base no la guarda si no corresponde (ver privado.factura_al_cobrar): la venta nunca falla por la factura."""
+    items = [{"producto_id": r["producto_id"], "cantidad": str(r["cantidad"]), "sobre": cofre.cerrar(
+        "facturas_items", comercio_id, {"nombre": r["nombre"], "precio_unitario": r["precio_unitario"]})} for r in renglones]
+    datos = {"imp_total": str(arca.plata(total)), "descuento": str(arca.plata(descuento or 0)), "concepto": _concepto(renglones),
+             "hecha_por": (hecha_por or "").strip()[:100], "fecha_venta": fecha_venta.isoformat()}
+    return _AL_COBRAR, (comercio_id, venta_id, json.dumps(datos), json.dumps(items))
+
+
+def para_la_venta(fila: dict | None) -> dict | None:
+    """Lo que la Caja necesita de la factura de una venta recién cobrada, para seguirla hasta que ARCA conteste."""
+    return None if fila is None else {"id": fila["id"], "estado": fila["estado"]}
 
 
 def _concepto(detalle: list[dict]) -> int:
@@ -209,6 +275,8 @@ def devolver(usuario: Usuario, llave: Llave, factura_id: int) -> dict:
     with como_usuario(usuario) as con:
         cofre = Cofre(con, llave)
         fila = con.execute("select * from public.facturas where id = %s", (factura_id,)).fetchone()
+        if fila is None:
+            raise HTTPException(404, facturacion.NO_EXISTE)
         cofre.comercio(fila["comercio_id"])
         return _con_items(con, cofre, [fila])[0]
 
@@ -247,7 +315,7 @@ def facturar(venta_id: int, datos: Facturar | None = None, usuario: Usuario = De
             factura = ya or nueva_factura(con, cofre, cofre.abrir("ventas", venta), fiscales, hecha_por)
     except errors.InsufficientPrivilege as error:
         raise facturacion.sin_permiso(error) from None
-    facturacion.emitir(usuario, llave, factura)
+    facturacion.emitir(facturacion.ComoUsuario(usuario, llave), factura)
     return devolver(usuario, llave, factura["id"])
 
 
@@ -267,5 +335,5 @@ def reintentar(factura_id: int, usuario: Usuario = Depends(usuario_actual), llav
     if fila["estado"] in ("autorizada", "rechazada"):
         raise HTTPException(409, "Esa factura ya tiene respuesta de ARCA." if fila["estado"] == "autorizada"
                             else "ARCA la rechazó: corregí el problema y facturá la venta de nuevo.")
-    facturacion.emitir(usuario, llave, fila)
+    facturacion.emitir(facturacion.ComoUsuario(usuario, llave), fila)
     return devolver(usuario, llave, factura_id)

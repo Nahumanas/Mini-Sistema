@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { ArrowDown, ArrowDownRight, ArrowUpRight, Lock } from "lucide-react";
 
 // Las piezas que se repiten en todas las pantallas. Si se cambia una acá, cambia en todo el sistema.
 
@@ -182,5 +182,54 @@ export function Tabla({ columnas, children, pie }: { columnas: Columna[]; childr
         {pie && <tfoot className="border-t border-borde">{pie}</tfoot>}
       </table>
     </div>
+  );
+}
+
+/**
+ * Un interruptor (prendido/apagado) con los colores del tema: azul prendido, gris apagado, igual en claro y oscuro.
+ * `bloqueado`: queda prendido y no se puede tocar (el candado y el renglón chico dicen por qué).
+ * `ocupado`: no se puede tocar un momento (mientras se guarda el cambio), sin cambiar de color.
+ */
+export function Interruptor({ id, texto, detalle, prendido, alCambiar, bloqueado = false, ocupado = false }: {
+  id: string;
+  texto: string;
+  detalle?: string;
+  prendido: boolean;
+  alCambiar?: () => void;
+  bloqueado?: boolean;
+  ocupado?: boolean;
+}) {
+  const idDetalle = `${id}-detalle`;
+  return (
+    <label
+      htmlFor={id}
+      title={bloqueado ? "Obligatorio para operar: no se puede apagar" : undefined}
+      className={`flex items-center justify-between gap-4 py-2.5 text-[15px] ${bloqueado ? "cursor-not-allowed" : "cursor-pointer"}`}
+    >
+      <span className="flex min-w-0 flex-col">
+        <span>{texto}</span>
+        {detalle && (
+          <span id={idDetalle} className="inline-flex items-center gap-1 text-[13px] text-texto-suave">
+            {bloqueado && <Lock className="size-3.5 shrink-0" aria-hidden />}
+            {detalle}
+          </span>
+        )}
+      </span>
+      <button
+        id={id}
+        type="button"
+        role="switch"
+        aria-checked={prendido}
+        aria-describedby={detalle ? idDetalle : undefined}
+        disabled={bloqueado || ocupado}
+        onClick={alCambiar}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed ${
+          // Bloqueado: azul más apagado, pero la bolita sigue blanca (con opacidad, en oscuro parecía apagado)
+          bloqueado ? "border-transparent bg-primary/50" : prendido ? "border-primary bg-primary" : "border-borde-fuerte bg-borde-fuerte"
+        }`}
+      >
+        <span className={`inline-block size-4 rounded-full bg-white shadow transition-transform ${prendido ? "translate-x-6" : "translate-x-1"}`} />
+      </button>
+    </label>
   );
 }

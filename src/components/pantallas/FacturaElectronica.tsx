@@ -3,18 +3,18 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, PlugZap, Receipt, Save } from "lucide-react";
-import { api, type DatosFiscales, type EstadoFacturacion, type PruebaArca } from "@/lib/api";
+import { api, type DatosFiscales, type DatosFiscalesGuardados, type EstadoFacturacion, type PruebaArca } from "@/lib/api";
 import { ddmm } from "@/lib/fechas";
 import { useComercioActivo, useEsJefe } from "@/store/comercio";
 import { useDatos } from "@/store/datos";
 import { useInterfaz } from "@/store/interfaz";
 import { useSuscripcion } from "@/store/suscripcion";
-import { Boton, Campo, Chip, claseInput, Tarjeta } from "../ui/base";
+import { Boton, Campo, Chip, claseInput, Interruptor, Tarjeta } from "../ui/base";
 
-// Factura electrónica de ARCA, etapa 1: SOLO el ambiente de pruebas de ARCA (homologación). Las facturas que salen
+// Factura electrónica de ARCA: por ahora SOLO el ambiente de pruebas de ARCA (homologación). Las facturas que salen
 // de acá no tienen valor fiscal. Es un agregado del plan que Nahuel prende desde /admin; lo usa solo el jefe.
-// Acá (Configuración) solo se cargan los datos fiscales y se prueba la conexión: facturar y ver las facturas
-// está en su propia pantalla, Facturas (pantallas/Facturas.tsx).
+// Acá (Configuración) se cargan los datos fiscales, se prueba la conexión y se prende "Facturar cada venta al
+// cobrar" (etapa 2). Facturar a mano y ver las facturas está en su propia pantalla, Facturas (pantallas/Facturas.tsx).
 
 export function FacturaElectronica() {
   const enNube = useDatos((s) => s.modo === "nube");
@@ -56,7 +56,14 @@ function ConFacturacion({ comercioId }: { comercioId: number }) {
       )}
 
       {estado.datos && !editando ? (
-        <ResumenDatos datos={estado.datos} alEditar={() => setEditando(true)} comercioId={comercioId} listo={estado.servidorListo} />
+        <>
+          <ResumenDatos datos={estado.datos} alEditar={() => setEditando(true)} comercioId={comercioId} listo={estado.servidorListo} />
+          <AlCobrar
+            comercioId={comercioId}
+            datos={estado.datos}
+            alCambiar={(activa) => setEstado((e) => (e?.datos ? { ...e, datos: { ...e.datos, facturarAlCobrar: activa } } : e))}
+          />
+        </>
       ) : (
         <FormularioDatos
           comercioId={comercioId}
@@ -114,6 +121,46 @@ function ResumenDatos({ datos, alEditar, comercioId, listo }: { datos: DatosFisc
           Última Factura C: N° {prueba.ultimos.facturaC} · última nota de crédito: N° {prueba.ultimos.notaCreditoC} · el certificado vence el {ddmm(prueba.certificadoVence, true)}.
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * "Facturar cada venta al cobrar": prendido, cada venta (Caja, QR de Mercado Pago, cuotas del gimnasio y las cobradas
+ * sin internet, cuando se mandan) sale con su Factura C a consumidor final. La Caja no espera a ARCA: el servidor la
+ * manda solo y, si ARCA no contesta, la reintenta. Solo lo cambia el jefe, y solo por la API (la base no deja tocarlo
+ * desde el navegador).
+ */
+function AlCobrar({ comercioId, datos, alCambiar }: { comercioId: number; datos: DatosFiscalesGuardados; alCambiar: (activa: boolean) => void }) {
+  const avisar = useInterfaz((s) => s.avisar);
+  const [guardando, setGuardando] = useState(false);
+  const prendido = datos.facturarAlCobrar === true;
+  return (
+    <div className="border-t border-borde pt-3">
+      <Interruptor
+        id="fe-al-cobrar"
+        texto="Facturar cada venta al cobrar"
+        detalle={
+          prendido
+            ? "Cada venta sale con su factura. La Caja no espera a ARCA: si ARCA no contesta, se reintenta sola y, si tarda, te avisa por Telegram (si lo tenés conectado)."
+            : "Apagado: facturás a mano, venta por venta, desde la pantalla Facturas."
+        }
+        prendido={prendido}
+        ocupado={guardando}
+        alCambiar={async () => {
+          setGuardando(true);
+          try {
+            const r = await api.facturarAlCobrar(comercioId, !prendido);
+            alCambiar(r.activa);
+            avisar(r.activa ? "Listo: desde ahora cada venta sale con su factura." : "Listo: las ventas ya no se facturan solas.");
+          } catch (err) {
+            avisar((err as Error).message, "error");
+          } finally {
+            setGuardando(false);
+          }
+        }}
+      />
+      <p className="text-[13px] text-texto-suave">Las ventas desde $10.000.000 no se facturan solas: a esas hay que identificar al comprador.</p>
     </div>
   );
 }

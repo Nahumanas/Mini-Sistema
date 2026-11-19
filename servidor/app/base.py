@@ -77,6 +77,23 @@ def como_usuario(usuario: Usuario, llave: Llave | None = None, motivo: str = "")
         yield con
 
 
+# El "traje" del trabajador de fondo (facturas a ARCA sin nadie conectado, ver trabajador.py): un rol propio de la
+# base que no puede leer ni escribir ninguna tabla, solo ejecutar las funciones privado.trabajador_* (ver la
+# migración 20261119000000). Sin token: auth.uid() queda vacío y el RLS no le muestra nada de nadie.
+TRAJE_TRABAJADOR = """select set_config('role', 'mantenete_trabajador', true),
+                             set_config('request.jwt.claims', '', true),
+                             set_config('request.jwt.claim.sub', '', true),
+                             set_config('mantenete.quien', 'trabajador', true),
+                             set_config('mantenete.motivo', %s, true)"""
+
+
+@contextmanager
+def como_trabajador(motivo: str = "factura") -> Iterator[Connection]:
+    with pool().connection() as con, con.transaction():
+        con.execute(TRAJE_TRABAJADOR, (motivo,))
+        yield con
+
+
 class Viaje:
     """Varias consultas en UN solo viaje a la base (la base está lejos del servidor: cada ida y vuelta se nota).
 

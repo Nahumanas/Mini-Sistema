@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from .. import gimnasio as g
+from .. import trabajador
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario
 from ..cifrado import Llave
@@ -17,6 +18,7 @@ from ..llaves import llave_requerida
 from ..permisos import exigir
 from ..sobres import Cofre
 from .clases import Cambios, DatosClase, cancelar_las_que_vienen, plan_de, reglas_de, revisar_disciplina
+from . import facturas
 from .ventas import con_items, insertar_detalle, insertar_venta
 
 router = APIRouter(tags=["Gimnasio: socios, cuotas y planes"])
@@ -267,6 +269,13 @@ def cobrar_cuota(comercio_id: int, datos: NuevaCuota, usuario: Usuario = Depends
         venta = insertar_venta(con, cofre, comercio_id, caja["id"], datos.medioPago, datos.cobradaPor.strip(),
                                precio, max(precio - monto, Decimal(0)), monto, [])
         insertar_detalle(con, cofre, comercio_id, venta["id"], None, 1, f"Cuota {plan['nombre']}", "Cuotas", precio, 0)
+        # Si el comercio factura al cobrar: la factura de la cuota (servicios), en la misma transacción
+        factura = None
+        if facturas.factura_al_cobrar(con.execute(facturas.LEER_FISCALES, (comercio_id,)).fetchall()):
+            factura = con.execute(*facturas.consulta_al_cobrar(
+                cofre, comercio_id, venta["id"], monto, venta["descuento"],
+                [{"producto_id": None, "cantidad": 1, "nombre": f"Cuota {plan['nombre']}", "precio_unitario": precio}],
+                datos.cobradaPor, g.hoy())).fetchone()
         cuota = con.execute(
             """insert into public.cuotas (comercio_id, socio_id, plan_id, venta_id, caja_id, fecha, medio_pago, cobrada_por,
                                          vence_antes, vence_nuevo, clases_cargadas, clases_despues, sobre)
@@ -279,13 +288,16 @@ def cobrar_cuota(comercio_id: int, datos: NuevaCuota, usuario: Usuario = Depends
             "update public.socios set plan_id = %s, vence = %s, clases_restantes = %s, activo = true where id = %s returning *",
             (plan["id"], datos.vence, c["clases"], socio["id"]),
         ).fetchone()
-        return {
+        resultado = {
             "cuota": a_camel(cofre.abrir("cuotas", cuota)),
-            "venta": con_items(con, cofre, [venta])[0],
+            "venta": {**con_items(con, cofre, [venta])[0], **({"factura": facturas.para_la_venta(factura)} if factura else {})},
             "socio": a_camel(cofre.abrir("socios", socio)),
             "clases": c["clases"],
             "clasesQueSePierden": c["se_pierden"],
         }
+    if factura is not None:
+        trabajador.despertar()  # la cuota ya quedó guardada: su factura sale ahora
+    return resultado
 
 
 # -----------------------------------------------------------------------------

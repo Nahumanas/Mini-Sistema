@@ -194,6 +194,9 @@ def datos_cierre(con: Connection, cofre: Cofre, comercio: dict, caja: dict) -> d
         f"select comercio_id, sobre from public.gastos where comercio_id = %s and fecha = {hoy}", (cid,)
     ).fetchall())), Decimal(0))
 
+    facturas = con.execute(FACTURAS_DE_LA_CAJA, (caja["id"],)).fetchone()
+    con_facturas = facturas is not None and (facturas["autorizadas"] or facturas["sin_cae"] or facturas["rechazadas"])
+
     return {
         "comercio": comercio["nombre"], "responsable": caja["responsable"], "nota": caja.get("nota") or "",
         "abierta": caja.get("abierta"), "cerrada": caja.get("cerrada"),
@@ -201,7 +204,34 @@ def datos_cierre(con: Connection, cofre: Cofre, comercio: dict, caja: dict) -> d
         "cobrado": cobrado, "ventas": len(ventas),
         "por_medio": sorted(por_medio.items(), key=lambda x: -x[1]),
         "mas_vendidos": mas_vendidos.most_common(3), "compras": compras, "gastos": gastos,
+        "facturas": dict(facturas) if con_facturas else None,
     }
+
+
+# Las facturas de ARCA de las ventas de una caja (sin las anuladas), contando UNA por venta: la que vale
+# (si ARCA rechazó una y después salió otra, cuenta la que salió)
+FACTURAS_DE_LA_CAJA = """
+select count(*) filter (where x.estado = 'autorizada') as autorizadas,
+       coalesce(sum(x.imp_total) filter (where x.estado = 'autorizada'), 0) as facturado,
+       count(*) filter (where x.estado in ('pendiente', 'enviando')) as sin_cae,
+       count(*) filter (where x.estado = 'rechazada') as rechazadas
+from (select distinct on (f.venta_id) f.estado, f.imp_total
+      from public.facturas f join public.ventas v on v.id = f.venta_id
+      where v.caja_id = %s and v.anulada is null and f.tipo = 'factura_c'
+      order by f.venta_id, (f.estado = 'autorizada') desc, (f.estado <> 'rechazada') desc, f.id desc) x"""
+
+
+def lineas_facturas(f: dict | None) -> list[str]:
+    """El resumen de las facturas de ARCA de la caja, para el cierre (vacío si la caja no tuvo facturas)."""
+    if not f:
+        return []
+    n = f["autorizadas"]
+    partes = [f"{n} con CAE ({plata(f['facturado'])})"]
+    if f["sin_cae"]:
+        partes.append(f"{f['sin_cae']} sin respuesta de ARCA todavía (salen solas)")
+    if f["rechazadas"]:
+        partes.append(f"{f['rechazadas']} rechazada{'s' if f['rechazadas'] != 1 else ''}: revisalas en Facturas")
+    return ["Facturas de ARCA: " + " · ".join(partes)]
 
 
 def texto_cierre(d: dict) -> str:
@@ -225,6 +255,7 @@ def texto_cierre(d: dict) -> str:
     if d["compras"] or d["gastos"]:
         lineas.append(f"Compras de hoy: {plata(d['compras'])} · Gastos de hoy: {plata(d['gastos'])}")
         lineas.append(f"Quedó: <b>{plata(d['cobrado'] - d['compras'] - d['gastos'])}</b>")
+    lineas += lineas_facturas(d.get("facturas"))
     return "\n".join(lineas)
 
 
@@ -483,6 +514,17 @@ def mail_cierre(d: dict) -> tuple[str, str, str]:
         cuerpo += _subtitulo("Lo más vendido") + _tabla(["Producto", "Cantidad vendida"], [
             "<tr>" + _celda(_e(nombre)) + _celda(f"<b>{cantidad(c)}</b>", True) + "</tr>" for nombre, c in d["mas_vendidos"]
         ])
+
+    f = d.get("facturas")
+    if f:
+        filas_f = ["<tr>" + _celda("Con CAE de ARCA", primera=True)
+                   + _celda(f"<b>{f['autorizadas']}</b> ({plata(f['facturado'])})", True, True) + "</tr>"]
+        if f["sin_cae"]:
+            filas_f.append("<tr>" + _celda("Sin respuesta de ARCA todavía (salen solas)") + _celda(str(f["sin_cae"]), True) + "</tr>")
+        if f["rechazadas"]:
+            filas_f.append("<tr>" + _celda("Rechazadas: revisalas en Facturas")
+                           + _celda(f"<b>{f['rechazadas']}</b>", True, estilo=f"color:{_ROJO};font-weight:700") + "</tr>")
+        cuerpo += _subtitulo("Facturas de ARCA") + _tabla(None, filas_f)
 
     asunto = f"Cierre de caja en {d['comercio']} · {m:%d/%m %H:%M}"
     plano = "\n".join([texto_plano(texto_cierre(d)), "", f"Ver el Panel del día: {config.URL_SISTEMA}/panel-del-dia",
