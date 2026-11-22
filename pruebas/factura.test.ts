@@ -6,9 +6,9 @@ import { numeroCorto, numeroFactura, relacionFactura, tipoFactura } from "@/lib/
 
 const factura = (extra: Partial<Factura> = {}): Factura => ({
   id: 1, comercioId: 50, ventaId: 10, tipo: "factura_c", cbteTipo: 11, asociadaId: null, ambiente: "homologacion",
-  cuitEmisor: "20111111112", puntoVenta: 1, numero: 1, fecha: "2026-11-18", impTotal: 100, estado: "autorizada",
-  cae: "86461089251326", vencimientoCae: "2026-11-28", errorMensaje: "", observaciones: "", intentos: 1,
-  creada: "2026-11-18T16:00:00Z", items: [],
+  cuitEmisor: "20111111112", puntoVenta: 1, numero: 1, fecha: "2026-11-18", impTotal: 100, descuento: 0, concepto: 1,
+  docTipo: 99, docNro: 0, estado: "autorizada", cae: "86461089251326", vencimientoCae: "2026-11-28", errorMensaje: "",
+  observaciones: "", intentos: 1, proximoIntento: null, creada: "2026-11-18T16:00:00Z", items: [],
   ...extra,
 });
 const nota = (extra: Partial<Factura> = {}) => factura({ id: 2, tipo: "nota_credito_c", cbteTipo: 13, asociadaId: 1, ...extra });

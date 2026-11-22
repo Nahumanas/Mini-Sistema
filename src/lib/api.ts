@@ -239,7 +239,9 @@ export type DatosFiscales = {
   ingresosBrutos: string;
   puntoVenta: number;
 };
-export type EstadoFacturacion = { activa: boolean; ambiente: "homologacion"; servidorListo: boolean; datos: (DatosFiscales & { comercioId: number }) | null };
+/** Lo que devuelve la API de los datos fiscales: lo que se carga más el interruptor de "facturar al cobrar" (etapa 2). */
+export type DatosFiscalesGuardados = DatosFiscales & { comercioId: number; facturarAlCobrar?: boolean };
+export type EstadoFacturacion = { activa: boolean; ambiente: "homologacion"; servidorListo: boolean; datos: DatosFiscalesGuardados | null };
 export type EstadoFactura = "pendiente" | "enviando" | "autorizada" | "rechazada";
 export type Factura = {
   id: number;
@@ -254,12 +256,17 @@ export type Factura = {
   numero: number | null;
   fecha: string | null;
   impTotal: number;
+  descuento: number;
+  concepto: 1 | 2 | 3; // 1 productos, 2 servicios (cuotas del gimnasio), 3 los dos
+  docTipo: number; // 99 = consumidor final sin identificar
+  docNro: number;
   estado: EstadoFactura;
   cae: string | null;
   vencimientoCae: string | null;
   errorMensaje: string;
   observaciones: string;
   intentos: number;
+  proximoIntento: string | null; // etapa 2: cuándo la vuelve a mandar sola el servidor (si sigue sin CAE)
   creada: string;
   items: { productoId: number | null; cantidad: number; nombre: string; precioUnitario: number }[];
 };
@@ -391,12 +398,16 @@ export const api = {
     pedir<{ ajuste: AjusteCaja; venta: Venta; productos: Producto[]; cuota: Cuota | null; socio: Socio | null; notaCredito: Factura | null }>(
       `/cajas/${cajaId}/anular-venta`, "POST", datos),
 
-  // Factura electrónica de ARCA (etapa 1, solo pruebas): datos fiscales, facturar una venta y reintentar
+  // Factura electrónica de ARCA (solo pruebas de ARCA por ahora): datos fiscales, facturar una venta y reintentar
   facturacion: (comercioId: number) => pedir<EstadoFacturacion>(`/comercios/${comercioId}/facturacion`),
   guardarDatosFiscales: (comercioId: number, datos: DatosFiscales) =>
-    pedir<DatosFiscales & { comercioId: number }>(`/comercios/${comercioId}/facturacion`, "PUT", datos),
+    pedir<DatosFiscalesGuardados>(`/comercios/${comercioId}/facturacion`, "PUT", datos),
   probarArca: (comercioId: number) => pedir<PruebaArca>(`/comercios/${comercioId}/facturacion/probar`, "POST"),
+  // Etapa 2: "Facturar cada venta al cobrar" (solo el jefe). Prendido, cada venta sale con su factura sin esperar a ARCA.
+  facturarAlCobrar: (comercioId: number, activa: boolean) =>
+    pedir<{ ok: true; activa: boolean }>(`/comercios/${comercioId}/facturacion/al-cobrar`, "PUT", { activa }),
   facturas: (comercioId: number) => pedir<Factura[]>(`/comercios/${comercioId}/facturas`),
+  factura: (facturaId: number) => pedir<Factura>(`/facturas/${facturaId}`),
   // Descargar mis datos (solo el jefe): de a un mes por pedido, así el servidor nunca abre un año entero de golpe
   copiaDelMes: (mes: string, actuales: boolean) => pedir<CopiaDelMes>(`/exportar/${mes}${actuales ? "?actuales=true" : ""}`),
   facturar: (ventaId: number) => pedir<Factura>(`/ventas/${ventaId}/facturar`, "POST", {}),

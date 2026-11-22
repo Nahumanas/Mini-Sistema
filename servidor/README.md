@@ -133,11 +133,40 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 - El número se pide al mandarla (último autorizado + 1), no al cobrar. Toda la plata con `Decimal` y 2 decimales.
 - El ticket de ARCA dura 12 horas y ARCA **no da otro** mientras el anterior siga vigente: se guarda en memoria y en la
   base (`privado.arca_tickets`, cifrado con un secreto que sale de `PIMIENTA_CIFRADO`), así un reinicio de Render no lo pierde.
-- Anular una venta facturada (Cajas anteriores) emite la nota de crédito que la anula. Si ARCA no contesta, se reintenta
-  desde Configuración.
+- Anular una venta facturada (Cajas anteriores) emite la nota de crédito que la anula. Si ARCA no contesta, la manda
+  sola el trabajador de fondo (etapa 2) o se reintenta desde Facturas.
 - El navegador puede **leer** las facturas pero no escribirlas: solo la API, con las funciones `privado.factura_*`.
 - Pruebas: `pruebas/test_facturas.py` con un ARCA de mentira (corta antes y después de autorizar, rechaza, etc.).
-- Etapa 2: facturar sola al cobrar, reintentos de fondo, PDF con QR, notas de crédito parciales, descarga en ZIP.
+
+## Factura electrónica de ARCA (etapa 2: facturar al cobrar, sigue en modo prueba)
+
+- **Interruptor por comercio** "Facturar cada venta al cobrar" (Configuración → Factura electrónica, solo el jefe,
+  apagado de entrada). Se cambia SOLO por la API (`PUT /comercios/{id}/facturacion/al-cobrar`): la base no deja que el
+  navegador toque esa columna (permiso por columna en `datos_fiscales`).
+- **La venta nunca espera a ARCA**: la Factura C se guarda "pendiente" en la MISMA transacción que la venta (Caja, QR de
+  Mercado Pago, cuotas del gimnasio y las ventas sin conexión al mandarse), con `privado.factura_al_cobrar`. Si algo
+  falla, no queda ni la venta ni la factura (todo o nada). Desde $10.000.000 no se factura sola (hay que identificar al
+  comprador). La fecha de la factura es la de la venta, si ARCA la acepta (hasta 5 días atrás, 10 en servicios, y
+  nunca antes que la última autorizada de ese punto de venta).
+- **El trabajador de fondo** (`app/trabajador.py`, un hilo dentro de la API) toma las pendientes y las manda con los
+  mismos 3 pasos de la etapa 1 ("enviando" guardado antes, y si ARCA no contestó, primero pregunta si ya la autorizó).
+  Reintentos a los 1, 2, 5, 10 y 30 minutos, y después cada 30. A los 5 intentos sin respuesta, o si ARCA la rechaza,
+  avisa UNA vez por Telegram al jefe. De a una por punto de venta; hasta 4 puntos de venta a la vez.
+- **Su propio rol de la base** (`mantenete_trabajador`, sin login): no puede leer ni escribir ninguna tabla, solo
+  ejecutar las funciones `privado.trabajador_*`. Lo usa porque no hay ningún usuario conectado (ver
+  `base.como_trabajador`). Dos servidores a la vez (el deploy de Render) no mandan dos veces la misma: cada una se toma
+  con `for update skip locked` y queda "prestada" 3 minutos.
+- **Cierre de caja**: el aviso (Telegram y mail) suma una línea con las facturas de la caja (con CAE, sin respuesta
+  todavía, rechazadas).
+- **Control de las 22 h** (hora argentina, una vez por día): avisa por Telegram si hay facturas de los últimos días sin
+  CAE o rechazadas, y si el último número de cada punto de venta en la base es distinto del de ARCA. Como Render
+  gratis apaga la API sin uso, el workflow **Control de facturas** de GitHub la despierta a las 22:05 (necesita la
+  variable `URL_API` del repo: Settings → Secrets and variables → Actions → Variables).
+- **PDF con el QR de ARCA**: lo arma el navegador (`src/lib/factura-pdf.ts`), desde Facturas y desde la Caja después
+  de cobrar. Mientras sea homologación dice "SIN VALOR FISCAL".
+- Pruebas: `pruebas/test_facturas_al_cobrar.py`, siempre contra el ARCA de mentira (nunca el real), incluida una de carga
+  con 100 ventas a la vez y un ARCA lento.
+- Para más adelante: nota de crédito parcial, factura a un comprador identificado (con aprobación), ZIP y envío automático.
 
 **El certificado de homologación** (una sola vez, lo hace Nahuel con su clave fiscal nivel 3):
 
@@ -179,7 +208,8 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 | `POST /comercios/{id}/mercadopago/cobros`, `GET .../cobros/{cobro}`, `POST .../cobros/{cobro}/cancelar`, `POST /comercios/{id}/mercadopago/revisar` | Cobrar con QR, preguntar si pagó (guarda la venta), cancelar y revisar los que quedaron esperando |
 | `POST /cajas/{id}/anular-venta`, `POST /cajas/{id}/recontar` | Ajustes de una caja cerrada: anular una venta (vuelve al stock; si era una cuota, el socio vuelve a como estaba; si tenía factura, sale la nota de crédito) o corregir el efectivo contado |
 | `GET/PUT /comercios/{id}/facturacion`, `POST …/facturacion/probar` | Factura electrónica (solo jefe): datos fiscales del comercio y probar la conexión con ARCA |
-| `GET /comercios/{id}/facturas`, `POST /ventas/{id}/facturar`, `POST /facturas/{id}/reintentar` | Facturas y notas de crédito; facturar una venta (Factura C a consumidor final); reintentar una que ARCA no contestó |
+| `GET /comercios/{id}/facturas`, `GET /facturas/{id}`, `POST /ventas/{id}/facturar`, `POST /facturas/{id}/reintentar` | Facturas y notas de crédito; ver una (la Caja la mira hasta que ARCA contesta); facturar una venta (Factura C a consumidor final); reintentar una que ARCA no contestó |
+| `PUT /comercios/{id}/facturacion/al-cobrar` | Prender o apagar "Facturar cada venta al cobrar" (solo jefe) |
 | `POST /comercios/{id}/proveedores`, `POST /comercios/{id}/compras` | Compras: suma al stock, cambia el costo y crea las tandas de lo que vence, todo o nada |
 | `POST /comercios/{id}/gastos`, `DELETE /gastos/{id}` | Gastos del comercio |
 | `POST /comercios/{id}/lotes`, `POST .../lotes/retirar-vencidos`, `POST /lotes/{id}/sacar` | Vencimientos: cargar una tanda, retirar lo vencido (pérdida) y corregir una tanda |
