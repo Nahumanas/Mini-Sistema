@@ -37,8 +37,8 @@ Además la copia trae los mails de los dueños y los usuarios. Por eso:
   es la única que abre, vive en tu compu y en papel. Aunque alguien baje el paquete de GitHub, no puede leerlo.
 - **`PIMIENTA_CIFRADO` no se carga nunca en GitHub.** Si estuviera ahí junto con la copia, quien entre a tu
   GitHub podría probar los códigos de empleado de a uno hasta abrir los comercios.
-- `SUPABASE_DB_URL` sí va en GitHub (sin ella no hay copia), pero dentro del entorno **produccion**, que solo
-  le pasa el secreto a la rama main. Así, un cambio en otra rama no puede leerlo.
+- `SUPABASE_DB_URL` sí va en GitHub (sin ella no hay copia), como secreto del repositorio. El repo es privado
+  (solo vos podés subir cambios) y el workflow solo corre desde main.
 
 ## Lo que tenés que hacer UNA vez
 
@@ -55,13 +55,12 @@ python -m respaldo.crear_llave D:\Proyectos_Informes\mantenete_if\respaldos\llav
 Te muestra la llave pública (`age1...`). La privada queda en ese archivo: **imprimila o copiala a mano** y
 guardala con la pimienta. Si la perdés, los respaldos que ya hiciste no se abren más.
 
-**2. Cargar el entorno en GitHub**: repositorio → **Settings → Environments → New environment** → nombre
-`produccion` → en *Deployment branches and tags* elegí **Selected branches** y agregá `main`. Después, en ese entorno:
+**2. Cargar los datos en GitHub**: repositorio → **Settings → Secrets and variables → Actions**:
 
-- **Add environment secret** → `SUPABASE_DB_URL` = la conexión **Session pooler** de Supabase
+- Pestaña **Secrets** → **New repository secret** → `SUPABASE_DB_URL` = la conexión **Session pooler** de Supabase
   (botón **Connect** arriba en Supabase → *Session pooler*, con tu contraseña de la base). Es la misma de
   `DATABASE_URL` en Render pero con el puerto **5432** en vez de 6543.
-- **Add environment variable** → `RESPALDO_LLAVE_PUBLICA` = la `age1...` del paso 1.
+- Pestaña **Variables** → **New repository variable** → `RESPALDO_LLAVE_PUBLICA` = la `age1...` del paso 1.
 
 **3. Probarlo**: Actions → **Respaldo** → **Run workflow**. A los 2 o 3 minutos tiene que quedar en verde.
 

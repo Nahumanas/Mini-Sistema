@@ -33,14 +33,16 @@ jobs:
   aplicar:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment: produccion
+    # Solo desde main. Antes lo frenaba el entorno "produccion"; con el repo privado en GitHub Free no hay
+    # entornos, así que el freno va acá: un "Run workflow" desde otra rama no aplica migraciones sin mergear.
+    if: github.ref == 'refs/heads/main'
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
     steps:
       - name: Controlar que esté cargada la conexión
         run: |
           if [ -z "$SUPABASE_DB_URL" ]; then
-            echo "::error::Falta el secreto SUPABASE_DB_URL en el entorno produccion (ver supabase/cli/LEEME.md)."; exit 1
+            echo "::error::Falta el secreto SUPABASE_DB_URL del repositorio (Settings → Secrets and variables → Actions; ver supabase/cli/LEEME.md)."; exit 1
           fi
           case "$SUPABASE_DB_URL" in *:6543/*) echo "::error::SUPABASE_DB_URL usa el puerto 6543. Tiene que ser el Session pooler, puerto 5432."; exit 1;; esac
       - uses: actions/checkout@v4

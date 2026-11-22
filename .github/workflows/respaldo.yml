@@ -10,7 +10,7 @@
 # Lo que se puede bajar está cerrado: sin tu llave PRIVADA (que nunca está en GitHub) no se abre.
 #
 # Lo que tenés que cargar una vez (ver servidor/respaldo/LEEME.md):
-#   - el entorno "produccion" (Settings → Environments), con el secreto SUPABASE_DB_URL
+#   - en Settings → Secrets and variables → Actions, a nivel repositorio: el secreto SUPABASE_DB_URL
 #     (la conexión "Session pooler" de Supabase, puerto 5432) y la variable RESPALDO_LLAVE_PUBLICA (age1...).
 name: Respaldo
 
@@ -28,7 +28,8 @@ jobs:
   respaldo:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: produccion
+    # Solo desde main (antes lo frenaba el entorno "produccion", que GitHub Free no da en repos privados).
+    if: github.ref == 'refs/heads/main'
     services:
       postgres:
         image: postgres:17
@@ -49,7 +50,7 @@ jobs:
           LLAVE_PUBLICA: ${{ vars.RESPALDO_LLAVE_PUBLICA }}
         run: |
           if [ -z "$BASE_URL" ] || [ -z "$LLAVE_PUBLICA" ]; then
-            echo "::error::Falta cargar SUPABASE_DB_URL (secreto) o RESPALDO_LLAVE_PUBLICA (variable) en el entorno produccion. Ver servidor/respaldo/LEEME.md"
+            echo "::error::Falta cargar SUPABASE_DB_URL (secreto) o RESPALDO_LLAVE_PUBLICA (variable) del repositorio (Settings → Secrets and variables → Actions). Ver servidor/respaldo/LEEME.md"
             exit 1
           fi
           case "$BASE_URL" in *:6543/*) echo "::error::SUPABASE_DB_URL usa el puerto 6543 (Transaction pooler). Para pg_dump tiene que ser el Session pooler, puerto 5432."; exit 1;; esac

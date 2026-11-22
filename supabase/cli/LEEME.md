@@ -26,10 +26,10 @@ Para que eso no pase hay dos frenos:
 
 ## Lo que tenés que hacer UNA vez
 
-1. En GitHub → **Settings → Environments → produccion** (el mismo entorno de los respaldos; si no existe, crealo
-   con *Deployment branches* = solo `main`) → **Add environment secret** → `SUPABASE_DB_URL` = la conexión
-   **Session pooler** de Supabase (botón **Connect** → *Session pooler*). Es tu `DATABASE_URL` de Render con el
-   puerto **5432** en vez de 6543. Es secreta: lleva la contraseña de la base.
+1. En GitHub → **Settings → Secrets and variables → Actions → Secrets → New repository secret** →
+   `SUPABASE_DB_URL` = la conexión **Session pooler** de Supabase (botón **Connect** → *Session pooler*). Es tu
+   `DATABASE_URL` de Render con el puerto **5432** en vez de 6543. Es secreta: lleva la contraseña de la base.
+   (Es el mismo secreto que usan los respaldos. El workflow solo corre desde main.)
 2. **Actions → Migraciones → Run workflow**, marcá la casilla *"SOLO LA PRIMERA VEZ..."* y tocá **Run workflow**.
    Al final tiene que decir *Remote database is up to date*.
 
