@@ -48,7 +48,7 @@ function ConFacturacion({ comercioId }: { comercioId: number }) {
       <div className="flex gap-3">
         <Receipt className="mt-0.5 size-5 shrink-0 text-texto-suave" strokeWidth={1.75} />
         <p className="text-texto-suave">
-          Factura C a consumidor final y nota de crédito, directo con ARCA. Por ahora es el <b className="text-texto">modo prueba de ARCA</b>: lo que sale de acá no tiene valor fiscal.
+          Factura C (a consumidor final o a un comprador con DNI o CUIT) y nota de crédito, total o parcial, directo con ARCA. Por ahora es el <b className="text-texto">modo prueba de ARCA</b>: lo que sale de acá no tiene valor fiscal.
         </p>
       </div>
       {!estado.servidorListo && (

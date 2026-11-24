@@ -36,6 +36,11 @@ def _negado(consulta: str) -> None:
     assert salida.returncode != 0 and "permission denied" in salida.stderr, (consulta, salida.stderr)
 
 
+def _renglones(f: dict) -> list[dict]:
+    """Lo que se vendió en la factura, sin los números de renglón (id e itemOrigenId, que cambian en cada prueba)."""
+    return [{k: v for k, v in i.items() if k not in ("id", "itemOrigenId")} for i in f["items"]]
+
+
 def _al_cobrar(cliente, quien, cid, activa=True):
     r = cliente.put(f"/comercios/{cid}/facturacion/al-cobrar", json={"activa": activa}, headers=quien)
     assert r.status_code == 200, r.text
@@ -108,7 +113,7 @@ def test_cada_venta_queda_con_su_factura_y_el_trabajador_la_manda(cliente, afip)
     assert trabajador.una_vuelta() == 1
     f = cliente.get(f"/facturas/{fid}", headers=ana).json()
     assert f["estado"] == "autorizada" and f["numero"] == 1 and f["cae"] and f["fecha"] == str(datetime.now(ARGENTINA).date())
-    assert f["items"] == [{"productoId": producto["id"], "cantidad": 3, "nombre": "Alfajor", "precioUnitario": 33.33}]
+    assert _renglones(f) == [{"productoId": producto["id"], "cantidad": 3, "nombre": "Alfajor", "precioUnitario": 33.33}]
     assert afip.comprobantes[(pv, 11, 1)]["ImpTotal"] == "99.99"
     # Ya no queda nada para mandar, y facturarla a mano dice que ya está
     assert trabajador.una_vuelta() == 0
@@ -168,7 +173,7 @@ def test_la_cuota_del_gimnasio_sale_como_servicio(cliente, afip):
     trabajador.una_vuelta()
     f = cliente.get(f"/facturas/{fid}", headers=ana).json()
     assert f["estado"] == "autorizada" and f["concepto"] == 2 and f["impTotal"] == 18000 and f["descuento"] == 2000
-    assert f["items"] == [{"productoId": None, "cantidad": 1, "nombre": "Cuota Mensual", "precioUnitario": 20000}]
+    assert _renglones(f) == [{"productoId": None, "cantidad": 1, "nombre": "Cuota Mensual", "precioUnitario": 20000}]
     enviado = afip.comprobantes[(pv, 11, 1)]
     assert enviado["Concepto"] == "2" and enviado["ImpTotal"] == "18000.00"
 

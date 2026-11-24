@@ -1,6 +1,6 @@
 import type { CopiaDelMes, Factura } from "./api";
 import type { BaseDemo } from "./datos-demo";
-import { numeroCorto, tipoFactura } from "./factura";
+import { CONDICIONES_IVA, documentoComprador, numeroCorto, tipoFactura } from "./factura";
 import { MEDIOS_DE_PAGO, type MedioDePago } from "./formato";
 import { nombreMes, sumarDias } from "./fechas";
 
@@ -54,6 +54,9 @@ const VACIA: Copia = {
   facturas: [], productos: [], proveedores: [], promos: [], lotes: [], empleados: [], socios: [], planes: [], disciplinas: [],
   clases: [], datosFiscales: [],
 };
+
+/** Una copia sin nada (para armar una con solo algunas cosas, como el ZIP de facturas). */
+export const copiaVacia = (): Copia => structuredClone(VACIA);
 
 /** Suma los meses que mandó la API (cada uno trae lo suyo; la foto de hoy viene en uno solo). */
 export function juntarMeses(partes: CopiaDelMes[]): Copia {
@@ -320,11 +323,14 @@ export function armarHojas(copia: Copia): Hoja[] {
       columnas: conComercio([
         { texto: "Tipo", ancho: 18 }, { texto: "Número", ancho: 16 }, { texto: "Fecha", tipo: "fecha" }, { texto: "Total", tipo: "plata" },
         { texto: "Estado" }, { texto: "CAE", ancho: 16 }, { texto: "Vence el CAE", tipo: "fecha" }, { texto: "Venta N°" },
-        { texto: "Anula la factura", ancho: 16 }, { texto: "Error", ancho: 30 },
+        { texto: "Anula la factura", ancho: 16 }, { texto: "Comprador", ancho: 24 }, { texto: "Documento", ancho: 18 },
+        { texto: "Condición IVA", ancho: 22 }, { texto: "Error", ancho: 30 },
       ]),
       filas: copia.facturas.map((f) =>
         fila(f.comercioId, [tipoFactura(f), numeroFactura(f), f.fecha, f.impTotal, ESTADOS_FACTURA[f.estado] ?? f.estado,
-          f.cae ?? "", f.vencimientoCae, numeroVenta.get(f.ventaId) ?? f.ventaId, anula(f), f.errorMensaje]),
+          f.cae ?? "", f.vencimientoCae, numeroVenta.get(f.ventaId) ?? f.ventaId, anula(f),
+          documentoComprador(f) ? (f.comprador?.nombre ?? "") : "Consumidor final", documentoComprador(f) ?? "",
+          CONDICIONES_IVA[f.condicionIvaReceptor ?? 5] ?? "", f.errorMensaje]),
       ),
     },
   ];

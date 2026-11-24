@@ -54,6 +54,8 @@ CAMPOS: dict[str, dict[str, str]] = {
     "asistencias": {"motivo": TEXTO},
     # Lo que se vendió en cada factura (los importes de la factura van a la vista: ver la migración 20261118000000)
     "facturas_items": {"nombre": TEXTO, "precio_unitario": NUMERO},
+    # El comprador identificado de una factura (facturas.receptor): lo que no va a ARCA, solo se imprime
+    "facturas_receptor": {"nombre": TEXTO, "domicilio": TEXTO},
 }
 
 # Las huellas son para la base: la página no las necesita.

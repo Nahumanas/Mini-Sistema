@@ -70,6 +70,17 @@ describe("el PDF", () => {
     expect(pdf.getNumberOfPages()).toBe(2);
   });
 
+  it("a un comprador identificado lleva su nombre, documento, condición frente al IVA y domicilio", async () => {
+    const conDni = (await armarFacturaPdf(factura({ docTipo: 96, docNro: 30123456, condicionIvaReceptor: 5, comprador: { nombre: "Juan Gómez", domicilio: "Calle Falsa 123" } }), emisor)).output();
+    for (const parte of ["Juan G", "30.123.456", "Consumidor Final", "Domicilio"]) expect(conDni).toContain(parte);
+    const conCuit = (await armarFacturaPdf(factura({ docTipo: 80, docNro: 30712345671, condicionIvaReceptor: 1, comprador: { nombre: "Ferreteria SRL", domicilio: "" } }), emisor)).output();
+    for (const parte of ["Ferreteria SRL", "30-71234567-1", "IVA Responsable Inscripto"]) expect(conCuit).toContain(parte);
+    expect(conCuit).not.toContain("Consumidor final");
+    // Y el QR lleva el documento del comprador ("de corresponder", dice ARCA)
+    const { datos } = datosDelQr(textoQrArca(factura({ docTipo: 80, docNro: 30712345671 }))!);
+    expect([datos.tipoDocRec, datos.nroDocRec]).toEqual([80, 30712345671]);
+  });
+
   it("el archivo se llama como el comprobante, sin caracteres que Windows no acepta", () => {
     expect(nombreArchivoFactura(factura(), "Kiosco: Ana/Beto")).toBe("Factura C 00003-00000012 - Kiosco- Ana-Beto.pdf");
   });
