@@ -74,10 +74,15 @@ export function TablaCarrito({ comercioId, productos, cuenta }: { comercioId: nu
       <table className="numeros w-full text-left">
         <thead>
           <tr className="border-b border-borde text-xs uppercase tracking-wider text-texto-suave">
-            <th className="px-3 py-2.5 font-medium sm:px-4">Producto</th>
+            {/* En el celular el subtotal va en el mismo renglón que el nombre: el título lo dice a la derecha */}
+            <th className="px-3 py-2.5 font-medium sm:px-4">
+              <span className="flex justify-between gap-3">
+                Producto <span className="sm:hidden">Subtotal</span>
+              </span>
+            </th>
             <th className="hidden px-4 py-2.5 text-center font-medium sm:table-cell">Cantidad</th>
             <th className="hidden px-4 py-2.5 text-right font-medium sm:table-cell">Precio</th>
-            <th className="px-2 py-2.5 text-right font-medium sm:px-4">Subtotal</th>
+            <th className="hidden px-4 py-2.5 text-right font-medium sm:table-cell">Subtotal</th>
             <th className="hidden w-14 px-1.5 py-2.5 sm:table-cell">
               <span className="sr-only">Quitar</span>
             </th>
@@ -87,13 +92,28 @@ export function TablaCarrito({ comercioId, productos, cuenta }: { comercioId: nu
           {items.map((item, indice) => {
             const stock = stockDe(item.productoId);
             const linea = cuenta.lineas[indice];
+            const subtotal = (
+              <>
+                {pesos(linea?.total ?? item.cantidad * item.precioUnitario)}
+                {linea?.descuento > 0 && (
+                  <span className="block text-sm font-normal text-texto-suave line-through">{pesos(item.cantidad * item.precioUnitario)}</span>
+                )}
+              </>
+            );
             return (
               <tr key={item.productoId} className="border-b border-borde last:border-b-0 hover:bg-superficie-suave/60">
                 <td className="px-3 py-3 sm:px-4">
-                  {item.nombre}
-                  {linea?.promos.length > 0 && <span className="block text-sm text-positivo">{linea.promos.join(" + ")}</span>}
-                  {/* En el celular no entra la columna Precio: va abajo del nombre */}
-                  <span className="block text-sm text-texto-suave sm:hidden">{pesos(item.precioUnitario)} c/u</span>
+                  {/* En el celular no entran 2 columnas al lado de los botones de 44 px: el subtotal va a la derecha del
+                      nombre y los botones abajo, con todo el ancho. Así los precios grandes no se cortan. */}
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="min-w-0">
+                      {item.nombre}
+                      {linea?.promos.length > 0 && <span className="block text-sm text-positivo">{linea.promos.join(" + ")}</span>}
+                      {/* En el celular no entra la columna Precio: va abajo del nombre */}
+                      <span className="block text-sm text-texto-suave sm:hidden">{pesos(item.precioUnitario)} c/u</span>
+                    </span>
+                    <span className="shrink-0 whitespace-nowrap text-right font-semibold sm:hidden">{subtotal}</span>
+                  </div>
                   {/* En el celular no entran las columnas Cantidad y Quitar con botones de 44 px: van abajo del nombre */}
                   <div className="mt-2 flex items-center gap-1 sm:hidden">
                     {controles(item, stock)}
@@ -110,12 +130,7 @@ export function TablaCarrito({ comercioId, productos, cuenta }: { comercioId: nu
                   {controles(item, stock)}
                 </td>
                 <td className="hidden px-4 py-3 text-right text-texto-suave sm:table-cell">{pesos(item.precioUnitario)}</td>
-                <td className="whitespace-nowrap py-3 pl-1 pr-3 text-right align-top font-semibold sm:px-4 sm:align-middle">
-                  {pesos(linea?.total ?? item.cantidad * item.precioUnitario)}
-                  {linea?.descuento > 0 && (
-                    <span className="block text-sm font-normal text-texto-suave line-through">{pesos(item.cantidad * item.precioUnitario)}</span>
-                  )}
-                </td>
+                <td className="hidden whitespace-nowrap px-4 py-3 text-right font-semibold sm:table-cell">{subtotal}</td>
                 <td className="hidden px-1.5 py-2 sm:table-cell">
                   <button
                     onClick={() => quitar(comercioId, item.productoId)}

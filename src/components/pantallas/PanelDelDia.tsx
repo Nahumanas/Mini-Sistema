@@ -84,12 +84,16 @@ export function PanelDelDia() {
           <div className="grid gap-6 lg:grid-cols-2">
             <section className="flex min-w-0 flex-col gap-3">
               <h2 className="font-medium">Lo más vendido</h2>
-              <Tabla columnas={[{ texto: "Producto" }, { texto: "Unidades", derecha: true }, { texto: "Cobrado", derecha: true }]}>
+              {/* En el celular las unidades van abajo del nombre: con su propia columna se cortaba "Cobrado" */}
+              <Tabla columnas={[{ texto: "Producto" }, { texto: "Unidades", derecha: true, ocultarCelular: true }, { texto: "Cobrado", derecha: true }]}>
                 {ranking.map((p) => (
                   <tr key={p.productoId}>
-                    <td className="px-4 py-2.5">{p.nombre}</td>
-                    <td className="px-4 py-2.5 text-right">{p.unidades}</td>
-                    <td className="px-4 py-2.5 text-right">{pesos(p.total)}</td>
+                    <td className="px-4 py-2.5">
+                      {p.nombre}
+                      <span className="block text-sm text-texto-suave sm:hidden">{p.unidades === 1 ? "1 unidad" : `${p.unidades} unidades`}</span>
+                    </td>
+                    <td className="hidden px-4 py-2.5 text-right sm:table-cell">{p.unidades}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right">{pesos(p.total)}</td>
                   </tr>
                 ))}
               </Tabla>
