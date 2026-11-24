@@ -1,6 +1,6 @@
 import type { ClienteAdmin, PlanCliente } from "./api";
 import { diasEntre, hoy } from "./fechas";
-import { PERIODOS } from "./plan";
+import { PERIODOS, PRECIO_COMERCIO_EXTRA } from "./plan";
 
 // Cuentas de la pantalla de administrador (components/admin/PanelAdmin.tsx): planes, vencimientos y estado.
 
@@ -32,15 +32,42 @@ export function estadoDe(c: Pick<ClienteAdmin, "suspendido" | "vence">, dia = ho
   return faltan <= 5 ? "por_vencer" : "activo";
 }
 
-/** Cuánto se le cobra al vencer: su plan; si está en prueba (o sin plan), lo que sale 1 mes. */
-export function precioACobrar(c: Pick<ClienteAdmin, "plan">) {
-  return c.plan && c.plan !== "prueba" ? PLANES[c.plan].precio : PLANES.mensual.precio;
+type ParaCobrar = Pick<ClienteAdmin, "plan" | "comercios" | "comerciosPagos">;
+
+/** Cuántos comercios se le cobran aparte: el plan trae 1 y se cobra cada uno de más.
+ * Se toma el mayor entre los pagos (el tope que se le puso en Clientes) y los que de verdad tiene, así no se cobra de menos
+ * a alguien que quedó con más comercios que el tope (por ejemplo, una cuenta vieja o creada por un administrador). */
+export function comerciosExtra(c: Pick<ClienteAdmin, "comercios" | "comerciosPagos">) {
+  return Math.max(0, Math.max(c.comerciosPagos ?? 1, c.comercios ?? 0) - 1);
 }
 
-/** Lo que entra por mes con los clientes que pagan (el de 3 y 6 meses se reparte por mes). Los suspendidos no cuentan. */
-export function ingresoMensual(clientes: Pick<ClienteAdmin, "plan" | "suspendido">[]) {
+/** El plan que se le cobra al vencer: su plan; si está en prueba (o sin plan), 1 mes. */
+export const planACobrar = (c: { plan?: PlanCliente | null }): Exclude<PlanCliente, "prueba"> =>
+  c.plan && c.plan !== "prueba" ? c.plan : "mensual";
+
+/** Lo que se cobra por los comercios extra en un plan: $6.500 × comercios de más × meses del plan (sin descuento). */
+export function precioExtras(c: Pick<ClienteAdmin, "comercios" | "comerciosPagos">, plan: PlanCliente) {
+  return comerciosExtra(c) * PRECIO_COMERCIO_EXTRA * PLANES[plan].meses;
+}
+
+/** Cuánto se le cobra al vencer: el plan (o 1 mes si está en prueba) más los comercios extra por los meses de ese plan.
+ * Con `plan` se calcula para otro plan (el que se elige en "Registrar pago"). */
+export function precioACobrar(c: Pick<ClienteAdmin, "comercios" | "comerciosPagos"> & { plan?: PlanCliente | null }, plan: PlanCliente = planACobrar(c)) {
+  if (plan === "prueba") return 0;
+  return PLANES[plan].precio + precioExtras(c, plan);
+}
+
+/** Lo que entra por mes con los clientes que pagan (el de 3 y 6 meses se reparte por mes), con los comercios extra.
+ * Los suspendidos y los que están en prueba no cuentan. */
+export function ingresoMensual(clientes: (ParaCobrar & Pick<ClienteAdmin, "suspendido">)[]) {
   return Math.round(
-    clientes.reduce((t, c) => (c.suspendido || !c.plan || c.plan === "prueba" ? t : t + PLANES[c.plan].precio / PLANES[c.plan].meses), 0),
+    clientes.reduce(
+      (t, c) =>
+        c.suspendido || !c.plan || c.plan === "prueba"
+          ? t
+          : t + PLANES[c.plan].precio / PLANES[c.plan].meses + comerciosExtra(c) * PRECIO_COMERCIO_EXTRA,
+      0,
+    ),
   );
 }
 

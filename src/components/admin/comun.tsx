@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Lock } from "lucide-react";
 import { apiAdmin, type ClienteAdmin, type DatosCliente, type PlanCliente } from "@/lib/api";
-import { type Estado, PLANES, sumarMeses } from "@/lib/clientes";
+import { comerciosExtra, type Estado, PLANES, precioACobrar, sumarMeses } from "@/lib/clientes";
+import { PRECIO_COMERCIO_EXTRA } from "@/lib/plan";
 import { ddmm, diasEntre, hoy } from "@/lib/fechas";
 import { pesos } from "@/lib/formato";
 import { useAdmin } from "@/store/admin";
@@ -47,6 +48,7 @@ export function cuandoVence(vence: string | null) {
  * La ventana del cliente: invitar uno nuevo, editar su plan o registrar un pago.
  * En "pago": base es la fecha desde la que se suman los meses del plan (el vencimiento, o hoy si ya venció),
  * y si estaba suspendido se ofrece reactivarlo en el mismo paso.
+ * comercios: cuántos tiene y cuántos pagos (al editar o cobrar), para sumar los $6.500/mes de cada comercio extra.
  */
 export type Formulario = {
   modo: "invitar" | "editar" | "pago";
@@ -55,6 +57,7 @@ export type Formulario = {
   suspendido?: boolean;
   reactivar?: boolean;
   duenoId?: number;
+  comercios?: Pick<ClienteAdmin, "comercios" | "comerciosPagos">;
 };
 export type Confirmar = { tipo: "suspender" | "reactivar" | "pin" | "borrar"; cliente: ClienteAdmin };
 
@@ -71,6 +74,7 @@ export const formularioNuevo = (): Formulario => ({
 export const formularioEditar = (c: ClienteAdmin): Formulario => ({
   modo: "editar",
   datos: { email: c.email, nombre: c.nombre || c.nombreDueno, plan: c.plan ?? "mensual", vence: c.vence ?? sumarMeses(hoy(), 1) },
+  comercios: { comercios: c.comercios, comerciosPagos: c.comerciosPagos },
 });
 
 /** Registrar un pago: se suma el plan desde el vencimiento (o desde hoy, si ya venció). La prueba pasa a 1 mes. */
@@ -84,6 +88,7 @@ export function formularioPago(c: ClienteAdmin): Formulario {
     suspendido: c.suspendido,
     reactivar: c.suspendido,
     duenoId: c.duenoId,
+    comercios: { comercios: c.comercios, comerciosPagos: c.comerciosPagos },
   };
 }
 
@@ -112,7 +117,10 @@ export function FormularioCliente({ formulario, puedeInvitar, enviando, alCambia
   const sinClave = invitando && !puedeInvitar;
   const listo = datos.email.includes("@") && datos.nombre.trim() !== "" && !sinClave;
   const cambiar = (d: Partial<DatosCliente>) => alCambiar({ ...formulario, datos: { ...datos, ...d } });
-  const precio = PLANES[datos.plan].precio;
+  // El plan más los comercios extra ($6.500 × comercios de más × meses del plan)
+  const precio = formulario.comercios ? precioACobrar(formulario.comercios, datos.plan) : PLANES[datos.plan].precio;
+  const extra = formulario.comercios ? comerciosExtra(formulario.comercios) : 0;
+  const meses = PLANES[datos.plan].meses;
   const titulos = { invitar: "Invitar cliente", editar: "Editar plan", pago: `Registrar pago de ${datos.nombre || datos.email}` };
   const descripciones = {
     invitar: "Le llega un mail para entrar con Google. Después crea sus comercios él mismo (así sus datos quedan cifrados con su PIN).",
@@ -174,6 +182,12 @@ export function FormularioCliente({ formulario, puedeInvitar, enviando, alCambia
             <input type="date" value={datos.vence ?? ""} onChange={(e) => cambiar({ vence: e.target.value || null })} className={claseInput} />
           </Campo>
         </div>
+        {extra > 0 && datos.plan !== "prueba" && (
+          <p className="text-sm text-texto-suave">
+            Incluye {pesos(PLANES[datos.plan].precio)} del plan + {extra} {extra === 1 ? "comercio extra" : "comercios extra"} ×{" "}
+            {pesos(PRECIO_COMERCIO_EXTRA)}{meses > 1 ? ` × ${meses} meses` : ""} = {pesos(extra * PRECIO_COMERCIO_EXTRA * meses)}.
+          </p>
+        )}
         {pago && formulario.suspendido && (
           <label className="flex items-start gap-2.5 text-sm">
             <input type="checkbox" checked={Boolean(formulario.reactivar)} className="mt-0.5 size-4 accent-[var(--primary-color)]"

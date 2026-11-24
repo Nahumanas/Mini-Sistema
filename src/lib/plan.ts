@@ -18,9 +18,12 @@ export const PERIODOS: Periodo[] = [
 // El que aparece elegido al entrar a la página.
 export const PERIODO_INICIAL = "1";
 
+// Lo que suma por mes cada comercio o sucursal por encima del primero (se cobra por CANTIDAD, no por rubro).
+export const PRECIO_COMERCIO_EXTRA = 6500;
+
 // Costos que se suman según el comercio.
 export const EXTRAS: { texto: string; precio: number; detalle?: string }[] = [
-  { texto: "Cada comercio o sucursal adicional", precio: 6500, detalle: "/ mes" },
+  { texto: "Cada comercio o sucursal adicional", precio: PRECIO_COMERCIO_EXTRA, detalle: "/ mes" },
   { texto: "Personalización a medida", precio: 20000 },
 ];
 
