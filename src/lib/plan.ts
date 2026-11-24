@@ -18,15 +18,18 @@ export const PERIODOS: Periodo[] = [
 // El que aparece elegido al entrar a la página.
 export const PERIODO_INICIAL = "1";
 
+// Lo que suma por mes cada comercio o sucursal por encima del primero (se cobra por CANTIDAD, no por rubro).
+export const PRECIO_COMERCIO_EXTRA = 6500;
+
 // Costos que se suman según el comercio.
 export const EXTRAS: { texto: string; precio: number; detalle?: string }[] = [
-  { texto: "Cada comercio o sucursal adicional", precio: 6500, detalle: "/ mes" },
+  { texto: "Cada comercio o sucursal adicional", precio: PRECIO_COMERCIO_EXTRA, detalle: "/ mes" },
   { texto: "Personalización a medida", precio: 20000 },
 ];
 
 // Letra chica debajo de los precios.
 export const NOTA_PRECIOS =
-  "Mantenimiento incluido. Si pagás 3 o 6 meses por adelantado, el precio queda congelado durante ese período. Los precios se actualizan cada 3 meses según el IPC. La baja se pide con un mes de anticipación.";
+  "Mantenimiento incluido. Si pagás 3 o 6 meses por adelantado, el precio queda congelado durante ese período y el descuento también se aplica a los comercios o sucursales adicionales. Los precios se actualizan cada 3 meses según el IPC. La baja se pide con un mes de anticipación.";
 
 // Aviso de promoción arriba de la tarjeta del plan. Con null no se muestra.
 export const PROMO_PLAN: string | null = "Contratá ahora: el primer mes es gratis para tu adaptación";

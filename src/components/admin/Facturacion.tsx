@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { CircleCheck, Receipt } from "lucide-react";
 import type { ClienteAdmin } from "@/lib/api";
-import { estadoDe, ingresoMensual, paraCobrar, PLANES, precioACobrar } from "@/lib/clientes";
+import { comerciosExtra, estadoDe, ingresoMensual, paraCobrar, PLANES, precioACobrar } from "@/lib/clientes";
 import { diasEntre, hoy } from "@/lib/fechas";
 import { pesos } from "@/lib/formato";
 import { useAdmin } from "@/store/admin";
@@ -12,7 +12,7 @@ import { cuandoVence, EtiquetaEstado, type Formulario, FormularioCliente, formul
 
 // Panel de administrador → Facturación: cuánto entra por mes, qué hay para cobrar y "Registrar pago"
 // (corre el vencimiento según lo que pagó y, si estaba suspendido, lo puede reactivar en el mismo paso).
-// Los montos salen de la cotización (lib/plan.ts). Todavía no se guarda un historial de pagos: solo el vencimiento.
+// Los montos salen de la cotización (lib/plan.ts): el plan más $6.500/mes por cada comercio o sucursal de más. Todavía no se guarda un historial de pagos: solo el vencimiento.
 
 type Vista = "cobrar" | "todos";
 
@@ -85,7 +85,16 @@ export function Facturacion() {
                 <p className="truncate text-sm text-texto-suave">{c.email}</p>
               </td>
               <td className="hidden px-4 py-3 sm:table-cell">{c.plan ? PLANES[c.plan].texto : <span className="text-texto-suave">Sin plan</span>}</td>
-              <td className="px-4 py-3 text-right">{pesos(precioACobrar(c))}</td>
+              <td className="px-4 py-3 text-right">
+                <span className="flex flex-col items-end">
+                  <span>{pesos(precioACobrar(c))}</span>
+                  {comerciosExtra(c) > 0 && (
+                    <span className="text-xs text-texto-suave">
+                      con {comerciosExtra(c)} {comerciosExtra(c) === 1 ? "comercio extra" : "comercios extra"}
+                    </span>
+                  )}
+                </span>
+              </td>
               <td className="hidden px-4 py-3 sm:table-cell">{cuandoVence(c.vence)}</td>
               <td className="hidden px-4 py-3 sm:table-cell"><EtiquetaEstado estado={estadoDe(c, dia)} /></td>
               <td className="px-4 py-3 text-right">
