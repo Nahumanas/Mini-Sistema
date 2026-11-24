@@ -19,7 +19,7 @@ import { Dialogo } from "../ui/Dialogo";
 // parcial (lo que el cliente devolvió) y bajar el ZIP del mes (todos los PDF y un Excel, para el contador). Con "Facturar cada venta al cobrar" prendido (Configuración), las facturas
 // aparecen solas y el servidor las reintenta solo. Los datos fiscales y la conexión con ARCA se cargan en
 // Configuración. Solo la ve el jefe, con la factura electrónica prendida en /admin (lo controla el menú:
-// lib/navegacion.ts). Por ahora solo el ARCA de prueba.
+// lib/navegacion.ts). Cada comercio arranca en el ARCA de prueba; Mantenete lo pasa a producción desde /admin.
 
 type Filtro = "todas" | "facturas" | "notas" | "problemas";
 
@@ -48,13 +48,20 @@ function ConComercio({ comercioId, nombre }: { comercioId: number; nombre: strin
   useEffect(recargar, [recargar]);
 
   const cambiar = (f: Factura) => setFacturas((lista) => [f, ...lista.filter((x) => x.id !== f.id)].sort((a, b) => b.id - a.id));
+  const produccion = estado?.ambiente === "produccion";
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <Encabezado
         titulo="Facturas"
-        descripcion={<>Las facturas y notas de crédito de {nombre}, directo con ARCA. Por ahora es el <b className="text-texto">modo prueba de ARCA</b>: no tienen valor fiscal.</>}
-        acciones={<Chip tono="amarillo">Modo prueba</Chip>}
+        descripcion={
+          produccion ? (
+            <>Las facturas y notas de crédito de {nombre}, directo con ARCA. Tienen <b className="text-texto">validez fiscal</b>.</>
+          ) : (
+            <>Las facturas y notas de crédito de {nombre}, directo con ARCA. Por ahora es el <b className="text-texto">modo prueba de ARCA</b>: no tienen valor fiscal.</>
+          )
+        }
+        acciones={estado && !produccion ? <Chip tono="amarillo">Modo prueba</Chip> : undefined}
       />
       {error ? (
         <p className="text-peligro">{error}</p>
@@ -68,7 +75,7 @@ function ConComercio({ comercioId, nombre }: { comercioId: number; nombre: strin
             <FacturarVenta comercioId={comercioId} facturas={facturas} alFacturar={cambiar} />
             <BajarMes comercioId={comercioId} nombre={nombre} emisor={estado.datos} />
           </div>
-          <Lista facturas={facturas} alCambiar={cambiar} nombre={nombre} emisor={estado.datos} />
+          <Lista facturas={facturas} alCambiar={cambiar} nombre={nombre} emisor={estado.datos} produccion={produccion} />
         </>
       )}
     </div>
@@ -255,7 +262,13 @@ function BajarMes({ comercioId, nombre, emisor }: { comercioId: number; nombre: 
   );
 }
 
-function Lista({ facturas, alCambiar, nombre, emisor }: { facturas: Factura[]; alCambiar: (f: Factura) => void; nombre: string; emisor: EmisorFactura }) {
+function Lista({ facturas, alCambiar, nombre, emisor, produccion }: {
+  facturas: Factura[];
+  alCambiar: (f: Factura) => void;
+  nombre: string;
+  emisor: EmisorFactura;
+  produccion: boolean;
+}) {
   const ventas = useDatos((s) => s.ventas);
   const avisar = useInterfaz((s) => s.avisar);
   const [filtro, setFiltro] = useState<Filtro>("todas");
@@ -307,6 +320,8 @@ function Lista({ facturas, alCambiar, nombre, emisor }: { facturas: Factura[]; a
                 <td className="px-3 py-2.5 sm:px-4">
                   <p className="whitespace-nowrap font-medium">{tipoFactura(f)}</p>
                   <p className="whitespace-nowrap text-sm text-texto-suave">{numeroCorto(f)}</p>
+                  {/* Ya en producción, las de antes siguen siendo del ARCA de prueba (y sus notas de crédito también) */}
+                  {produccion && f.ambiente === "homologacion" && <span className="mt-0.5 inline-block"><Chip tono="amarillo">De prueba</Chip></span>}
                   {/* En el celular la fecha y el total van acá (sus columnas se esconden para que entre el estado) */}
                   {f.fecha && <p className="whitespace-nowrap text-sm text-texto-suave sm:hidden">{ddmm(f.fecha, true)}</p>}
                   <p className="whitespace-nowrap text-sm font-medium sm:hidden">{plataConCentavos(f.impTotal)}</p>

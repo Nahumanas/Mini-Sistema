@@ -58,9 +58,13 @@ SMTP_CLAVE = os.environ.get("SMTP_CLAVE", "").strip()
 CORREO_REMITENTE = os.environ.get("CORREO_REMITENTE", "").strip()
 CORREO_NOMBRE = os.environ.get("CORREO_NOMBRE", "Mantenete").strip()
 
-# Factura electrónica de ARCA (etapa 1: SOLO homologación, el ambiente de pruebas de ARCA). Ver arca.py.
-# El certificado de pruebas que Nahuel saca en ARCA (WSASS) y su clave privada, en formato PEM (el texto que
-# empieza con "-----BEGIN"). La clave privada es SECRETA: va solo en Render y nunca en GitHub (el repo es público).
-# Si Render guarda los saltos de línea como "\n", igual se aceptan. Sin las dos, facturar contesta 503.
+# Factura electrónica de ARCA. Ver arca.py. Cada ambiente tiene SU certificado y SU clave privada, en formato PEM
+# (el texto que empieza con "-----BEGIN"). Las claves privadas son SECRETAS: van solo en Render y nunca en GitHub.
+# Si Render guarda los saltos de línea como "\n", igual se aceptan. Sin el par de un ambiente, ese ambiente no factura.
+#   · Homologación (prueba): el certificado que Nahuel saca en WSASS.
 ARCA_CERTIFICADO = os.environ.get("ARCA_CERTIFICADO", "").strip()
 ARCA_CLAVE_PRIVADA = os.environ.get("ARCA_CLAVE_PRIVADA", "").strip()
+#   · Producción (facturas con validez fiscal): el de "Administración de Certificados Digitales" (con clave fiscal).
+#     Cada comercio autoriza al CUIT de ESTE certificado a facturar por él (Administrador de Relaciones).
+ARCA_CERTIFICADO_PRODUCCION = os.environ.get("ARCA_CERTIFICADO_PRODUCCION", "").strip()
+ARCA_CLAVE_PRIVADA_PRODUCCION = os.environ.get("ARCA_CLAVE_PRIVADA_PRODUCCION", "").strip()

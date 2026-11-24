@@ -8,6 +8,7 @@ import { ddmm } from "@/lib/fechas";
 import { pesos } from "@/lib/formato";
 import { useAdmin } from "@/store/admin";
 import { Boton, Chip, claseInput, Encabezado, Kpi, Tabla, Vacio } from "../ui/base";
+import { FacturacionComercios } from "./FacturacionComercios";
 import {
   type Confirmar, ConfirmarAccion, cuandoVence, EtiquetaEstado, type Formulario, FormularioCliente, formularioEditar, formularioNuevo,
   guardarFormulario, sePuedeBorrar,
@@ -119,8 +120,10 @@ function FilaCliente({ cliente: c, enviando, alEditar, alConfirmar }: {
         <p className="truncate font-medium">{c.nombre || c.nombreDueno || "Sin nombre"}</p>
         <p className="truncate text-sm text-texto-suave">{c.email}</p>
         {c.permisosPorEmpleado && <span className="mt-1 inline-block"><Chip tono="verde">Personalización: qué ve cada empleado</Chip></span>}
-        {c.facturacion && <span className="mt-1 ml-1 inline-block"><Chip tono="amarillo">Factura ARCA (prueba)</Chip></span>}
+        {c.facturacion && <span className="mt-1 ml-1 inline-block"><Chip tono="amarillo">Factura ARCA</Chip></span>}
         <ComerciosPagos cliente={c} enviando={enviando} />
+        {/* Cada comercio pasa a producción (facturas con validez fiscal) por separado */}
+        {c.facturacion && <FacturacionComercios cliente={c} />}
         {/* En el celular, plan y vencimiento van acá abajo (las columnas se esconden) */}
         <p className="mt-0.5 text-xs text-texto-suave sm:hidden">
           {c.plan ? PLANES[c.plan].texto : "Sin plan"}{c.vence ? ` · vence ${ddmm(c.vence, true)}` : ""}
@@ -229,7 +232,7 @@ function AccionesCliente({ cliente: c, enviando, alEditar, alConfirmar, clase }:
         }
         className={`!px-2 !py-1.5 ${c.permisosPorEmpleado ? "bg-positivo/15 !text-positivo" : ""}`}
       />
-      {/* Factura electrónica de ARCA (etapa 1: solo el modo prueba de ARCA) */}
+      {/* Factura electrónica de ARCA: prendida, cada comercio arranca en prueba (y pasa a producción aparte) */}
       <Boton
         variante="fantasma"
         icono={Receipt}

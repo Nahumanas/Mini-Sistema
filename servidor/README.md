@@ -117,10 +117,11 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 - Pruebas: `pruebas/test_mercadopago.py` con un Mercado Pago de mentira (nunca se llama al real).
 - Pendiente (parte 2): avisos de Mercado Pago (webhooks), devoluciones y el posnet Point.
 
-## Factura electrónica de ARCA (etapa 1: SOLO modo prueba de ARCA)
+## Factura electrónica de ARCA (etapa 1: modo prueba de ARCA)
 
 - Factura C a consumidor final y nota de crédito C, directo con ARCA (WSAA para entrar, WSFE para facturar): `app/arca.py`.
-  Solo conoce las direcciones de **homologación**: lo que sale no tiene valor fiscal.
+  Cada comercio arranca en **homologación** (lo que sale no tiene valor fiscal); el paso a producción, comercio por
+  comercio, está en "Factura electrónica de ARCA en producción", más abajo.
 - Es un agregado del plan: Nahuel lo prende por cliente en /admin → Clientes (ícono del recibo). El jefe carga los datos
   fiscales en Configuración → Factura electrónica, prueba la conexión y factura una venta ya cobrada.
 - **Nunca dos veces la misma venta** (`app/facturacion.py`): la factura pasa a `enviando` (con su número) ANTES de salir.
@@ -198,6 +199,44 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 5. En Render: `ARCA_CERTIFICADO` = el contenido del `.crt` y `ARCA_CLAVE_PRIVADA` = el contenido del `.key`.
 6. En Configuración → Factura electrónica: el CUIT tiene que ser el mismo del certificado; cualquier punto de venta sirve en pruebas.
 
+## Factura electrónica de ARCA en producción (facturas con validez fiscal), comercio por comercio
+
+Cada comercio arranca en homologación (prueba). Lo pasa a producción **solo el administrador**, desde /admin →
+el cliente → "Factura ARCA por comercio" → **Pasar a producción**. Antes de cambiar nada, la API le pregunta a ARCA de
+producción (`FEDummy`, `FEParamGetPtosVenta`, `FECompUltimoAutorizado`) que ande, que el comercio haya autorizado a
+Mantenete y que su punto de venta exista para web services, sin baja ni bloqueo. Para que los ambientes nunca se crucen:
+
+- **Cada factura nace con su ambiente y no lo cambia nunca** (disparador `facturas_datos_fijos`). Lo pone la base, de
+  los datos fiscales del comercio, en la misma transacción en que se guarda la factura: la API no lo elige. Una nota
+  de crédito va al ambiente de la factura que anula (una factura de prueba se anula en prueba).
+- **Cambiar de ambiente y facturar no se pisan**: crear una factura traba los datos fiscales para leer (`for share`) y
+  el cambio los traba para escribir (`for update`). El que llega segundo espera al primero y ve lo que hizo
+  (`pruebas/test_facturas_produccion.py` lo prueba con dos transacciones a la vez).
+- **Con facturas sin respuesta de ARCA no se cambia**: tienen que terminar en el ambiente en el que nacieron.
+- **Certificado, ticket, dirección y numeración van por ambiente**: `ARCA_CERTIFICADO_PRODUCCION` y
+  `ARCA_CLAVE_PRIVADA_PRODUCCION` son otro par; el ticket de un ambiente no sirve en el otro (`arca.Ticket.ambiente`:
+  WSFE toma la dirección del ticket, y ninguna función tiene un ambiente "por defecto"); la primera factura de
+  producción es la N° 1 de producción aunque en prueba ya haya muchas.
+- **En producción el CUIT y el punto de venta quedan fijos** (son los que se verificaron): el jefe no los cambia ni
+  borra los datos fiscales. Si cambian, el administrador lo vuelve a prueba, el jefe los corrige y se verifica de nuevo.
+- Cada cambio queda anotado en `privado.facturacion_ambientes` (quién, cuándo, con qué CUIT y punto de venta).
+
+**Qué hace falta en ARCA para el primer comercio en producción** (los logins a ARCA los hace solo el servidor de
+Mantenete; nunca se prueba WSAA desde una compu con el certificado de Render):
+
+1. El certificado de producción de Mantenete (una sola vez, con clave fiscal nivel 3 del CUIT que factura el
+   servicio): clave privada y pedido como en homologación (`openssl genrsa` / `openssl req`, con el CUIT de
+   Mantenete), y en ARCA → **Administración de Certificados Digitales** → nuevo alias → subir el `.csr` → bajar el `.crt`.
+2. En Render: `ARCA_CERTIFICADO_PRODUCCION` = el `.crt` y `ARCA_CLAVE_PRIVADA_PRODUCCION` = el `.key`. Tiene que ser
+   otro certificado que el de prueba (si es el mismo, la API lo avisa).
+3. Cada comercio, con su clave fiscal:
+   - **ABM de Puntos de Venta** → un punto de venta nuevo para web services (en monotributo: "Factura Electrónica -
+     Monotributo - Web Services") → ese número va en Configuración → Factura electrónica.
+   - **Administrador de Relaciones de Clave Fiscal** → nueva relación → servicio **Facturación Electrónica** (wsfe) →
+     representante: el CUIT de Mantenete (el del certificado). Si ARCA pide que Mantenete acepte, se acepta desde su
+     clave fiscal. Nunca se le pide la clave fiscal al comercio.
+4. En /admin → **Pasar a producción**. Si algo falta, dice qué (punto de venta, autorización, certificado).
+
 ## Qué hace
 
 | Pedido | Para qué |
@@ -226,6 +265,7 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 | `GET/PUT /comercios/{id}/facturacion`, `POST …/facturacion/probar` | Factura electrónica (solo jefe): datos fiscales del comercio y probar la conexión con ARCA |
 | `GET /comercios/{id}/facturas`, `GET /facturas/{id}`, `POST /ventas/{id}/facturar`, `POST /facturas/{id}/reintentar` | Facturas y notas de crédito; ver una (la Caja la mira hasta que ARCA contesta); facturar una venta (Factura C a consumidor final o a un comprador con DNI o CUIT); reintentar una que ARCA no contestó |
 | `POST /facturas/{id}/nota-credito`, `GET /comercios/{id}/facturas/mes/{mes}` | Nota de crédito parcial (lo que se devolvió); todas las facturas de un mes, para el ZIP (solo el jefe) |
+| `GET /admin/clientes/{id}/facturacion/comercios`, `PUT /admin/clientes/{id}/comercios/{comercio}/facturacion/ambiente` | Solo el administrador: los comercios del cliente con su ambiente de ARCA; pasar uno a producción (verificado antes con ARCA) o volverlo a prueba |
 | `PUT /comercios/{id}/facturacion/al-cobrar` | Prender o apagar "Facturar cada venta al cobrar" (solo jefe) |
 | `POST /comercios/{id}/proveedores`, `POST /comercios/{id}/compras` | Compras: suma al stock, cambia el costo y crea las tandas de lo que vence, todo o nada |
 | `POST /comercios/{id}/gastos`, `DELETE /gastos/{id}` | Gastos del comercio |
@@ -260,8 +300,10 @@ Con la API corriendo, la lista completa está en `/docs`.
 | `CORREO_REMITENTE` | El mail que figura como remitente. Con Brevo tiene que estar verificado en *Senders* | No |
 | `CORREO_NOMBRE` | El nombre del remitente (por defecto `Mantenete`) | No |
 | `SMTP_HOST`, `SMTP_PUERTO`, `SMTP_USUARIO`, `SMTP_CLAVE` | Avisos por mail (opción 2): SMTP común, por ejemplo `smtp.gmail.com`, `587`, tu Gmail y una *contraseña de aplicación*. **No anda en Render gratis** (bloquea los puertos de mail). `SMTP_CLAVE` es secreta | `SMTP_CLAVE` sí |
-| `ARCA_CERTIFICADO` | Factura electrónica (etapa 1, pruebas): el certificado de homologación de ARCA (`.crt`, texto que empieza con `-----BEGIN CERTIFICATE`). Ver "Factura electrónica de ARCA" | No |
-| `ARCA_CLAVE_PRIVADA` | La clave privada de ese certificado (`.key`). Sin las dos, facturar contesta 503 | **Sí** |
+| `ARCA_CERTIFICADO` | Factura electrónica en prueba: el certificado de homologación de ARCA (`.crt`, texto que empieza con `-----BEGIN CERTIFICATE`). Ver "Factura electrónica de ARCA" | No |
+| `ARCA_CLAVE_PRIVADA` | La clave privada de ese certificado (`.key`). Sin las dos, los comercios en prueba no facturan (503) | **Sí** |
+| `ARCA_CERTIFICADO_PRODUCCION` | Factura electrónica con validez fiscal: el certificado de producción de Mantenete (Administración de Certificados Digitales). Ver "Factura electrónica de ARCA en producción" | No |
+| `ARCA_CLAVE_PRIVADA_PRODUCCION` | La clave privada de ese certificado. Sin las dos, ningún comercio pasa a producción | **Sí** |
 | `URL_SISTEMA` | Opcional: a dónde lleva el mail de invitación (por defecto `https://mantenete-app.vercel.app`) | No |
 
 Y en **Vercel**, para que la página use la API: `NEXT_PUBLIC_API_URL` = la dirección de la API (no es secreta).

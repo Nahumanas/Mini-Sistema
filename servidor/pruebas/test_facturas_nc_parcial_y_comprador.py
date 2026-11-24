@@ -220,7 +220,7 @@ def test_los_datos_del_comprador_se_controlan(cliente, afip, comprador, texto):
 
 
 def test_desde_10_millones_hay_que_identificar_al_comprador(cliente, afip):
-    ana, cid, producto, pv = _kiosco_con_facturacion(cliente, "ana.diezmillones@gmail.com", precio=5_000_000)
+    ana, cid, producto, pv = _kiosco_con_facturacion(cliente, "ana.diezmillones.comprador@gmail.com", precio=5_000_000)
     venta = _vender(cliente, ana, cid, producto, cantidad=2)  # $ 10.000.000 justos
     r = cliente.post(f"/ventas/{venta['id']}/facturar", json={}, headers=ana)
     assert r.status_code == 422 and "identificar al comprador" in r.json()["detail"]

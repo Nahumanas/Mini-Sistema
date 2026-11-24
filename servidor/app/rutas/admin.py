@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from psycopg import errors
 from pydantic import BaseModel, Field
 
-from .. import config, cuenta_suspendida
+from .. import arca, config, cuenta_suspendida, facturacion
 from ..autenticacion import Usuario, usuario_actual
 from ..base import como_usuario, leer
 from ..formato import a_camel
@@ -137,11 +137,108 @@ def permisos_por_empleado(dueno_id: int, datos: Personalizacion, admin: Usuario 
 
 
 @router.put("/clientes/{dueno_id}/facturacion")
-def facturacion(dueno_id: int, datos: Personalizacion, admin: Usuario = Depends(administrador)):
-    """La factura electrónica de ARCA (etapa 1: solo homologación). Prendida, el jefe carga los datos fiscales de sus
-    comercios en Configuración y puede facturar ventas. Apagarla no borra ninguna factura."""
+def prender_facturacion(dueno_id: int, datos: Personalizacion, admin: Usuario = Depends(administrador)):
+    """La factura electrónica de ARCA. Prendida, el jefe carga los datos fiscales de sus comercios en Configuración
+    y factura en modo prueba (homologación); cada comercio pasa a producción aparte (ver abajo). Apagarla no borra
+    ninguna factura."""
     _llamar(admin, "select privado.admin_facturacion(%s, %s)", (dueno_id, datos.activa))
     return {"ok": True, "activa": datos.activa}
+
+
+# ---------------------------------------------------------------- factura ARCA: prueba o producción, por comercio
+
+NO_AUTORIZADO = ("ARCA de producción dice que Mantenete no puede facturar por el CUIT {cuit}. El comercio tiene que "
+                 "entrar a ARCA con su clave fiscal, ir a \"Administrador de Relaciones de Clave Fiscal\" y autorizar al "
+                 "CUIT {mantenete} (Mantenete) en el servicio \"Facturación Electrónica\" (wsfe).")
+POR_SALIR = ("Tiene {n} factura{s} sin respuesta de ARCA. Tienen que terminar en el ambiente en el que nacieron "
+             "(que salgan, o descartarlas) antes de cambiarlo.")
+
+
+class Ambiente(BaseModel):
+    ambiente: Literal["homologacion", "produccion"]
+
+
+def _comercios_facturacion(admin: Usuario, dueno_id: int) -> list[dict]:
+    return [a_camel(f) for f in _llamar(admin, "select * from privado.admin_facturacion_comercios(%s)", (dueno_id,))]
+
+
+@router.get("/clientes/{dueno_id}/facturacion/comercios")
+def comercios_facturacion(dueno_id: int, admin: Usuario = Depends(administrador)):
+    """Los comercios del cliente que ya cargaron sus datos fiscales, con su ambiente (prueba o producción)."""
+    return {"comercios": _comercios_facturacion(admin, dueno_id),
+            "produccionLista": arca.certificado_listo(arca.PRODUCCION)}
+
+
+def _verificar_en_produccion(admin: Usuario, cuit: str, punto_venta: int) -> dict:
+    """Antes de pasar un comercio a producción, se le pregunta a ARCA de producción (sin ninguna transacción de la
+    base abierta mientras tanto): que ande, que el comercio haya autorizado a Mantenete y que el punto de venta
+    exista para web services, sin baja ni bloqueo. Devuelve el punto de venta y el último número de cada tipo."""
+    if not arca.certificado_listo(arca.PRODUCCION):
+        raise HTTPException(409, "Falta cargar el certificado de producción de ARCA en Render "
+                                 "(ARCA_CERTIFICADO_PRODUCCION y ARCA_CLAVE_PRIVADA_PRODUCCION).")
+    try:
+        if not arca.servicio_anda(arca.PRODUCCION):
+            raise HTTPException(502, "ARCA de producción dice que ahora no anda. Probá de nuevo en un rato.")
+        acceso = facturacion.ticket(facturacion.ComoUsuario(admin), arca.PRODUCCION)
+        puntos = arca.puntos_de_venta(acceso, cuit)
+        punto = next((p for p in puntos if p.numero == punto_venta), None)
+        if punto is None:
+            habilitados = ", ".join(str(p.numero) for p in puntos) or "ninguno"
+            raise HTTPException(409, f"En ARCA de producción, el CUIT {cuit} no tiene el punto de venta {punto_venta} "
+                                     f"para web services (tiene: {habilitados}). El comercio tiene que crearlo en "
+                                     "\"ABM de Puntos de Venta\" como \"Web Services\" y cargar ese número en Configuración.")
+        if punto.baja is not None or punto.bloqueado:
+            raise HTTPException(409, f"El punto de venta {punto_venta} está "
+                                     f"{'dado de baja' if punto.baja is not None else 'bloqueado'} en ARCA.")
+        if punto.emision_tipo.upper().startswith("CAEA"):
+            raise HTTPException(409, f"El punto de venta {punto_venta} es de CAEA (contingencia): Mantenete factura con "
+                                     "CAE. El comercio tiene que usar un punto de venta de web services con CAE.")
+        ultimos = {
+            "facturaC": arca.ultimo_autorizado(acceso, cuit, punto_venta, arca.FACTURA_C),
+            "notaCreditoC": arca.ultimo_autorizado(acceso, cuit, punto_venta, arca.NOTA_CREDITO_C),
+        }
+    except arca.ErrorDeArca as error:
+        if arca.no_esta_autorizado(error):
+            raise HTTPException(409, NO_AUTORIZADO.format(
+                cuit=cuit, mantenete=arca.cuit_del_certificado(arca.PRODUCCION))) from None
+        raise HTTPException(502, f"No se pudo verificar con ARCA de producción: {error}") from None
+    return {"puntoVenta": punto_venta, "emisionTipo": punto.emision_tipo, "ultimos": ultimos}
+
+
+@router.put("/clientes/{dueno_id}/comercios/{comercio_id}/facturacion/ambiente")
+def cambiar_ambiente(dueno_id: int, comercio_id: int, datos: Ambiente, admin: Usuario = Depends(administrador)):
+    """Pasa un comercio a producción (sus facturas tienen validez fiscal) o lo vuelve a prueba.
+    Producción: primero se verifica con ARCA (ver arriba) y después, en UNA transacción con los datos fiscales
+    trabados, la base controla que sigan siendo el mismo CUIT y punto de venta y que no haya facturas por salir
+    (privado.admin_ambiente). Desde ese momento cada factura nueva sale en producción; las de antes, y sus notas de
+    crédito, siguen en prueba."""
+    fila = next((c for c in _comercios_facturacion(admin, dueno_id) if c["comercioId"] == comercio_id), None)
+    if fila is None:
+        raise HTTPException(404, "Ese comercio no es de este cliente o todavía no cargó sus datos fiscales.")
+    if fila["ambiente"] == datos.ambiente:
+        return {"ok": True, "ambiente": datos.ambiente, "verificado": None}
+    if fila["porSalir"]:
+        n = fila["porSalir"]
+        raise HTTPException(409, POR_SALIR.format(n=n, s="s" if n != 1 else ""))
+    verificado = (_verificar_en_produccion(admin, fila["cuit"], fila["puntoVenta"])
+                  if datos.ambiente == arca.PRODUCCION else None)
+    try:
+        _llamar(admin, "select * from privado.admin_ambiente(%s, %s, %s, %s, %s)",
+                (comercio_id, datos.ambiente, fila["cuit"], fila["puntoVenta"], admin.email))
+    except errors.RaiseException as error:
+        mensaje = error.diag.message_primary or ""
+        if mensaje == "HAY_POR_SALIR":
+            n = int(error.diag.message_detail or "1")
+            raise HTTPException(409, POR_SALIR.format(n=n, s="s" if n != 1 else "")) from None
+        if mensaje == "DATOS_CAMBIARON":
+            raise HTTPException(409, "El CUIT o el punto de venta del comercio cambiaron mientras se verificaba con "
+                                     "ARCA. Probá de nuevo.") from None
+        if mensaje == "SIN_FACTURACION":
+            raise HTTPException(409, "Este cliente no tiene la factura electrónica prendida (o está suspendido).") from None
+        if mensaje == "SIN_DATOS":
+            raise HTTPException(404, "Ese comercio todavía no cargó sus datos fiscales.") from None
+        raise
+    return {"ok": True, "ambiente": datos.ambiente, "verificado": verificado}
 
 
 class ComerciosPagos(BaseModel):

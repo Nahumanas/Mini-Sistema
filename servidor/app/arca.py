@@ -1,4 +1,4 @@
-"""Hablar con ARCA (ex AFIP): factura electrónica por web service, etapa 1 (SOLO homologación).
+"""Hablar con ARCA (ex AFIP): factura electrónica por web service, en homologación (prueba) o en producción.
 
 Son dos servicios, los dos con mensajes SOAP (XML):
   · WSAA (login): con el certificado de Mantenete se firma un pedido de acceso y ARCA devuelve un "ticket"
@@ -11,7 +11,14 @@ ARCA no recibe los productos de la factura, solo los TOTALES, y controla que
 total = neto + IVA + tributos + no gravado + exento. Toda la plata va con Decimal y 2 decimales: un float
 (0.1 + 0.2 = 0.30000000000000004) puede terminar en un total que no cierra por un centavo.
 
-Esta etapa solo conoce las direcciones de PRUEBA de ARCA: lo que se manda no es una factura de verdad.
+Dos ambientes, que nunca se cruzan:
+  · homologación: el ARCA de prueba (lo que sale no tiene valor fiscal), con su propio certificado.
+  · producción: el ARCA de verdad, con otro certificado. El ticket de un ambiente solo sirve en ese ambiente
+    (Ticket.ambiente): las funciones de WSFE toman la dirección del ticket, así que una factura no puede salir
+    con el certificado de un ambiente hacia el otro. Ninguna función tiene un ambiente "por defecto".
+Qué ambiente usa cada factura lo dice la base (facturas.ambiente, que se copia de los datos fiscales del comercio
+al crearla y no cambia más). En producción, Mantenete factura en nombre de cada comercio: el CUIT del certificado
+es el de Mantenete y el de cada factura (Auth.Cuit) es el del comercio, que lo autorizó en ARCA.
 
 Manuales: https://www.afip.gob.ar/ws/documentacion/ (WSAA y "Manual para el desarrollador" de WSFEv1).
 """
@@ -32,11 +39,16 @@ from cryptography.hazmat.primitives.serialization import pkcs7
 
 from . import config
 
-AMBIENTE = "homologacion"
+HOMOLOGACION, PRODUCCION = "homologacion", "produccion"
+AMBIENTES = (HOMOLOGACION, PRODUCCION)
 DIRECCIONES = {
-    "homologacion": {
+    HOMOLOGACION: {
         "wsaa": "https://wsaahomo.afip.gov.ar/ws/services/LoginCms",
         "wsfe": "https://wswhomo.afip.gov.ar/wsfev1/service.asmx",
+    },
+    PRODUCCION: {
+        "wsaa": "https://wsaa.afip.gov.ar/ws/services/LoginCms",
+        "wsfe": "https://servicios1.afip.gov.ar/wsfev1/service.asmx",
     },
 }
 SERVICIO = "wsfe"
@@ -96,24 +108,44 @@ def _pem(texto: str) -> bytes:
     return texto.replace("\\n", "\n").encode()
 
 
-def certificado_listo() -> bool:
-    return bool(config.ARCA_CERTIFICADO and config.ARCA_CLAVE_PRIVADA)
+def _revisar_ambiente(ambiente: str) -> str:
+    if ambiente not in AMBIENTES:
+        raise ValueError(f"Ambiente de ARCA desconocido: {ambiente!r}")
+    return ambiente
 
 
-def _cargar():
-    if not certificado_listo():
-        raise FaltaCertificado("Falta cargar el certificado de ARCA en el servidor (ARCA_CERTIFICADO y ARCA_CLAVE_PRIVADA).")
+def _variables(ambiente: str) -> tuple[str, str, str]:
+    """(certificado, clave privada, nombres de las variables de Render) de ese ambiente."""
+    if _revisar_ambiente(ambiente) == PRODUCCION:
+        return (config.ARCA_CERTIFICADO_PRODUCCION, config.ARCA_CLAVE_PRIVADA_PRODUCCION,
+                "ARCA_CERTIFICADO_PRODUCCION y ARCA_CLAVE_PRIVADA_PRODUCCION")
+    return config.ARCA_CERTIFICADO, config.ARCA_CLAVE_PRIVADA, "ARCA_CERTIFICADO y ARCA_CLAVE_PRIVADA"
+
+
+def certificado_listo(ambiente: str) -> bool:
+    certificado, clave, _ = _variables(ambiente)
+    return bool(certificado and clave)
+
+
+def _cargar(ambiente: str):
+    certificado, clave_privada, nombres = _variables(ambiente)
+    que = "de producción" if ambiente == PRODUCCION else "de prueba"
+    if not (certificado and clave_privada):
+        raise FaltaCertificado(f"Falta cargar el certificado {que} de ARCA en el servidor ({nombres}).")
+    if ambiente == PRODUCCION and _pem(certificado).strip() == _pem(config.ARCA_CERTIFICADO).strip():
+        # El de prueba lo firma la autoridad de prueba de ARCA: en producción lo rechazaría. Mejor avisarlo claro.
+        raise FaltaCertificado("El certificado de producción cargado en el servidor es el mismo que el de prueba.")
     try:
-        cert = x509.load_pem_x509_certificate(_pem(config.ARCA_CERTIFICADO))
-        clave = serialization.load_pem_private_key(_pem(config.ARCA_CLAVE_PRIVADA), password=None)
+        cert = x509.load_pem_x509_certificate(_pem(certificado))
+        clave = serialization.load_pem_private_key(_pem(clave_privada), password=None)
     except ValueError as error:
-        raise FaltaCertificado("El certificado o la clave privada de ARCA cargados en el servidor no se pueden leer.") from error
+        raise FaltaCertificado(f"El certificado o la clave privada {que} de ARCA no se pueden leer.") from error
     return cert, clave
 
 
-def cuit_del_certificado() -> str:
+def cuit_del_certificado(ambiente: str) -> str:
     """El CUIT que figura en el certificado (ARCA lo pone como "CUIT 20123456789" en el serialNumber)."""
-    cert, _ = _cargar()
+    cert, _ = _cargar(ambiente)
     for atributo in cert.subject.get_attributes_for_oid(x509.NameOID.SERIAL_NUMBER):
         numeros = re.sub(r"[^0-9]", "", str(atributo.value))
         if len(numeros) == 11:
@@ -121,8 +153,8 @@ def cuit_del_certificado() -> str:
     raise FaltaCertificado("El certificado de ARCA no dice de qué CUIT es.")
 
 
-def vence_certificado() -> datetime:
-    cert, _ = _cargar()
+def vence_certificado(ambiente: str) -> datetime:
+    cert, _ = _cargar(ambiente)
     return cert.not_valid_after_utc
 
 
@@ -191,9 +223,10 @@ class Ticket:
     token: str
     sign: str
     vence: datetime
+    ambiente: str  # el ticket de un ambiente solo sirve en ese ambiente: WSFE toma la dirección de acá
 
     def __repr__(self) -> str:  # nunca mostrar el token en un error ni en un registro
-        return f"Ticket(vence={self.vence.isoformat()})"
+        return f"Ticket(ambiente={self.ambiente}, vence={self.vence.isoformat()})"
 
     def sirve(self, margen_minutos: int = 10) -> bool:
         return self.vence - timedelta(minutes=margen_minutos) > datetime.now(UTC)
@@ -210,9 +243,9 @@ def _pedido_de_acceso(servicio: str) -> bytes:
     return ET.tostring(tra, encoding="utf-8", xml_declaration=True)
 
 
-def firmar(datos: bytes) -> str:
-    """El pedido firmado con el certificado (CMS/PKCS#7 con el contenido adentro), en base64, como lo pide WSAA."""
-    cert, clave = _cargar()
+def firmar(datos: bytes, ambiente: str) -> str:
+    """El pedido firmado con el certificado del ambiente (CMS/PKCS#7 con el contenido adentro), en base64."""
+    cert, clave = _cargar(ambiente)
     cms = (pkcs7.PKCS7SignatureBuilder().set_data(datos).add_signer(cert, clave, hashes.SHA256())
            .sign(serialization.Encoding.DER, [pkcs7.PKCS7Options.Binary]))
     return base64.b64encode(cms).decode()
@@ -222,9 +255,9 @@ YA_TIENE_TICKET = ("ARCA dice que ya entregó un acceso que todavía no venció,
                    "Se destraba solo cuando vence (hasta 12 horas). Avisale a Nahuel.")
 
 
-def pedir_ticket(servicio: str = SERVICIO, ambiente: str = AMBIENTE) -> Ticket:
+def pedir_ticket(ambiente: str, servicio: str = SERVICIO) -> Ticket:
     """Login en WSAA. Ojo: ARCA no da otro ticket mientras el anterior siga vigente (hay que guardarlo)."""
-    firmado = firmar(_pedido_de_acceso(servicio))
+    firmado = firmar(_pedido_de_acceso(servicio), _revisar_ambiente(ambiente))
     sobre = (
         '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" '
         'xmlns:wsaa="http://wsaa.view.sua.dvadac.desein.afip.gov"><soapenv:Header/><soapenv:Body>'
@@ -242,7 +275,7 @@ def pedir_ticket(servicio: str = SERVICIO, ambiente: str = AMBIENTE) -> Ticket:
     token, sign, vence = _valor(ticket, "token"), _valor(ticket, "sign"), _valor(ticket, "expirationTime")
     if not (token and sign and vence):
         raise ErrorDeArca("ARCA no devolvió el acceso.", texto[:500])
-    return Ticket(token=token, sign=sign, vence=datetime.fromisoformat(vence).astimezone(UTC))
+    return Ticket(token=token, sign=sign, vence=datetime.fromisoformat(vence).astimezone(UTC), ambiente=ambiente)
 
 
 # ---------------------------------------------------------------- WSFE
@@ -262,12 +295,12 @@ def _xml(padre: ET.Element, nombre: str, contenido) -> ET.Element:
     return elemento
 
 
-def _wsfe(metodo: str, cuerpo: dict, ambiente: str = AMBIENTE) -> tuple[ET.Element, str]:
+def _wsfe(metodo: str, cuerpo: dict, ambiente: str) -> tuple[ET.Element, str]:
     ET.register_namespace("ar", NS_WSFE)
     ET.register_namespace("soap", "http://schemas.xmlsoap.org/soap/envelope/")
     sobre = ET.Element("{http://schemas.xmlsoap.org/soap/envelope/}Envelope")
     _xml(ET.SubElement(sobre, "{http://schemas.xmlsoap.org/soap/envelope/}Body"), metodo, cuerpo)
-    texto = llamar(DIRECCIONES[ambiente]["wsfe"], f"{NS_WSFE}{metodo}", ET.tostring(sobre, encoding="utf-8"))
+    texto = llamar(DIRECCIONES[_revisar_ambiente(ambiente)]["wsfe"], f"{NS_WSFE}{metodo}", ET.tostring(sobre, encoding="utf-8"))
     raiz = _leer_xml(texto)
     falla = _falla(raiz)
     if falla is not None:
@@ -287,7 +320,7 @@ def _auth(ticket: Ticket, cuit: str) -> dict:
     return {"Token": ticket.token, "Sign": ticket.sign, "Cuit": cuit}
 
 
-def servicio_anda(ambiente: str = AMBIENTE) -> bool:
+def servicio_anda(ambiente: str) -> bool:
     """FEDummy: ARCA dice si sus servidores (aplicación, base y login) están andando. No pide ticket."""
     resultado, _ = _wsfe("FEDummy", {}, ambiente)
     return all(_valor(resultado, k).upper() == "OK" for k in ("AppServer", "DbServer", "AuthServer"))
@@ -295,7 +328,8 @@ def servicio_anda(ambiente: str = AMBIENTE) -> bool:
 
 def ultimo_autorizado(ticket: Ticket, cuit: str, punto_venta: int, cbte_tipo: int) -> int:
     """El último número que ARCA autorizó para ese punto de venta y tipo (0 si todavía no hay ninguno)."""
-    resultado, texto = _wsfe("FECompUltimoAutorizado", {"Auth": _auth(ticket, cuit), "PtoVta": punto_venta, "CbteTipo": cbte_tipo})
+    resultado, texto = _wsfe("FECompUltimoAutorizado", {"Auth": _auth(ticket, cuit), "PtoVta": punto_venta, "CbteTipo": cbte_tipo},
+                             ticket.ambiente)
     errores = _errores(resultado)
     if errores:
         raise ErrorDeArca("ARCA no dio el último número: " + "; ".join(errores), texto[:1000])
@@ -327,7 +361,7 @@ def consultar(ticket: Ticket, cuit: str, punto_venta: int, cbte_tipo: int, numer
     """La factura con ese número, si ARCA la tiene (None si no existe)."""
     resultado, texto = _wsfe("FECompConsultar", {
         "Auth": _auth(ticket, cuit), "FeCompConsReq": {"CbteTipo": cbte_tipo, "CbteNro": numero, "PtoVta": punto_venta},
-    })
+    }, ticket.ambiente)
     get = _buscar(resultado, "ResultGet")
     if get is None:
         errores = _errores(resultado)
@@ -346,6 +380,44 @@ def consultar(ticket: Ticket, cuit: str, punto_venta: int, cbte_tipo: int, numer
         resultado=_valor(get, "Resultado"),
         xml=texto,
     )
+
+
+@dataclass
+class PuntoDeVenta:
+    """Un punto de venta habilitado para web services, como lo lista ARCA (FEParamGetPtosVenta)."""
+    numero: int
+    emision_tipo: str  # "CAE" (el que usa Mantenete) o "CAEA"
+    bloqueado: bool
+    baja: date | None
+
+
+def puntos_de_venta(ticket: Ticket, cuit: str) -> list[PuntoDeVenta]:
+    """Los puntos de venta de web services de ese CUIT. Sirve también para saber si ARCA deja a Mantenete facturar
+    por ese CUIT: si el comercio no lo autorizó, ARCA contesta con un error (ver no_esta_autorizado)."""
+    resultado, texto = _wsfe("FEParamGetPtosVenta", {"Auth": _auth(ticket, cuit)}, ticket.ambiente)
+    errores = _errores(resultado)
+    # 602 = "Sin resultados": todavía no tiene ningún punto de venta de web services
+    if errores and all(e.startswith("602:") for e in errores):
+        return []
+    if errores:
+        raise ErrorDeArca("ARCA no dio los puntos de venta: " + "; ".join(errores), texto[:1000])
+    puntos = []
+    for p in _todos(resultado, "PtoVenta"):
+        numero = _valor(p, "Nro")
+        if not numero.isdigit():
+            continue
+        baja = _valor(p, "FchBaja")
+        puntos.append(PuntoDeVenta(numero=int(numero), emision_tipo=_valor(p, "EmisionTipo"),
+                                   bloqueado=_valor(p, "Bloqueado").upper() == "S",
+                                   baja=_fecha(baja) if baja and baja.upper() != "NULL" else None))
+    return puntos
+
+
+def no_esta_autorizado(error: ErrorDeArca) -> bool:
+    """¿ARCA dice que el certificado no puede facturar por ese CUIT? (error 600 de "ValidacionDeToken": el comercio
+    todavía no autorizó a Mantenete en Administrador de Relaciones, o lo autorizó para otro servicio)."""
+    texto = f"{error} {error.detalle}"
+    return "600:" in texto or "relaciones" in texto.lower()
 
 
 @dataclass
@@ -408,7 +480,7 @@ def solicitar_cae(ticket: Ticket, c: Comprobante) -> Respuesta:
             "FeCabReq": {"CantReg": 1, "PtoVta": c.punto_venta, "CbteTipo": c.cbte_tipo},
             "FeDetReq": [("FECAEDetRequest", detalle)],
         },
-    })
+    }, ticket.ambiente)
     det = _buscar(resultado, "FECAEDetResponse")
     errores = _errores(resultado)
     observaciones = [f"{_valor(o, 'Code')}: {_valor(o, 'Msg')}" for o in _todos(det, "Obs")]

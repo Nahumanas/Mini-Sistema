@@ -30,10 +30,10 @@ from .test_parte_3 import _sql
 CUIT = "20123456786"  # dígito verificador correcto
 
 
-def _certificado_de_prueba() -> tuple[str, str]:
+def _certificado_de_prueba(cuit: str = CUIT) -> tuple[str, str]:
     clave = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     nombre = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "mantenete-pruebas"),
-                        x509.NameAttribute(NameOID.SERIAL_NUMBER, f"CUIT {CUIT}")])
+                        x509.NameAttribute(NameOID.SERIAL_NUMBER, f"CUIT {cuit}")])
     ahora = datetime.now(UTC)
     cert = (x509.CertificateBuilder().subject_name(nombre).issuer_name(nombre).public_key(clave.public_key())
             .serial_number(x509.random_serial_number()).not_valid_before(ahora - timedelta(days=1))
@@ -59,7 +59,16 @@ def _txt(raiz, nombre):
 
 
 class ArcaFalso:
-    def __init__(self):
+    """Un ARCA de UN ambiente. ambiente/token: los de producción para la prueba de producción. autorizados: los CUIT
+    que autorizaron al certificado (None = solo CUIT, como en homologación); con otro CUIT contesta el error 600.
+    puntos: lo que contesta FEParamGetPtosVenta, [(número, emisión, bloqueado "S"/"N", baja "NULL" o AAAAMMDD)]."""
+
+    def __init__(self, ambiente: str = "homologacion", token: str = "TOKEN-DE-PRUEBA", autorizados: set[str] | None = None):
+        self.ambiente = ambiente
+        self.token = token
+        self.autorizados = autorizados
+        self.puntos: list[tuple[int, str, str, str]] = []
+        self.anda = True
         self.logins = 0
         self.ticket_vence: datetime | None = None
         self.comprobantes: dict[tuple[int, int, int], dict] = {}  # (pv, tipo, numero) -> lo que se autorizó
@@ -71,13 +80,20 @@ class ArcaFalso:
         self._atomico = threading.Lock()  # el ARCA real controla y guarda cada comprobante de a uno
 
     def __call__(self, url, accion, sobre):
+        # Cada ARCA solo atiende sus direcciones: un pedido a la dirección de otro ambiente es un cruce
+        assert url in arca.DIRECCIONES[self.ambiente].values(), f"{url} no es de {self.ambiente}"
         raiz = ET.fromstring(sobre)
-        if url == arca.DIRECCIONES["homologacion"]["wsaa"]:
+        if url == arca.DIRECCIONES[self.ambiente]["wsaa"]:
             return self._login(raiz)
         metodo = accion.rsplit("/", 1)[-1]
         self.pedidos.append((metodo, raiz))
         if metodo != "FEDummy":
-            assert _txt(raiz, "Token") == "TOKEN-DE-PRUEBA" and _txt(raiz, "Cuit") == CUIT
+            assert _txt(raiz, "Token") == self.token
+            if self.autorizados is None:
+                assert _txt(raiz, "Cuit") == CUIT
+            elif _txt(raiz, "Cuit") not in self.autorizados:
+                return self._sobre(metodo, "<Errors><Err><Code>600</Code><Msg>ValidacionDeToken: No aparecio CUIT en lista "
+                                           f"de relaciones: {_txt(raiz, 'Cuit')}</Msg></Err></Errors>")
         return getattr(self, metodo)(raiz)
 
     def _login(self, raiz):
@@ -90,7 +106,7 @@ class ArcaFalso:
         self.logins += 1
         self.ticket_vence = datetime.now(UTC) + timedelta(hours=12)
         ticket = (f"<loginTicketResponse><header><expirationTime>{self.ticket_vence.isoformat()}</expirationTime></header>"
-                  "<credentials><token>TOKEN-DE-PRUEBA</token><sign>SIGN-DE-PRUEBA</sign></credentials></loginTicketResponse>")
+                  f"<credentials><token>{self.token}</token><sign>SIGN-DE-PRUEBA</sign></credentials></loginTicketResponse>")
         escapado = ticket.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         return ('<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body>'
                 f'<loginCmsResponse><loginCmsReturn>{escapado}</loginCmsReturn></loginCmsResponse></soapenv:Body></soapenv:Envelope>')
@@ -102,7 +118,15 @@ class ArcaFalso:
                 f'</{metodo}Response></soap:Body></soap:Envelope>')
 
     def FEDummy(self, _raiz):
-        return self._sobre("FEDummy", "<AppServer>OK</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer>")
+        estado = "OK" if self.anda else "ERROR"
+        return self._sobre("FEDummy", f"<AppServer>{estado}</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer>")
+
+    def FEParamGetPtosVenta(self, _raiz):
+        if not self.puntos:
+            return self._sobre("FEParamGetPtosVenta", "<Errors><Err><Code>602</Code><Msg>Sin Resultados</Msg></Err></Errors>")
+        filas = "".join(f"<PtoVenta><Nro>{n}</Nro><EmisionTipo>{e}</EmisionTipo><Bloqueado>{b}</Bloqueado><FchBaja>{f}</FchBaja></PtoVenta>"
+                        for n, e, b, f in self.puntos)
+        return self._sobre("FEParamGetPtosVenta", f"<ResultGet>{filas}</ResultGet>")
 
     def _ultimo(self, pv, tipo):
         return max([n for (p, t, n) in self.comprobantes if p == pv and t == tipo], default=0)

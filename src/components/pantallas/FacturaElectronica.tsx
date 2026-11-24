@@ -48,7 +48,12 @@ function ConFacturacion({ comercioId }: { comercioId: number }) {
       <div className="flex gap-3">
         <Receipt className="mt-0.5 size-5 shrink-0 text-texto-suave" strokeWidth={1.75} />
         <p className="text-texto-suave">
-          Factura C (a consumidor final o a un comprador con DNI o CUIT) y nota de crédito, total o parcial, directo con ARCA. Por ahora es el <b className="text-texto">modo prueba de ARCA</b>: lo que sale de acá no tiene valor fiscal.
+          Factura C (a consumidor final o a un comprador con DNI o CUIT) y nota de crédito, total o parcial, directo con ARCA.{" "}
+          {estado.ambiente === "produccion" ? (
+            <>Este comercio ya factura <b className="text-texto">de verdad</b>: cada factura tiene validez fiscal.</>
+          ) : (
+            <>Por ahora es el <b className="text-texto">modo prueba de ARCA</b>: lo que sale de acá no tiene valor fiscal. Cuando el punto de venta y la autorización estén listos en ARCA, Mantenete lo pasa a facturas de verdad.</>
+          )}
         </p>
       </div>
       {!estado.servidorListo && (
@@ -68,6 +73,7 @@ function ConFacturacion({ comercioId }: { comercioId: number }) {
         <FormularioDatos
           comercioId={comercioId}
           inicial={estado.datos}
+          enProduccion={estado.ambiente === "produccion"}
           alGuardar={() => {
             setEditando(false);
             recargar();
@@ -165,7 +171,15 @@ function AlCobrar({ comercioId, datos, alCambiar }: { comercioId: number; datos:
   );
 }
 
-function FormularioDatos({ comercioId, inicial, alGuardar, alCancelar }: { comercioId: number; inicial: DatosFiscales | null; alGuardar: () => void; alCancelar?: () => void }) {
+function FormularioDatos({ comercioId, inicial, enProduccion, alGuardar, alCancelar }: {
+  comercioId: number;
+  inicial: DatosFiscales | null;
+  enProduccion: boolean;
+  alGuardar: () => void;
+  alCancelar?: () => void;
+}) {
+  // En producción, el CUIT y el punto de venta son los que Mantenete verificó con ARCA: la base no deja cambiarlos
+  const fijo = enProduccion ? "Ya se verificó con ARCA: si cambió, avisale a Mantenete." : undefined;
   const avisar = useInterfaz((s) => s.avisar);
   const [datos, setDatos] = useState<DatosFiscales>(
     inicial ?? { cuit: "", razonSocial: "", domicilio: "", inicioActividades: "", ingresosBrutos: "", puntoVenta: 1 },
@@ -195,8 +209,8 @@ function FormularioDatos({ comercioId, inicial, alGuardar, alCancelar }: { comer
     >
       <p className="text-sm text-texto-suave">Son los que salen impresos en cada factura. El punto de venta es el que creaste en ARCA para «web services» (no el de la factura en línea).</p>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Campo etiqueta="CUIT">
-          <input id="fe-cuit" value={datos.cuit} onChange={poner("cuit")} inputMode="numeric" placeholder="20-12345678-6" className={claseInput} required />
+        <Campo etiqueta="CUIT" ayuda={fijo}>
+          <input id="fe-cuit" value={datos.cuit} onChange={poner("cuit")} inputMode="numeric" placeholder="20-12345678-6" className={claseInput} required readOnly={enProduccion} />
         </Campo>
         <Campo etiqueta="Razón social" ayuda="Tu nombre y apellido, o el nombre de la sociedad, como figura en ARCA.">
           <input id="fe-razon" value={datos.razonSocial} onChange={poner("razonSocial")} maxLength={200} className={claseInput} required />
@@ -210,8 +224,8 @@ function FormularioDatos({ comercioId, inicial, alGuardar, alCancelar }: { comer
         <Campo etiqueta="Ingresos Brutos" ayuda="El número de inscripción (si tenés).">
           <input id="fe-iibb" value={datos.ingresosBrutos} onChange={poner("ingresosBrutos")} maxLength={30} className={claseInput} />
         </Campo>
-        <Campo etiqueta="Punto de venta (web services)">
-          <input id="fe-pv" value={datos.puntoVenta || ""} onChange={poner("puntoVenta")} inputMode="numeric" maxLength={5} className={claseInput} required />
+        <Campo etiqueta="Punto de venta (web services)" ayuda={fijo}>
+          <input id="fe-pv" value={datos.puntoVenta || ""} onChange={poner("puntoVenta")} inputMode="numeric" maxLength={5} className={claseInput} required readOnly={enProduccion} />
         </Campo>
       </div>
       {error && <p className="text-sm text-peligro">{error}</p>}
