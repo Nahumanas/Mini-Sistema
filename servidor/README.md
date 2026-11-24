@@ -166,7 +166,23 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
   de cobrar. Mientras sea homologación dice "SIN VALOR FISCAL".
 - Pruebas: `pruebas/test_facturas_al_cobrar.py`, siempre contra el ARCA de mentira (nunca el real), incluida una de carga
   con 100 ventas a la vez y un ARCA lento.
-- Para más adelante: nota de crédito parcial, factura a un comprador identificado (con aprobación), ZIP y envío automático.
+
+## Factura electrónica de ARCA (etapa 3: nota de crédito parcial, comprador y ZIP, sigue en modo prueba)
+
+- **Nota de crédito parcial** (`POST /facturas/{id}/nota-credito`, solo el jefe): lo que el cliente devolvió, renglón
+  por renglón. La plata va con el mismo descuento que tuvo la venta, en proporción; la que devuelve todo lo que queda
+  va justo por lo que queda (así los redondeos nunca suman un centavo de más). Una factura puede tener varias. La base
+  (`privado.factura_nueva`, con la factura original trabada) no deja devolver más plata ni más unidades que las
+  facturadas, aunque dos compus lo pidan a la vez. Es solo el comprobante fiscal: no toca la caja, el stock ni la venta.
+  Al anular la venta en Cajas anteriores, la nota de crédito sale por lo que queda (o no sale, si ya se devolvió todo).
+- **Comprador identificado**: `POST /ventas/{id}/facturar` acepta `comprador` (DNI o CUIT, condición frente al IVA,
+  nombre y domicilio). Obligatorio desde $ 10.000.000 (RG 5700). El documento va a la vista (ARCA lo recibe); el nombre
+  y el domicilio van cifrados en `facturas.receptor` (solo se imprimen). La nota de crédito copia el comprador de la
+  factura. Sigue siendo Factura C: la A y la B son para comercios Responsables Inscriptos (otra etapa).
+- **ZIP del mes** (`GET /comercios/{id}/facturas/mes/{mes}`, solo el jefe): todas las del mes; el navegador arma el PDF
+  de cada autorizada y un Excel (`src/lib/facturas-zip.ts`), como "Descargar mis datos".
+- Pruebas: `pruebas/test_facturas_nc_parcial_y_comprador.py` (ARCA de mentira).
+- Para más adelante: envío automático del ZIP (mail o Drive, que prenda el jefe) y Factura A/B.
 
 **El certificado de homologación** (una sola vez, lo hace Nahuel con su clave fiscal nivel 3):
 
@@ -208,7 +224,8 @@ un JSON cifrado con la clave de su comercio (AES-256-GCM). Lo hace `app/sobres.p
 | `POST /comercios/{id}/mercadopago/cobros`, `GET .../cobros/{cobro}`, `POST .../cobros/{cobro}/cancelar`, `POST /comercios/{id}/mercadopago/revisar` | Cobrar con QR, preguntar si pagó (guarda la venta), cancelar y revisar los que quedaron esperando |
 | `POST /cajas/{id}/anular-venta`, `POST /cajas/{id}/recontar` | Ajustes de una caja cerrada: anular una venta (vuelve al stock; si era una cuota, el socio vuelve a como estaba; si tenía factura, sale la nota de crédito) o corregir el efectivo contado |
 | `GET/PUT /comercios/{id}/facturacion`, `POST …/facturacion/probar` | Factura electrónica (solo jefe): datos fiscales del comercio y probar la conexión con ARCA |
-| `GET /comercios/{id}/facturas`, `GET /facturas/{id}`, `POST /ventas/{id}/facturar`, `POST /facturas/{id}/reintentar` | Facturas y notas de crédito; ver una (la Caja la mira hasta que ARCA contesta); facturar una venta (Factura C a consumidor final); reintentar una que ARCA no contestó |
+| `GET /comercios/{id}/facturas`, `GET /facturas/{id}`, `POST /ventas/{id}/facturar`, `POST /facturas/{id}/reintentar` | Facturas y notas de crédito; ver una (la Caja la mira hasta que ARCA contesta); facturar una venta (Factura C a consumidor final o a un comprador con DNI o CUIT); reintentar una que ARCA no contestó |
+| `POST /facturas/{id}/nota-credito`, `GET /comercios/{id}/facturas/mes/{mes}` | Nota de crédito parcial (lo que se devolvió); todas las facturas de un mes, para el ZIP (solo el jefe) |
 | `PUT /comercios/{id}/facturacion/al-cobrar` | Prender o apagar "Facturar cada venta al cobrar" (solo jefe) |
 | `POST /comercios/{id}/proveedores`, `POST /comercios/{id}/compras` | Compras: suma al stock, cambia el costo y crea las tandas de lo que vence, todo o nada |
 | `POST /comercios/{id}/gastos`, `DELETE /gastos/{id}` | Gastos del comercio |

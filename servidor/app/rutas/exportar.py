@@ -128,7 +128,7 @@ def exportar(mes: str = Path(pattern=r"^\d{4}-\d{2}$"), actuales: bool = Query(F
         "cuotas": camel(abiertas("cuotas")),
         "reservas": camel(leidas["reservas"]),
         # Sin la respuesta completa de ARCA (es solo para revisar), igual que la pantalla de Facturas
-        "facturas": [_publica(f, _abrir_items(cofre, items_por_factura.get(f["id"], []))) for f in leidas["facturas"]],
+        "facturas": [_publica(f, _abrir_items(cofre, items_por_factura.get(f["id"], [])), cofre) for f in leidas["facturas"]],
     }
     if actuales:
         salida |= {

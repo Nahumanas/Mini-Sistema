@@ -1,6 +1,6 @@
 import type { DatosFiscales, Factura } from "./api";
 import { ddmm } from "./fechas";
-import { numeroCorto, numeroFactura, plataConCentavos } from "./factura";
+import { CONDICIONES_IVA, documentoComprador, numeroCorto, numeroFactura, plataConCentavos } from "./factura";
 
 // El PDF de una factura (o nota de crédito) de ARCA ya autorizada, armado en el navegador: hoja A4 con el código QR
 // que pide ARCA (RG 4892). No hace falta el servidor: la factura (con su CAE) y los datos fiscales ya los tiene la
@@ -154,16 +154,28 @@ export async function armarFacturaPdf(f: Factura, emisor: EmisorFactura, asociad
   y += alto + 3;
 
   // ---------------------------------------------------------------- a quién
-  const identificado = f.docTipo !== 99 || f.docNro !== 0;
-  const altoReceptor = esNota && asociada ? 17 : 12;
+  // Consumidor final sin identificar, o el comprador con su documento (DNI o CUIT), nombre y domicilio
+  const documento = documentoComprador(f);
+  const comprador = f.comprador ?? null;
+  const renglonesReceptor = 2 + (documento ? 1 : 0) + (documento && comprador?.domicilio ? 1 : 0) + (esNota && asociada ? 1 : 0);
+  const altoReceptor = 12 + 4.8 * (renglonesReceptor - 2);
   pdf.rect(MARGEN, y, derecha - MARGEN, altoReceptor);
   pdf.setFontSize(9);
   let yr = y + 5;
   const renglonReceptor = (etiqueta: string, valor: string, x: number) => etiquetaYValor(etiqueta, valor, x, yr);
-  renglonReceptor("Condición frente al IVA", "Consumidor Final", MARGEN + 4);
+  renglonReceptor("Condición frente al IVA", CONDICIONES_IVA[f.condicionIvaReceptor ?? 5] ?? "Consumidor Final", MARGEN + 4);
   renglonReceptor("Condición de venta", "Contado", mitad + 12);
   yr += 4.8;
-  renglonReceptor("Apellido y nombre / Razón social", identificado ? `Documento ${f.docNro}` : "Consumidor final", MARGEN + 4);
+  const nombre = documento ? (comprador?.nombre || "—") : "Consumidor final";
+  renglonReceptor("Apellido y nombre / Razón social", (pdf.splitTextToSize(nombre, derecha - MARGEN - 60) as string[])[0], MARGEN + 4);
+  if (documento) {
+    yr += 4.8;
+    renglonReceptor(f.docTipo === 80 ? "CUIT" : "DNI", documento.replace(/^(DNI|CUIT) /, ""), MARGEN + 4);
+    if (comprador?.domicilio) {
+      yr += 4.8;
+      renglonReceptor("Domicilio", (pdf.splitTextToSize(comprador.domicilio, derecha - MARGEN - 30) as string[])[0], MARGEN + 4);
+    }
+  }
   if (esNota && asociada) {
     yr += 4.8;
     renglonReceptor("Comprobante asociado", numeroFactura(asociada), MARGEN + 4);
@@ -254,6 +266,12 @@ export async function armarFacturaPdf(f: Factura, emisor: EmisorFactura, asociad
     pdf.setTextColor(0);
   }
   return pdf;
+}
+
+/** Los bytes del PDF (para meterlo en el ZIP del mes). */
+export async function bytesFacturaPdf(f: Factura, emisor: EmisorFactura, asociada?: Pick<Factura, "tipo" | "puntoVenta" | "numero"> | null) {
+  const pdf = await armarFacturaPdf(f, emisor, asociada);
+  return new Uint8Array(pdf.output("arraybuffer"));
 }
 
 /** Arma el PDF y lo descarga con su nombre (como el ticket). */

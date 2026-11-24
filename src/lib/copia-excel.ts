@@ -103,6 +103,16 @@ export async function armarCopiaExcel(copia: Copia, meses: string[], alcance: st
   return libro.xlsx.writeBuffer();
 }
 
+/** Un Excel solo con estas hojas, sin el Resumen (lo usa el ZIP de facturas del mes: lib/facturas-zip.ts). */
+export async function armarExcelDeHojas(hojas: Hoja[]) {
+  const { default: ExcelJS } = await import("exceljs");
+  const libro = new ExcelJS.Workbook();
+  libro.creator = "Mantenete";
+  libro.created = new Date();
+  for (const h of hojas) escribirHoja(libro.addWorksheet(h.nombre), h);
+  return libro.xlsx.writeBuffer();
+}
+
 /** Arma el Excel y lo descarga (queda en Descargas). */
 export async function descargarCopiaExcel(copia: Copia, meses: string[], alcance: string) {
   const bytes = await armarCopiaExcel(copia, meses, alcance);

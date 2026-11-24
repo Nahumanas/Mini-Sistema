@@ -224,7 +224,7 @@ def anular_venta(caja_id: int, datos: AnularVenta, usuario: Usuario = Depends(us
         ).fetchone()
         if venta is None or venta["anulada"] is not None:
             raise HTTPException(409, "Esa venta no está en la caja o ya se anuló.")
-        nota = _nota_de_credito_si_hace_falta(con, venta["id"], datos.hechoPor.strip())
+        nota = _nota_de_credito_si_hace_falta(con, cofre, venta["id"], datos.hechoPor.strip())
         venta = cofre.abrir("ventas", con.execute(
             "update public.ventas set anulada = now() where id = %s returning *", (venta["id"],)
         ).fetchone())
@@ -270,9 +270,10 @@ def anular_venta(caja_id: int, datos: AnularVenta, usuario: Usuario = Depends(us
     return resultado
 
 
-def _nota_de_credito_si_hace_falta(con, venta_id: int, hecha_por: str) -> dict | None:
-    """Si la venta tenía factura: autorizada → se crea la nota de crédito que la anula (sale después de guardar);
-    sin salir todavía → se descarta; saliendo para ARCA → hay que esperar (409)."""
+def _nota_de_credito_si_hace_falta(con, cofre: Cofre, venta_id: int, hecha_por: str) -> dict | None:
+    """Si la venta tenía factura: autorizada → se crea la nota de crédito por lo que queda de ella (sale después de
+    guardar; si notas de crédito parciales ya devolvieron todo, no hace falta otra); sin salir todavía → se descarta;
+    saliendo para ARCA → hay que esperar (409)."""
     factura = con.execute(
         # La venta ya está trabada (for update): facturar la misma venta espera a que esto termine
         "select * from public.facturas where venta_id = %s and tipo = 'factura_c' and estado <> 'rechazada'", (venta_id,)
@@ -297,10 +298,8 @@ def _nota_de_credito_si_hace_falta(con, venta_id: int, hecha_por: str) -> dict |
     if not tiene:
         raise HTTPException(409, "Esta venta tiene factura y la facturación está apagada en tu cuenta: "
                                  "no se puede hacer la nota de crédito. Hablá con Mantenete.")
-    ya = con.execute(
-        "select * from public.facturas where asociada_id = %s and estado <> 'rechazada'", (factura["id"],)
-    ).fetchone()
-    return ya or facturas.nueva_nota_credito(con, factura, hecha_por)
+    # La factura está trabada (factura_trabar, arriba): ninguna nota de crédito parcial se cruza con esta
+    return facturas.nueva_nota_credito(con, cofre, factura, hecha_por)
 
 
 @router.post("/cajas/{caja_id}/recontar", status_code=201)

@@ -258,8 +258,11 @@ export type Factura = {
   impTotal: number;
   descuento: number;
   concepto: 1 | 2 | 3; // 1 productos, 2 servicios (cuotas del gimnasio), 3 los dos
-  docTipo: number; // 99 = consumidor final sin identificar
+  docTipo: number; // 99 = consumidor final sin identificar, 96 = DNI, 80 = CUIT
   docNro: number;
+  condicionIvaReceptor?: number; // 5 = consumidor final (ver CONDICIONES_IVA en lib/factura.ts)
+  /** El comprador identificado (nombre y domicilio, que no van a ARCA). null = consumidor final sin identificar. */
+  comprador?: { nombre: string; domicilio: string } | null;
   estado: EstadoFactura;
   cae: string | null;
   vencimientoCae: string | null;
@@ -268,8 +271,11 @@ export type Factura = {
   intentos: number;
   proximoIntento: string | null; // etapa 2: cuándo la vuelve a mandar sola el servidor (si sigue sin CAE)
   creada: string;
-  items: { productoId: number | null; cantidad: number; nombre: string; precioUnitario: number }[];
+  /** id: el renglón. itemOrigenId: en una nota de crédito, el renglón de la factura que devuelve. */
+  items: { id?: number; itemOrigenId?: number | null; productoId: number | null; cantidad: number; nombre: string; precioUnitario: number }[];
 };
+/** El comprador identificado de una Factura C (sin él, va a consumidor final). condicionIva: códigos de ARCA. */
+export type CompradorFactura = { docTipo: 80 | 96; docNro: string; condicionIva: 1 | 4 | 5 | 6; nombre: string; domicilio: string };
 export type PruebaArca = { ok: true; arcaAnda: boolean; ultimos: { facturaC: number; notaCreditoC: number }; cuitCertificado: string; certificadoVence: string };
 
 /** La cuenta de Mercado Pago de un comercio (etapa 8): con ella la Caja cobra con QR. */
@@ -410,7 +416,13 @@ export const api = {
   factura: (facturaId: number) => pedir<Factura>(`/facturas/${facturaId}`),
   // Descargar mis datos (solo el jefe): de a un mes por pedido, así el servidor nunca abre un año entero de golpe
   copiaDelMes: (mes: string, actuales: boolean) => pedir<CopiaDelMes>(`/exportar/${mes}${actuales ? "?actuales=true" : ""}`),
-  facturar: (ventaId: number) => pedir<Factura>(`/ventas/${ventaId}/facturar`, "POST", {}),
+  facturar: (ventaId: number, comprador?: CompradorFactura | null) =>
+    pedir<Factura>(`/ventas/${ventaId}/facturar`, "POST", comprador ? { comprador } : {}),
+  // Nota de crédito PARCIAL: qué renglones de la factura se devuelven y cuántos (no toca la caja ni el stock)
+  notaCreditoParcial: (facturaId: number, items: { itemId: number; cantidad: number }[]) =>
+    pedir<Factura>(`/facturas/${facturaId}/nota-credito`, "POST", { items }),
+  // Todas las del mes (sin tope), para el ZIP con los PDF y el Excel. Solo el jefe.
+  facturasDelMes: (comercioId: number, mes: string) => pedir<Factura[]>(`/comercios/${comercioId}/facturas/mes/${mes}`),
   reintentarFactura: (facturaId: number) => pedir<Factura>(`/facturas/${facturaId}/reintentar`, "POST", {}),
   recontar: (cajaId: number, datos: { efectivo: number; hechoPor: string; motivo: string }) => pedir<AjusteCaja>(`/cajas/${cajaId}/recontar`, "POST", datos),
 

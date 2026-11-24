@@ -252,7 +252,8 @@ def test_facturar_una_venta_trae_el_cae_y_no_se_factura_dos_veces(cliente, afip)
     f = r.json()
     assert f["estado"] == "autorizada" and re.fullmatch(r"[0-9]{14}", f["cae"]) and f["numero"] == 1
     assert f["impTotal"] == 99.99 and f["puntoVenta"] == pv and f["tipo"] == "factura_c"
-    assert f["items"] == [{"productoId": producto["id"], "cantidad": 3, "nombre": "Alfajor", "precioUnitario": 33.33}]
+    assert [{k: v for k, v in i.items() if k != "id"} for i in f["items"]] == [
+        {"itemOrigenId": None, "productoId": producto["id"], "cantidad": 3, "nombre": "Alfajor", "precioUnitario": 33.33}]
     enviado = afip.comprobantes[(pv, 11, 1)]
     assert enviado["ImpTotal"] == "99.99" and enviado["ImpNeto"] == "99.99" and enviado["ImpIVA"] == "0.00"
     assert enviado["DocTipo"] == "99" and enviado["DocNro"] == "0" and enviado["CondicionIVAReceptorId"] == "5"
@@ -406,7 +407,9 @@ def test_anular_una_venta_facturada_emite_la_nota_de_credito(cliente, afip):
     nota = r.json()["notaCredito"]
     assert nota["tipo"] == "nota_credito_c" and nota["estado"] == "autorizada" and nota["numero"] == 1
     assert nota["asociadaId"] == factura["id"] and nota["impTotal"] == factura["impTotal"]
-    assert nota["items"] == factura["items"]
+    # Los mismos renglones, cada uno apuntando al de la factura que devuelve
+    assert [{**i, "id": None, "itemOrigenId": None} for i in nota["items"]] == [{**i, "id": None} for i in factura["items"]]
+    assert [i["itemOrigenId"] for i in nota["items"]] == [i["id"] for i in factura["items"]]
     enviada = afip.comprobantes[(pv, 13, 1)]
     assert enviada["asociado"] == {"Tipo": "11", "PtoVta": str(pv), "Nro": "1", "Cuit": CUIT,
                                    "CbteFch": factura["fecha"].replace("-", "")}
