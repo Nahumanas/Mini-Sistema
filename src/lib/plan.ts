@@ -29,7 +29,7 @@ export const EXTRAS: { texto: string; precio: number; detalle?: string }[] = [
 
 // Letra chica debajo de los precios.
 export const NOTA_PRECIOS =
-  "Mantenimiento incluido. Si pagás 3 o 6 meses por adelantado, el precio queda congelado durante ese período. Los precios se actualizan cada 3 meses según el IPC. La baja se pide con un mes de anticipación.";
+  "Mantenimiento incluido. Si pagás 3 o 6 meses por adelantado, el precio queda congelado durante ese período y el descuento también se aplica a los comercios o sucursales adicionales. Los precios se actualizan cada 3 meses según el IPC. La baja se pide con un mes de anticipación.";
 
 // Aviso de promoción arriba de la tarjeta del plan. Con null no se muestra.
 export const PROMO_PLAN: string | null = "Contratá ahora: el primer mes es gratis para tu adaptación";

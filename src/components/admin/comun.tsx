@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Lock } from "lucide-react";
 import { apiAdmin, type ClienteAdmin, type DatosCliente, type PlanCliente } from "@/lib/api";
-import { comerciosExtra, type Estado, PLANES, precioACobrar, sumarMeses } from "@/lib/clientes";
+import { comerciosExtra, type Estado, PLANES, precioACobrar, precioExtras, sumarMeses } from "@/lib/clientes";
 import { PRECIO_COMERCIO_EXTRA } from "@/lib/plan";
 import { ddmm, diasEntre, hoy } from "@/lib/fechas";
 import { pesos } from "@/lib/formato";
@@ -117,7 +117,7 @@ export function FormularioCliente({ formulario, puedeInvitar, enviando, alCambia
   const sinClave = invitando && !puedeInvitar;
   const listo = datos.email.includes("@") && datos.nombre.trim() !== "" && !sinClave;
   const cambiar = (d: Partial<DatosCliente>) => alCambiar({ ...formulario, datos: { ...datos, ...d } });
-  // El plan más los comercios extra ($6.500 × comercios de más × meses del plan)
+  // El plan más los comercios extra ($6.500 × comercios de más × meses del plan, con el descuento del plan)
   const precio = formulario.comercios ? precioACobrar(formulario.comercios, datos.plan) : PLANES[datos.plan].precio;
   const extra = formulario.comercios ? comerciosExtra(formulario.comercios) : 0;
   const meses = PLANES[datos.plan].meses;
@@ -185,7 +185,8 @@ export function FormularioCliente({ formulario, puedeInvitar, enviando, alCambia
         {extra > 0 && datos.plan !== "prueba" && (
           <p className="text-sm text-texto-suave">
             Incluye {pesos(PLANES[datos.plan].precio)} del plan + {extra} {extra === 1 ? "comercio extra" : "comercios extra"} ×{" "}
-            {pesos(PRECIO_COMERCIO_EXTRA)}{meses > 1 ? ` × ${meses} meses` : ""} = {pesos(extra * PRECIO_COMERCIO_EXTRA * meses)}.
+            {pesos(PRECIO_COMERCIO_EXTRA)}{meses > 1 ? ` × ${meses} meses` : ""}
+            {PLANES[datos.plan].descuento > 0 ? ` − ${PLANES[datos.plan].descuento}%` : ""} = {pesos(precioExtras(formulario.comercios!, datos.plan))}.
           </p>
         )}
         {pago && formulario.suspendido && (
