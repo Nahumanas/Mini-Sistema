@@ -163,11 +163,24 @@ export function Reportes() {
           <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
             <section className="flex min-w-0 flex-col gap-3">
               <h2 className="font-medium">Ranking de productos</h2>
-              <Tabla columnas={[{ texto: "Producto" }, columnaOrden("Unidades", "unidades"), columnaOrden("Cobrado", "total"), columnaOrden("Ganancia", "ganancia", true)]}>
+              {/* En el celular la columna Unidades no entra (cortaba "Cobrado"): las unidades van abajo del nombre
+                  y para ordenar por unidades queda este selector. */}
+              <div className="sm:hidden">
+                <Segmentado
+                  etiqueta="Ordenar el ranking por"
+                  opciones={[{ valor: "total", texto: "Por cobrado" }, { valor: "unidades", texto: "Por unidades" }]}
+                  valor={orden}
+                  alCambiar={setOrden}
+                />
+              </div>
+              <Tabla columnas={[{ texto: "Producto" }, columnaOrden("Unidades", "unidades", true), columnaOrden("Cobrado", "total"), columnaOrden("Ganancia", "ganancia", true)]}>
                 {ranking.map((p) => (
                   <tr key={p.productoId}>
-                    <td className="px-4 py-2.5">{p.nombre}</td>
-                    <td className="px-4 py-2.5 text-right">{p.unidades}</td>
+                    <td className="px-4 py-2.5">
+                      {p.nombre}
+                      <span className="block text-sm text-texto-suave sm:hidden">{plural(p.unidades, "unidad", "unidades")}</span>
+                    </td>
+                    <td className="hidden px-4 py-2.5 text-right sm:table-cell">{p.unidades}</td>
                     {/* nowrap: que "$ 1.455.200" no se parta en dos renglones */}
                     <td className="whitespace-nowrap px-4 py-2.5 text-right">{pesos(p.total)}</td>
                     <td className="hidden whitespace-nowrap px-4 py-2.5 text-right text-positivo sm:table-cell">{pesos(p.ganancia)}</td>
@@ -263,12 +276,15 @@ function MasDetalles({ d }: { d: D }) {
           </section>
           <section className="flex min-w-0 flex-col gap-3">
             <h3 className="font-medium">🐢 Lo que menos vende</h3>
-            <Tabla columnas={[{ texto: "Producto" }, { texto: "Unidades", derecha: true }, { texto: "Vendido", derecha: true }]}>
+            <Tabla columnas={[{ texto: "Producto" }, { texto: "Unidades", derecha: true, ocultarCelular: true }, { texto: "Vendido", derecha: true }]}>
               {d.menosVende.map((p) => (
                 <tr key={p.productoId}>
-                  <td className="px-4 py-2">{p.nombre}</td>
-                  <td className="px-4 py-2 text-right">{p.unidades}</td>
-                  <td className="px-4 py-2 text-right">{pesos(p.total)}</td>
+                  <td className="px-4 py-2">
+                    {p.nombre}
+                    <span className="block text-sm text-texto-suave sm:hidden">{plural(p.unidades, "unidad", "unidades")}</span>
+                  </td>
+                  <td className="hidden px-4 py-2 text-right sm:table-cell">{p.unidades}</td>
+                  <td className="whitespace-nowrap px-4 py-2 text-right">{pesos(p.total)}</td>
                 </tr>
               ))}
             </Tabla>
