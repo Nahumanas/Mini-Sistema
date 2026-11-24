@@ -130,7 +130,7 @@ def _cerrar_ticket(clave: str, ticket: arca.Ticket) -> str:
     return f"{VERSION}:" + b64(nonce + AESGCM(_clave_cifrado()).encrypt(nonce, datos, f"arca|{clave}".encode()))
 
 
-def _abrir_ticket(clave: str, guardado: str, vence: datetime) -> arca.Ticket | None:
+def _abrir_ticket(clave: str, guardado: str, vence: datetime, ambiente: str) -> arca.Ticket | None:
     try:
         version, resto = guardado.split(":", 1)
         crudo = de_b64(resto)
@@ -139,7 +139,7 @@ def _abrir_ticket(clave: str, guardado: str, vence: datetime) -> arca.Ticket | N
         datos = json.loads(AESGCM(_clave_cifrado()).decrypt(crudo[:LARGO_NONCE], crudo[LARGO_NONCE:], f"arca|{clave}".encode()))
     except (InvalidTag, ValueError):
         return None
-    return arca.Ticket(token=datos["token"], sign=datos["sign"], vence=vence)
+    return arca.Ticket(token=datos["token"], sign=datos["sign"], vence=vence, ambiente=ambiente)
 
 
 def olvidar_tickets() -> None:
@@ -147,9 +147,11 @@ def olvidar_tickets() -> None:
     _memoria.clear()
 
 
-def ticket(quien: Quien) -> arca.Ticket:
-    """El ticket vigente: el de la memoria, si no el de la base, y si no hay ninguno, uno nuevo de ARCA."""
-    clave = f"{arca.AMBIENTE}|{arca.cuit_del_certificado()}|{arca.SERVICIO}"
+def ticket(quien: Quien, ambiente: str) -> arca.Ticket:
+    """El ticket vigente de ese ambiente: el de la memoria, si no el de la base, y si no hay ninguno, uno nuevo de
+    ARCA. Cada ambiente tiene el suyo (la clave empieza con el ambiente y el cifrado la usa como dato asociado:
+    el ticket guardado de un ambiente no se puede abrir como si fuera del otro)."""
+    clave = f"{ambiente}|{arca.cuit_del_certificado(ambiente)}|{arca.SERVICIO}"
     guardado = _memoria.get(clave)
     if guardado is not None and guardado.sirve():
         return guardado
@@ -160,12 +162,12 @@ def ticket(quien: Quien) -> arca.Ticket:
         with quien.conexion() as con:
             fila = con.execute(quien.TICKET, (clave,)).fetchone()
         if fila is not None:
-            guardado = _abrir_ticket(clave, fila["ticket_cifrado"], fila["vence"]) or guardado
+            guardado = _abrir_ticket(clave, fila["ticket_cifrado"], fila["vence"], ambiente) or guardado
             if guardado is not None and guardado.sirve():
                 _memoria[clave] = guardado
                 return guardado
         try:
-            nuevo = arca.pedir_ticket()
+            nuevo = arca.pedir_ticket(ambiente)
         except arca.ErrorDeArca as error:
             # ARCA no da otro mientras el anterior siga vigente: si el que hay todavía no venció (le quedan menos
             # de 10 minutos), se usa ese hasta el final
@@ -292,7 +294,7 @@ def _emitir(quien: Quien, factura_id: int) -> dict:
 
     # ---- paso 2: preguntar y mandar ----------------------------------------------------------------
     try:
-        acceso = ticket(quien)
+        acceso = ticket(quien, factura["ambiente"])  # el ambiente de la factura, nunca otro
         ultimo = arca.ultimo_autorizado(acceso, cuit, pv, tipo)
         if numero_anterior is not None and ultimo >= numero_anterior:
             # Ese número ya salió: ¿es nuestra factura (el corte fue en la respuesta)?

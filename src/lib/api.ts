@@ -202,6 +202,18 @@ export type EstadoDeCuenta = { admin: boolean; suspendido: boolean; plan: PlanCl
 
 /** Pantalla de administrador (solo Nahuel): los planes que se cobran y cada cliente. */
 export type PlanCliente = "prueba" | "mensual" | "trimestral" | "semestral";
+/** Un comercio de un cliente con sus datos fiscales, como lo ve /admin (para pasarlo a producción). */
+export type ComercioFacturacion = {
+  comercioId: number;
+  nombre: string;
+  cuit: string;
+  razonSocial: string;
+  puntoVenta: number;
+  ambiente: AmbienteArca;
+  porSalir: number; // facturas sin respuesta de ARCA: con alguna, no se cambia de ambiente
+  cambiado: string | null;
+};
+
 export type ClienteAdmin = {
   duenoId: number;
   email: string;
@@ -240,8 +252,10 @@ export type DatosFiscales = {
   puntoVenta: number;
 };
 /** Lo que devuelve la API de los datos fiscales: lo que se carga más el interruptor de "facturar al cobrar" (etapa 2). */
-export type DatosFiscalesGuardados = DatosFiscales & { comercioId: number; facturarAlCobrar?: boolean };
-export type EstadoFacturacion = { activa: boolean; ambiente: "homologacion"; servidorListo: boolean; datos: DatosFiscalesGuardados | null };
+/** El ambiente de ARCA: homologación (prueba, sin valor fiscal) o producción (facturas de verdad). Lo cambia /admin. */
+export type AmbienteArca = "homologacion" | "produccion";
+export type DatosFiscalesGuardados = DatosFiscales & { comercioId: number; facturarAlCobrar?: boolean; ambiente?: AmbienteArca };
+export type EstadoFacturacion = { activa: boolean; ambiente: AmbienteArca; servidorListo: boolean; datos: DatosFiscalesGuardados | null };
 export type EstadoFactura = "pendiente" | "enviando" | "autorizada" | "rechazada";
 export type Factura = {
   id: number;
@@ -250,7 +264,7 @@ export type Factura = {
   tipo: "factura_c" | "nota_credito_c";
   cbteTipo: number;
   asociadaId: number | null;
-  ambiente: "homologacion";
+  ambiente: AmbienteArca;
   cuitEmisor: string;
   puntoVenta: number;
   numero: number | null;
@@ -494,6 +508,12 @@ export const apiAdmin = {
   // La factura electrónica de ARCA (etapa 1: solo homologación)
   facturacion: (duenoId: number, activa: boolean) =>
     pedir<{ ok: true; activa: boolean }>(`/admin/clientes/${duenoId}/facturacion`, "PUT", { activa }),
+  comerciosFacturacion: (duenoId: number) =>
+    pedir<{ comercios: ComercioFacturacion[]; produccionLista: boolean }>(`/admin/clientes/${duenoId}/facturacion/comercios`),
+  /** Producción: antes la API le pregunta a ARCA de producción por el punto de venta y la autorización del comercio. */
+  ambiente: (duenoId: number, comercioId: number, ambiente: AmbienteArca) =>
+    pedir<{ ok: true; ambiente: AmbienteArca; verificado: { puntoVenta: number; emisionTipo: string; ultimos: { facturaC: number; notaCreditoC: number } } | null }>(
+      `/admin/clientes/${duenoId}/comercios/${comercioId}/facturacion/ambiente`, "PUT", { ambiente }),
   // El tope de comercios: el jefe no puede crear más de los que tiene pagos (la base lo frena)
   comerciosPagos: (duenoId: number, cantidad: number) =>
     pedir<{ ok: true; cantidad: number }>(`/admin/clientes/${duenoId}/comercios-pagos`, "PUT", { cantidad }),

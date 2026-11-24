@@ -58,7 +58,9 @@ def _ahora() -> datetime:
 
 def una_vuelta(limite: int = TANDA) -> int:
     """Manda las facturas a las que les toca. Devuelve cuántas tomó."""
-    if not arca.certificado_listo():
+    # Sin ningún certificado no hay nada que hacer. Si falta el de un solo ambiente, sus facturas igual se toman:
+    # quedan pendientes con el motivo a la vista (y el aviso al jefe), en vez de esperar calladas.
+    if not any(arca.certificado_listo(a) for a in arca.AMBIENTES):
         return 0
     with como_trabajador() as con:
         tomadas = con.execute("select * from privado.trabajador_tomar(%s)", (limite,)).fetchall()
@@ -173,9 +175,10 @@ def mensaje_sin_resolver(fila: dict) -> str:
 
 def mensaje_numeracion(fila: dict, ultimo_arca: int) -> str:
     tipo = "Factura C" if fila["cbte_tipo"] == arca.FACTURA_C else "nota de crédito C"
+    donde = "En ARCA" if fila["ambiente"] == arca.PRODUCCION else "En el ARCA de prueba"
     return "\n".join([
         "⚠️ <b>Control de facturas de las 22 h</b>",
-        f"En ARCA, la última {tipo} del punto de venta {fila['punto_venta']} es la N° {ultimo_arca}, pero en Mantenete "
+        f"{donde}, la última {tipo} del punto de venta {fila['punto_venta']} es la N° {ultimo_arca}, pero en Mantenete "
         f"la última autorizada es la N° {fila['ultimo']} ({texto(fila['comercios'])}).",
         "Puede ser un comprobante hecho desde otro sistema con el mismo punto de venta. Avisale a Nahuel para revisarlo.",
     ])
@@ -192,18 +195,21 @@ def controlar() -> list[tuple[int, str]]:
         numeraciones = con.execute("select * from privado.trabajador_numeraciones(%s)", (desde,)).fetchall()
 
     avisos = [(f["chat_id"], mensaje_sin_resolver(f)) for f in sin_resolver if f["chat_id"] is not None]
-    propias = [n for n in numeraciones if n["ambiente"] == arca.AMBIENTE and not n["hay_enviando"]]
-    if propias and arca.certificado_listo():
+    # Cada numeración se compara con el ARCA de SU ambiente (con el ticket de ese ambiente)
+    for ambiente in arca.AMBIENTES:
+        propias = [n for n in numeraciones if n["ambiente"] == ambiente and not n["hay_enviando"]]
+        if not propias or not arca.certificado_listo(ambiente):
+            continue
         try:
-            acceso = facturacion.ticket(TRABAJADOR)
+            acceso = facturacion.ticket(TRABAJADOR, ambiente)
             for n in propias:
                 ultimo = arca.ultimo_autorizado(acceso, n["cuit"], n["punto_venta"], n["cbte_tipo"])
                 if ultimo != n["ultimo"]:
-                    print(f"Control de facturas: {n['cuit']} PV {n['punto_venta']} tipo {n['cbte_tipo']}: "
+                    print(f"Control de facturas ({ambiente}): {n['cuit']} PV {n['punto_venta']} tipo {n['cbte_tipo']}: "
                           f"ARCA {ultimo}, Mantenete {n['ultimo']}", flush=True)
                     avisos += [(chat, mensaje_numeracion(n, ultimo)) for chat in n["chats"]]
         except arca.ErrorDeArca as error:
-            print(f"Control de facturas: no se pudo comparar con ARCA ({error})", flush=True)
+            print(f"Control de facturas ({ambiente}): no se pudo comparar con ARCA ({error})", flush=True)
 
     if telegram.configurado():
         for chat, mensaje in avisos:
