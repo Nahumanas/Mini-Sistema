@@ -219,6 +219,16 @@ Mantenete y que su punto de venta exista para web services, sin baja ni bloqueo.
   producción es la N° 1 de producción aunque en prueba ya haya muchas.
 - **En producción el CUIT y el punto de venta quedan fijos** (son los que se verificaron): el jefe no los cambia ni
   borra los datos fiscales. Si cambian, el administrador lo vuelve a prueba, el jefe los corrige y se verifica de nuevo.
+- **Un CUIT factura en producción para un solo cliente.** Como hay un solo certificado para todos, si un cliente
+  escribiera en Configuración el CUIT de otro que ya autorizó a Mantenete, ARCA lo verificaría igual. Por eso
+  `privado.admin_ambiente` no deja pasar a producción un CUIT que ya está en producción en un comercio de otro dueño
+  (el mismo dueño sí puede usarlo en varios comercios). Dos pasos a la vez del mismo CUIT se hacen de a uno: cada uno
+  toma una traba de la transacción por ese CUIT (`pg_advisory_xact_lock`). Además, el diálogo de /admin pide
+  confirmar que se revisó la **constancia de inscripción** (que el CUIT sea de ese cliente y monotributista).
+- **El certificado se revisa antes de usarlo**: que se pueda leer, que sea pareja de la clave privada (si se carga
+  el nuevo con la clave vieja, avisa en vez de fallar en cada login), que no sea el de prueba y que no esté vencido.
+  `GET /admin/arca/certificados` dice de qué CUIT es y cuándo vence; /admin → Clientes avisa desde **30 días antes**
+  (es uno solo para todos los comercios: si vence, ninguno factura).
 - Cada cambio queda anotado en `privado.facturacion_ambientes` (quién, cuándo, con qué CUIT y punto de venta).
 
 **Qué hace falta en ARCA para el primer comercio en producción** (los logins a ARCA los hace solo el servidor de
@@ -232,10 +242,17 @@ Mantenete; nunca se prueba WSAA desde una compu con el certificado de Render):
 3. Cada comercio, con su clave fiscal:
    - **ABM de Puntos de Venta** → un punto de venta nuevo para web services (en monotributo: "Factura Electrónica -
      Monotributo - Web Services") → ese número va en Configuración → Factura electrónica.
-   - **Administrador de Relaciones de Clave Fiscal** → nueva relación → servicio **Facturación Electrónica** (wsfe) →
-     representante: el CUIT de Mantenete (el del certificado). Si ARCA pide que Mantenete acepte, se acepta desde su
-     clave fiscal. Nunca se le pide la clave fiscal al comercio.
-4. En /admin → **Pasar a producción**. Si algo falta, dice qué (punto de venta, autorización, certificado).
+   - **Administrador de Relaciones de Clave Fiscal** → **Nueva relación** → servicio **Facturación Electrónica**
+     (dentro de WebServices) → representante: el CUIT de Mantenete (el del certificado). **No** es "Adherir
+     servicio": eso habilita al comercio, no a Mantenete. Si ARCA pide que Mantenete acepte, se acepta desde su clave
+     fiscal. Nunca se le pide la clave fiscal al comercio.
+4. Revisar la **constancia de inscripción** del CUIT (que sea de ese cliente y monotributista) y, en /admin →
+   **Pasar a producción**. Si algo falta, dice qué (punto de venta, autorización, certificado, CUIT de otro cliente).
+
+**Renovar el certificado de producción** (dura 2 años; /admin avisa 30 días antes): en Administración de Certificados
+Digitales, con el mismo alias, se sube un pedido (`.csr`) nuevo y se baja el `.crt`. Se cargan **los dos** en Render a la
+vez (`ARCA_CERTIFICADO_PRODUCCION` y `ARCA_CLAVE_PRIVADA_PRODUCCION`): si la clave no es pareja del certificado, /admin lo
+dice. Mientras tanto, las facturas que no pueden salir quedan pendientes y se mandan solas cuando el certificado anda.
 
 ## Qué hace
 
@@ -266,6 +283,7 @@ Mantenete; nunca se prueba WSAA desde una compu con el certificado de Render):
 | `GET /comercios/{id}/facturas`, `GET /facturas/{id}`, `POST /ventas/{id}/facturar`, `POST /facturas/{id}/reintentar` | Facturas y notas de crédito; ver una (la Caja la mira hasta que ARCA contesta); facturar una venta (Factura C a consumidor final o a un comprador con DNI o CUIT); reintentar una que ARCA no contestó |
 | `POST /facturas/{id}/nota-credito`, `GET /comercios/{id}/facturas/mes/{mes}` | Nota de crédito parcial (lo que se devolvió); todas las facturas de un mes, para el ZIP (solo el jefe) |
 | `GET /admin/clientes/{id}/facturacion/comercios`, `PUT /admin/clientes/{id}/comercios/{comercio}/facturacion/ambiente` | Solo el administrador: los comercios del cliente con su ambiente de ARCA; pasar uno a producción (verificado antes con ARCA) o volverlo a prueba |
+| `GET /admin/arca/certificados` | Solo el administrador: el certificado de ARCA de cada ambiente (de qué CUIT es, cuándo vence, si tiene un problema) |
 | `PUT /comercios/{id}/facturacion/al-cobrar` | Prender o apagar "Facturar cada venta al cobrar" (solo jefe) |
 | `POST /comercios/{id}/proveedores`, `POST /comercios/{id}/compras` | Compras: suma al stock, cambia el costo y crea las tandas de lo que vence, todo o nada |
 | `POST /comercios/{id}/gastos`, `DELETE /gastos/{id}` | Gastos del comercio |

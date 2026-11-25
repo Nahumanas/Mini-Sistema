@@ -38,6 +38,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs7
 
 from . import config
+from .formato import ARGENTINA
 
 HOMOLOGACION, PRODUCCION = "homologacion", "produccion"
 AMBIENTES = (HOMOLOGACION, PRODUCCION)
@@ -140,7 +141,18 @@ def _cargar(ambiente: str):
         clave = serialization.load_pem_private_key(_pem(clave_privada), password=None)
     except ValueError as error:
         raise FaltaCertificado(f"El certificado o la clave privada {que} de ARCA no se pueden leer.") from error
+    if not _son_pareja(cert, clave):
+        # Pasa si se carga el certificado nuevo con la clave vieja (o al revés): ARCA rechazaría cada login
+        raise FaltaCertificado(f"El certificado {que} y la clave privada cargados en el servidor no son pareja: la "
+                               f"clave no es la que se usó para pedir ese certificado. Revisá {nombres} en Render.")
     return cert, clave
+
+
+def _son_pareja(cert, clave) -> bool:
+    """El certificado lleva adentro la clave pública de la clave privada con la que se pidió: tienen que coincidir."""
+    def publica(llave) -> bytes:
+        return llave.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+    return publica(cert.public_key()) == publica(clave.public_key())
 
 
 def cuit_del_certificado(ambiente: str) -> str:
@@ -156,6 +168,33 @@ def cuit_del_certificado(ambiente: str) -> str:
 def vence_certificado(ambiente: str) -> datetime:
     cert, _ = _cargar(ambiente)
     return cert.not_valid_after_utc
+
+
+AVISAR_DIAS_ANTES = 30  # /admin avisa cuando al certificado le quedan estos días (o menos)
+
+
+def estado_certificado(ambiente: str) -> dict:
+    """Para /admin: si el certificado del ambiente está cargado, de qué CUIT es, cuándo vence y si tiene algún
+    problema (no se lee, no es pareja de la clave, es el de prueba cargado como de producción, o ya venció).
+    Es uno solo para todos los comercios de ese ambiente: si vence, ninguno factura."""
+    certificado, clave, _ = _variables(ambiente)
+    estado = {"ambiente": ambiente, "cargado": bool(certificado and clave), "cuit": None, "vence": None,
+              "dias_para_vencer": None, "problema": None}
+    if not estado["cargado"]:
+        return estado
+    try:
+        estado["cuit"] = cuit_del_certificado(ambiente)  # carga y revisa todo lo de _cargar
+        vence = vence_certificado(ambiente)
+    except FaltaCertificado as error:
+        estado["problema"] = str(error)
+        return estado
+    estado["vence"] = vence
+    estado["dias_para_vencer"] = (vence - datetime.now(UTC)).days
+    if vence <= datetime.now(UTC):
+        estado["problema"] = (f"El certificado {'de producción' if ambiente == PRODUCCION else 'de prueba'} de ARCA "
+                              f"venció el {vence.astimezone(ARGENTINA):%d/%m/%Y}. Hasta cargar uno nuevo, ARCA "
+                              "rechaza cada login.")
+    return estado
 
 
 # ---------------------------------------------------------------- SOAP
