@@ -492,6 +492,16 @@ export const api = {
     pedir<{ repetido: boolean; asistencia: Asistencia | null; reserva: Reserva | null }>(`/comercios/${comercioId}/ingresos`, "POST", datos),
 };
 
+/** El certificado de ARCA de un ambiente, cargado en Render. problema: no se lee, no es pareja de la clave, es el de
+ * prueba cargado como de producción, o venció. */
+export type CertificadoArca = {
+  ambiente: AmbienteArca;
+  cargado: boolean;
+  cuit: string | null;
+  vence: string | null;
+  diasParaVencer: number | null;
+  problema: string | null;
+};
 /** Pantalla de administrador (solo Nahuel). La API revisa en la base que la cuenta sea de administrador:
  * a cualquier otro le contesta 404, como si la página no existiera. */
 export const apiAdmin = {
@@ -509,7 +519,10 @@ export const apiAdmin = {
   facturacion: (duenoId: number, activa: boolean) =>
     pedir<{ ok: true; activa: boolean }>(`/admin/clientes/${duenoId}/facturacion`, "PUT", { activa }),
   comerciosFacturacion: (duenoId: number) =>
-    pedir<{ comercios: ComercioFacturacion[]; produccionLista: boolean }>(`/admin/clientes/${duenoId}/facturacion/comercios`),
+    pedir<{ comercios: ComercioFacturacion[]; produccionLista: boolean; produccionProblema: string | null }>(
+      `/admin/clientes/${duenoId}/facturacion/comercios`),
+  /** El certificado de ARCA de cada ambiente (uno solo para todos los comercios): si vence, ninguno factura. */
+  certificadosArca: () => pedir<{ certificados: CertificadoArca[]; avisarDiasAntes: number }>("/admin/arca/certificados"),
   /** Producción: antes la API le pregunta a ARCA de producción por el punto de venta y la autorización del comercio. */
   ambiente: (duenoId: number, comercioId: number, ambiente: AmbienteArca) =>
     pedir<{ ok: true; ambiente: AmbienteArca; verificado: { puntoVenta: number; emisionTipo: string; ultimos: { facturaC: number; notaCreditoC: number } } | null }>(

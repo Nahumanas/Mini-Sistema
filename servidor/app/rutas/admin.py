@@ -148,8 +148,10 @@ def prender_facturacion(dueno_id: int, datos: Personalizacion, admin: Usuario = 
 # ---------------------------------------------------------------- factura ARCA: prueba o producción, por comercio
 
 NO_AUTORIZADO = ("ARCA de producción dice que Mantenete no puede facturar por el CUIT {cuit}. El comercio tiene que "
-                 "entrar a ARCA con su clave fiscal, ir a \"Administrador de Relaciones de Clave Fiscal\" y autorizar al "
-                 "CUIT {mantenete} (Mantenete) en el servicio \"Facturación Electrónica\" (wsfe).")
+                 "entrar a ARCA con su clave fiscal, ir a \"Administrador de Relaciones de Clave Fiscal\" → \"Nueva "
+                 "relación\" → servicio \"Facturación Electrónica\" (dentro de WebServices) y poner como representante "
+                 "el CUIT {mantenete} (Mantenete). Ojo: \"Adherir servicio\" no sirve, eso habilita al comercio y no "
+                 "a Mantenete. Si ARCA pide que Mantenete acepte la relación, hay que aceptarla.")
 POR_SALIR = ("Tiene {n} factura{s} sin respuesta de ARCA. Tienen que terminar en el ambiente en el que nacieron "
              "(que salgan, o descartarlas) antes de cambiarlo.")
 
@@ -165,8 +167,18 @@ def _comercios_facturacion(admin: Usuario, dueno_id: int) -> list[dict]:
 @router.get("/clientes/{dueno_id}/facturacion/comercios")
 def comercios_facturacion(dueno_id: int, admin: Usuario = Depends(administrador)):
     """Los comercios del cliente que ya cargaron sus datos fiscales, con su ambiente (prueba o producción)."""
+    certificado = arca.estado_certificado(arca.PRODUCCION)
     return {"comercios": _comercios_facturacion(admin, dueno_id),
-            "produccionLista": arca.certificado_listo(arca.PRODUCCION)}
+            "produccionLista": certificado["cargado"] and not certificado["problema"],
+            "produccionProblema": certificado["problema"]}
+
+
+@router.get("/arca/certificados")
+def certificados_arca(admin: Usuario = Depends(administrador)):
+    """El certificado de cada ambiente: si está cargado en Render, de qué CUIT es, cuándo vence y si tiene un
+    problema. Es uno solo para todos los comercios: /admin avisa desde 30 días antes de que venza."""
+    return {"certificados": [a_camel(arca.estado_certificado(a)) for a in arca.AMBIENTES],
+            "avisarDiasAntes": arca.AVISAR_DIAS_ANTES}
 
 
 def _verificar_en_produccion(admin: Usuario, cuit: str, punto_venta: int) -> dict:
@@ -176,6 +188,9 @@ def _verificar_en_produccion(admin: Usuario, cuit: str, punto_venta: int) -> dic
     if not arca.certificado_listo(arca.PRODUCCION):
         raise HTTPException(409, "Falta cargar el certificado de producción de ARCA en Render "
                                  "(ARCA_CERTIFICADO_PRODUCCION y ARCA_CLAVE_PRIVADA_PRODUCCION).")
+    problema = arca.estado_certificado(arca.PRODUCCION)["problema"]
+    if problema:
+        raise HTTPException(409, problema)
     try:
         if not arca.servicio_anda(arca.PRODUCCION):
             raise HTTPException(502, "ARCA de producción dice que ahora no anda. Probá de nuevo en un rato.")
@@ -237,6 +252,11 @@ def cambiar_ambiente(dueno_id: int, comercio_id: int, datos: Ambiente, admin: Us
             raise HTTPException(409, "Este cliente no tiene la factura electrónica prendida (o está suspendido).") from None
         if mensaje == "SIN_DATOS":
             raise HTTPException(404, "Ese comercio todavía no cargó sus datos fiscales.") from None
+        if mensaje == "CUIT_DE_OTRO_CLIENTE":
+            otro = error.diag.message_detail or "otro cliente"
+            raise HTTPException(409, f"El CUIT {fila['cuit']} ya factura en producción para otro cliente ({otro}). Un "
+                                     "CUIT es de un solo cliente: revisá su constancia de inscripción en ARCA antes de "
+                                     "seguir.") from None
         raise
     return {"ok": True, "ambiente": datos.ambiente, "verificado": verificado}
 

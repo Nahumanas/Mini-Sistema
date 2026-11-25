@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { CertificadoArca } from "@/lib/api";
+import { avisoCertificado } from "@/lib/certificados-arca";
 import { comerciosExtra, estadoDe, ingresoMensual, paraCobrar, PLANES, precioACobrar, sumarMeses } from "@/lib/clientes";
 
 describe("pantalla de administrador", () => {
@@ -82,5 +84,30 @@ describe("facturación", () => {
       { ...base, id: 6, vence: "2026-12-04" },
     ];
     expect(paraCobrar(lista, 30, dia).map((c) => c.id)).toEqual([3, 2, 6]);
+  });
+});
+
+describe("certificado de ARCA (uno solo para todos los comercios)", () => {
+  const cert = (cambios: Partial<CertificadoArca>): CertificadoArca => ({
+    ambiente: "produccion", cargado: true, cuit: "30712345671", vence: "2028-11-18T12:00:00+00:00", diasParaVencer: 400,
+    problema: null, ...cambios,
+  });
+
+  it("no avisa si está bien, ni si no está cargado (eso lo dice cada comercio)", () => {
+    expect(avisoCertificado(cert({}), 30)).toBeNull();
+    expect(avisoCertificado(cert({ diasParaVencer: 31 }), 30)).toBeNull();
+    expect(avisoCertificado(cert({ cargado: false, vence: null, diasParaVencer: null }), 30)).toBeNull();
+  });
+
+  it("avisa desde 30 días antes de que venza, con la fecha", () => {
+    expect(avisoCertificado(cert({ diasParaVencer: 30 }), 30)).toContain("vence en 30 días (18/11/2028)");
+    expect(avisoCertificado(cert({ diasParaVencer: 1 }), 30)).toContain("vence mañana");
+    expect(avisoCertificado(cert({ diasParaVencer: 0 }), 30)).toContain("vence hoy");
+    expect(avisoCertificado(cert({ ambiente: "homologacion", diasParaVencer: 5 }), 30)).toContain("El certificado de prueba");
+  });
+
+  it("un problema (no es pareja, venció) avisa que ningún comercio de ese ambiente factura", () => {
+    const texto = avisoCertificado(cert({ problema: "El certificado de producción y la clave privada no son pareja." }), 30);
+    expect(texto).toBe("El certificado de producción y la clave privada no son pareja. Mientras tanto, ningún comercio en producción factura.");
   });
 });

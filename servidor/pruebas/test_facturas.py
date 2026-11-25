@@ -30,14 +30,15 @@ from .test_parte_3 import _sql
 CUIT = "20123456786"  # dígito verificador correcto
 
 
-def _certificado_de_prueba(cuit: str = CUIT) -> tuple[str, str]:
+def _certificado_de_prueba(cuit: str = CUIT, vence_en_dias: float = 730) -> tuple[str, str]:
     clave = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     nombre = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "mantenete-pruebas"),
                         x509.NameAttribute(NameOID.SERIAL_NUMBER, f"CUIT {cuit}")])
     ahora = datetime.now(UTC)
+    vence = ahora + timedelta(days=vence_en_dias)
     cert = (x509.CertificateBuilder().subject_name(nombre).issuer_name(nombre).public_key(clave.public_key())
-            .serial_number(x509.random_serial_number()).not_valid_before(ahora - timedelta(days=1))
-            .not_valid_after(ahora + timedelta(days=730)).sign(clave, hashes.SHA256()))
+            .serial_number(x509.random_serial_number()).not_valid_before(min(ahora, vence) - timedelta(days=1))
+            .not_valid_after(vence).sign(clave, hashes.SHA256()))
     return (cert.public_bytes(serialization.Encoding.PEM).decode(),
             clave.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
                                 serialization.NoEncryption()).decode())

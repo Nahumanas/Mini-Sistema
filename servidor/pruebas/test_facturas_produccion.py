@@ -20,7 +20,8 @@ from app.base import como_usuario
 
 from .conftest import BASE, _psql
 from .test_admin import _admin, _cliente_de
-from .test_facturas import CERT, CLAVE, CUIT, DATOS, ArcaFalso, _certificado_de_prueba, _kiosco_con_facturacion, _vender
+from .test_facturas import (CERT, CLAVE, CUIT, DATOS, ArcaFalso, _certificado_de_prueba, _kiosco_con_facturacion,
+                            _puntos_de_venta, _vender)
 from .test_facturas_nc_parcial_y_comprador import _facturar, _nota
 from .test_parte_3 import _sql
 
@@ -48,6 +49,8 @@ def arcas(monkeypatch):
     _psql("-d", BASE, "-c", "delete from privado.arca_tickets")
     yield prueba, produccion
     facturacion.olvidar_tickets()
+    # Todas usan el mismo CUIT y un CUIT en producción es de un solo cliente: cada prueba deja todo en prueba
+    _psql("-d", BASE, "-c", "update public.datos_fiscales set ambiente = 'homologacion' where ambiente = 'produccion'")
 
 
 def _comercio(cliente, email: str, **extra):
@@ -151,7 +154,7 @@ def test_sin_verificar_con_arca_no_pasa_a_produccion(cliente, arcas, monkeypatch
     monkeypatch.setattr(config, "ARCA_CERTIFICADO_PRODUCCION", CERT)
     monkeypatch.setattr(config, "ARCA_CLAVE_PRIVADA_PRODUCCION", CLAVE)
     facturacion.olvidar_tickets()
-    no_pasa("mismo que el de prueba", 502)
+    no_pasa("mismo que el de prueba")
     # Nada de eso le pidió una factura a producción
     assert not any(m == "FECAESolicitar" for m, _ in produccion.pedidos)
     # Y solo el administrador lo cambia
@@ -275,3 +278,103 @@ def test_el_control_de_las_22_compara_cada_ambiente_con_su_arca(cliente, arcas, 
     salida = capsys.readouterr().out
     assert f"Control de facturas (produccion): {CUIT} PV {pv} tipo 11: ARCA 2, Mantenete 1" in salida
     assert f"Control de facturas (homologacion): {CUIT} PV {pv} tipo" not in salida
+
+
+def test_un_cuit_factura_en_produccion_para_un_solo_cliente(cliente, arcas):
+    """Hay un solo certificado para todos: si otro cliente escribe en Configuración el CUIT de un comercio que ya
+    autorizó a Mantenete, ARCA lo verificaría igual. La base no deja que ese CUIT pase a producción para otro cliente
+    (el mismo cliente sí puede usarlo en varios comercios)."""
+    prueba, produccion = arcas
+    ana, cid, producto, pv, admin, dueno = _comercio(cliente, "ana.cuitpropio@gmail.com")
+    beto, cid_beto, _, pv_beto, _, dueno_beto = _comercio(cliente, "beto.cuitajeno@gmail.com")
+    produccion.puntos = [(pv, "CAE", "N", "NULL"), (pv_beto, "CAE", "N", "NULL")]
+    assert _ambiente(cliente, admin, dueno, cid, "produccion").status_code == 200
+    r = _ambiente(cliente, admin, dueno_beto, cid_beto, "produccion")
+    assert r.status_code == 409 and "ya factura en producción para otro cliente (Kiosco de Ana)" in r.json()["detail"], r.text
+    assert cliente.get(f"/comercios/{cid_beto}/facturacion", headers=beto).json()["ambiente"] == "homologacion"
+    assert _sql(f"select count(*) from privado.facturacion_ambientes where comercio_id = {cid_beto}") == "0"
+    # Un segundo comercio de Ana, con su CUIT y otro punto de venta: sí
+    assert cliente.put(f"/admin/clientes/{dueno}/comercios-pagos", json={"cantidad": 2}, headers=admin).status_code == 200
+    cid2 = cliente.post("/comercios", json={"nombre": "Kiosco 2 de Ana", "rubro": "kiosco"}, headers=ana).json()["id"]
+    pv2 = next(_puntos_de_venta)
+    assert cliente.put(f"/comercios/{cid2}/facturacion", json={**DATOS, "puntoVenta": pv2}, headers=ana).status_code == 200
+    produccion.puntos.append((pv2, "CAE", "N", "NULL"))
+    assert _ambiente(cliente, admin, dueno, cid2, "produccion").status_code == 200
+
+
+def test_dos_clientes_con_el_mismo_cuit_a_la_vez_pasa_uno_solo(cliente, arcas):
+    """Directo en la base, dos pasos a producción del mismo CUIT (de clientes distintos) en el mismo momento. Sin la
+    traba por CUIT, ninguno vería al otro (todavía no se guardó) y pasarían los dos. Con la traba, el segundo espera,
+    ve al primero y no pasa."""
+    _, cid_a, _, pv_a, admin, _ = _comercio(cliente, "ana.mismocuit@gmail.com")
+    _, cid_b, _, pv_b, _, _ = _comercio(cliente, "beto.mismocuit@gmail.com")
+    yo = _usuario(admin)
+    cambio = "select * from privado.admin_ambiente(%s, 'produccion', %s, %s, 'prueba')"
+    adentro = threading.Event()
+
+    def primero():
+        with como_usuario(yo) as con:
+            con.execute(cambio, (cid_a, CUIT, pv_a))
+            adentro.set()
+            time.sleep(1)  # la transacción sigue abierta: la traba del CUIT también
+
+    hilo = threading.Thread(target=primero)
+    hilo.start()
+    adentro.wait(5)
+    largada = time.monotonic()
+    with pytest.raises(errors.RaiseException, match="CUIT_DE_OTRO_CLIENTE"), como_usuario(yo) as con:
+        con.execute(cambio, (cid_b, CUIT, pv_b))
+    assert time.monotonic() - largada > 0.7  # esperó al primero (y por eso lo vio)
+    hilo.join()
+    assert _sql(f"select ambiente from public.datos_fiscales where comercio_id = {cid_a}") == "produccion"
+    assert _sql(f"select ambiente from public.datos_fiscales where comercio_id = {cid_b}") == "homologacion"
+
+
+def test_el_certificado_tiene_que_ser_pareja_de_la_clave_y_no_estar_vencido(cliente, arcas, monkeypatch):
+    prueba, produccion = arcas
+    ana, cid, producto, pv, admin, dueno = _comercio(cliente, "ana.pareja@gmail.com")
+    produccion.puntos = [(pv, "CAE", "N", "NULL")]
+
+    def estado(ambiente="produccion"):
+        r = cliente.get("/admin/arca/certificados", headers=admin)
+        assert r.status_code == 200 and r.json()["avisarDiasAntes"] == 30
+        return next(c for c in r.json()["certificados"] if c["ambiente"] == ambiente)
+
+    # Bien cargado: de qué CUIT es y cuándo vence
+    bien = estado()
+    assert bien["cargado"] and bien["problema"] is None and bien["cuit"] == CUIT_MANTENETE
+    assert 700 < bien["diasParaVencer"] <= 730 and bien["vence"]
+    # El certificado nuevo con la clave vieja (o al revés): no son pareja, ARCA rechazaría cada login
+    _, otra_clave = _certificado_de_prueba(CUIT_MANTENETE)
+    monkeypatch.setattr(config, "ARCA_CLAVE_PRIVADA_PRODUCCION", otra_clave)
+    assert "no son pareja" in estado()["problema"]
+    lista = cliente.get(f"/admin/clientes/{dueno}/facturacion/comercios", headers=admin).json()
+    assert not lista["produccionLista"] and "no son pareja" in lista["produccionProblema"]
+    r = _ambiente(cliente, admin, dueno, cid, "produccion")
+    assert r.status_code == 409 and "no son pareja" in r.json()["detail"]
+    assert produccion.pedidos == []  # ni se le preguntó a ARCA
+    # Vencido: tampoco
+    vencido, su_clave = _certificado_de_prueba(CUIT_MANTENETE, vence_en_dias=-2)
+    monkeypatch.setattr(config, "ARCA_CERTIFICADO_PRODUCCION", vencido)
+    monkeypatch.setattr(config, "ARCA_CLAVE_PRIVADA_PRODUCCION", su_clave)
+    assert "venció el" in estado()["problema"]
+    assert _ambiente(cliente, admin, dueno, cid, "produccion").status_code == 409
+    # Por vencer (menos de 30 días): anda, y /admin lo avisa (lo arma la página con diasParaVencer)
+    pronto, su_clave = _certificado_de_prueba(CUIT_MANTENETE, vence_en_dias=10.5)
+    monkeypatch.setattr(config, "ARCA_CERTIFICADO_PRODUCCION", pronto)
+    monkeypatch.setattr(config, "ARCA_CLAVE_PRIVADA_PRODUCCION", su_clave)
+    assert estado()["problema"] is None and estado()["diasParaVencer"] == 10
+    assert _ambiente(cliente, admin, dueno, cid, "produccion").status_code == 200
+    # El de prueba, mal cargado: el jefe lo ve al probar la conexión, y sus facturas quedan para después (no se pierden)
+    monkeypatch.setattr(config, "ARCA_CLAVE_PRIVADA", otra_clave)
+    assert "no son pareja" in estado("homologacion")["problema"]
+    # Solo el administrador ve los certificados
+    assert cliente.get("/admin/arca/certificados", headers=ana).status_code == 404
+
+
+def test_si_falta_la_autorizacion_explica_que_no_es_adherir_servicio(cliente, arcas):
+    prueba, produccion = arcas
+    ana, cid, producto, pv, admin, dueno = _comercio(cliente, "ana.adherir@gmail.com")
+    produccion.autorizados = set()
+    detalle = _ambiente(cliente, admin, dueno, cid, "produccion").json()["detail"]
+    assert "Nueva relación" in detalle and "Adherir servicio" in detalle and CUIT_MANTENETE in detalle

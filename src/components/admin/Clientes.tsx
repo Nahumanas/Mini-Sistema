@@ -8,6 +8,7 @@ import { ddmm } from "@/lib/fechas";
 import { pesos } from "@/lib/formato";
 import { useAdmin } from "@/store/admin";
 import { Boton, Chip, claseInput, Encabezado, Kpi, Tabla, Vacio } from "../ui/base";
+import { AvisoCertificadosArca } from "./AvisoCertificadosArca";
 import { FacturacionComercios } from "./FacturacionComercios";
 import {
   type Confirmar, ConfirmarAccion, cuandoVence, EtiquetaEstado, type Formulario, FormularioCliente, formularioEditar, formularioNuevo,
@@ -59,6 +60,9 @@ export function Clientes() {
         descripcion="Planes, vencimientos y acceso de cada dueño. Suspender no borra nada: queda en solo lectura."
         acciones={<Boton variante="primario" icono={Plus} onClick={() => setFormulario(formularioNuevo())}>Invitar cliente</Boton>}
       />
+
+      {/* El certificado de ARCA es uno solo para todos los comercios: avisa si vence pronto o si el de Render no sirve */}
+      <AvisoCertificadosArca />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi titulo="Clientes" valor={String(clientes.length)} />
